@@ -1,133 +1,519 @@
-/* Анимации для уведомлений */
-@keyframes slideIn {
-    from { 
-        transform: translateY(-100%); 
-        opacity: 0; 
-    }
-    to { 
-        transform: translateY(0); 
-        opacity: 1; 
-    }
-}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#4285f4">
+    <title>УЛН. Регистрация водителей</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="./manifest.json">
+    
+    <!-- Основные иконки -->
+    <link rel="icon" type="image/png" href="./icons/icon-32x32.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="./icons/icon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="./icons/icon-16x16.png">
+    <link rel="apple-touch-icon" href="./icons/icon-152x152.png">
+    
+    <!-- Стили -->
+    <link rel="stylesheet" href="./styles.css">
+    
+    <!-- Анимации для уведомлений -->
+    <style>
+        @keyframes slideIn {
+            from { transform: translateY(-100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+            from { transform: translateY(0); opacity: 1; }
+            to { transform: translateY(-100%); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="app-container">
+        <!-- Шаг 1: Ввод телефона -->
+        <div class="step" id="step-phone" data-step="1">
+            <div class="step-header">
+                <div class="step-number">1</div>
+                <h2>📱 Ввод номера телефона</h2>
+            </div>
+            
+            <div class="step-content">
+                <div class="phone-input-container">
+                    <div class="phone-prefix">+7</div>
+                    <input 
+                        type="tel" 
+                        id="phone-input" 
+                        placeholder="999 123 45 67"
+                        inputmode="tel"
+                        maxlength="10"
+                    >
+                </div>
+                
+                <div class="info-box">
+                    <p><strong>Важно:</strong> Номер телефона нужен для идентификации и связи с вами.</p>
+                    <p>Отправляя свой номер телефона вы автоматически соглашаетесь с обработкой и хранением персональных данных.</p>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="handlePhoneSubmit()">
+                        Продолжить
+                    </button>
+                    <button class="btn btn-secondary" onclick="resetRegistration()">
+                        Сбросить
+                    </button>
+                </div>
+            </div>
+        </div>
 
-@keyframes slideOut {
-    from { 
-        transform: translateY(0); 
-        opacity: 1; 
-    }
-    to { 
-        transform: translateY(-100%); 
-        opacity: 0; 
-    }
-}
+        <!-- Шаг 2: Ввод ФИО -->
+        <div class="step" id="step-fio" data-step="2" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">2</div>
+                <h2>👤 Ввод ФИО</h2>
+            </div>
+            
+            <div class="step-content">
+                <input 
+                    type="text" 
+                    id="fio-input" 
+                    placeholder="Иванов Иван Иванович"
+                    class="form-input"
+                >
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="handleFioSubmit()">
+                        Продолжить
+                    </button>
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
 
-/* Стили для уведомлений */
-.notification {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    left: 20px;
-    max-width: 400px;
-    margin: 0 auto;
-    padding: 16px 24px;
-    background: #333;
-    color: white;
-    border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-    z-index: 10000;
-    text-align: center;
-    animation: slideIn 0.3s ease;
-    font-size: 14px;
-}
+        <!-- Шаг 3: Выбор поставщика -->
+        <div class="step" id="step-supplier" data-step="3" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">3</div>
+                <h2>🏢 Выбор поставщика</h2>
+            </div>
+            
+            <div class="step-content">
+                <div id="supplier-buttons" class="option-buttons">
+                    <!-- Кнопки поставщиков появятся здесь -->
+                </div>
+                
+                <div class="separator">или</div>
+                
+                <div class="manual-input">
+                    <input 
+                        type="text" 
+                        id="supplier-input" 
+                        placeholder="Введите название поставщика"
+                        class="form-input"
+                    >
+                    <button class="btn btn-secondary" onclick="handleManualSupplier()">
+                        Ввести вручную
+                    </button>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
 
-.notification.success {
-    background: #4caf50;
-}
+        <!-- Шаг 4: Выбор юрлица -->
+        <div class="step" id="step-legal" data-step="4" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">4</div>
+                <h2>🏛️ Выбор юрлица</h2>
+            </div>
+            
+            <div class="step-content">
+                <div class="option-buttons">
+                    <button class="option-btn" onclick="selectLegalEntity('Гулливер')">
+                        <span class="option-number">1</span>
+                        <span class="option-text">Гулливер</span>
+                    </button>
+                    <button class="option-btn" onclick="selectLegalEntity('ТК Лето')">
+                        <span class="option-number">2</span>
+                        <span class="option-text">ТК Лето</span>
+                    </button>
+                    <button class="option-btn" onclick="selectLegalEntity('Общая машина')">
+                        <span class="option-number">3</span>
+                        <span class="option-text">Общая машина</span>
+                    </button>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
 
-.notification.error {
-    background: #f44336;
-}
+        <!-- Шаг 5: Выбор типа товара -->
+        <div class="step" id="step-product" data-step="5" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">5</div>
+                <h2>📦 Выбор типа товара</h2>
+            </div>
+            
+            <div class="step-content">
+                <div class="option-buttons">
+                    <button class="option-btn" onclick="selectProductType('Сухой')">
+                        <span class="option-number">1</span>
+                        <span class="option-text">Сухой</span>
+                        <span class="option-icon">📦</span>
+                    </button>
+                    <button class="option-btn" onclick="selectProductType('ФРОВ')">
+                        <span class="option-number">2</span>
+                        <span class="option-text">ФРОВ (овощи фрукты)</span>
+                        <span class="option-icon">🍎</span>
+                    </button>
+                    <button class="option-btn" onclick="selectProductType('ФРЕШ')">
+                        <span class="option-number">3</span>
+                        <span class="option-text">ФРЕШ (Охлажденная продукция)</span>
+                        <span class="option-icon">❄️</span>
+                    </button>
+                    <button class="option-btn" onclick="selectProductType('Акциз')">
+                        <span class="option-number">4</span>
+                        <span class="option-text">Акциз (Крепкий алкоголь)</span>
+                        <span class="option-icon">🍷</span>
+                    </button>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
 
-.notification.warning {
-    background: #ff9800;
-}
+        <!-- Шаг 6: Марка авто -->
+        <div class="step" id="step-vehicle-brand" data-step="6" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">6</div>
+                <h2>🚗 Марка авто</h2>
+            </div>
+            
+            <div class="step-content">
+                <div id="brand-buttons" class="option-buttons">
+                    <!-- Кнопки марок авто появятся здесь -->
+                </div>
+                
+                <div class="separator">или</div>
+                
+                <div class="manual-input">
+                    <input 
+                        type="text" 
+                        id="brand-input" 
+                        placeholder="Введите марку авто"
+                        class="form-input"
+                    >
+                    <button class="btn btn-secondary" onclick="handleManualBrand()">
+                        Ввести вручную
+                    </button>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
 
-/* Загрузчик */
-.loader-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(255, 255, 255, 0.9);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 9999;
-}
+        <!-- Шаг 7: Номер ТС -->
+        <div class="step" id="step-vehicle-number" data-step="7" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">7</div>
+                <h2>🔢 Номер ТС</h2>
+            </div>
+            
+            <div class="step-content">
+                <input 
+                    type="text" 
+                    id="vehicle-number-input" 
+                    placeholder="А123ВС777"
+                    class="form-input"
+                >
+                
+                <div class="info-box">
+                    <p>Введите государственный номер автомобиля</p>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="handleVehicleNumberSubmit()">
+                        Продолжить
+                    </button>
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
 
-.loader {
-    width: 50px;
-    height: 50px;
-    border: 5px solid #f3f3f3;
-    border-top: 5px solid #4285f4;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
+        <!-- Шаг 8: Количество поддонов -->
+        <div class="step" id="step-pallets" data-step="8" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">8</div>
+                <h2>📦 Количество поддонов</h2>
+            </div>
+            
+            <div class="step-content">
+                <div class="number-input">
+                    <input 
+                        type="number" 
+                        id="pallets-input" 
+                        placeholder="0"
+                        min="0"
+                        step="1"
+                        class="form-input"
+                        inputmode="numeric"
+                    >
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="handlePalletsSubmit()">
+                        Продолжить
+                    </button>
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
 
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
+        <!-- Шаг 9: Номер заказа -->
+        <div class="step" id="step-order" data-step="9" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">9</div>
+                <h2>📋 Номер заказа</h2>
+            </div>
+            
+            <div class="step-content">
+                <input 
+                    type="text" 
+                    id="order-input" 
+                    placeholder="Номер заказа"
+                    class="form-input"
+                >
+                
+                <div class="info-box">
+                    <p>Найти можно в сопроводительных документах</p>
+                    <p><em>Если не знаете, введите 0</em></p>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="handleOrderSubmit()">
+                        Продолжить
+                    </button>
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
 
-/* Адаптивные стили */
-@media (max-width: 600px) {
-    .notification {
-        top: 10px;
-        right: 10px;
-        left: 10px;
-        padding: 12px 16px;
-        font-size: 13px;
-    }
-}
+        <!-- Шаг 10: ЭТрН -->
+        <div class="step" id="step-etrn" data-step="10" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">10</div>
+                <h2>📱 ЭТрН</h2>
+            </div>
+            
+            <div class="step-content">
+                <input 
+                    type="text" 
+                    id="etrn-input" 
+                    placeholder="Номер ЭТрН"
+                    class="form-input"
+                >
+                
+                <div class="info-box">
+                    <p>Найти можно в личном кабинете мобильного приложения</p>
+                    <p><em>Если не знаете, введите 0</em></p>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="handleEtrnSubmit()">
+                        Продолжить
+                    </button>
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
 
-/* Стили для успешной регистрации */
-.success-icon-large {
-    font-size: 80px;
-    text-align: center;
-    margin: 20px 0;
-    animation: bounce 1s ease;
-}
+        <!-- Шаг 11: Транзит -->
+        <div class="step" id="step-transit" data-step="11" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">11</div>
+                <h2>📦 Транзит</h2>
+            </div>
+            
+            <div class="step-content">
+                <div class="option-buttons">
+                    <button class="option-btn" onclick="selectTransit('Да')">
+                        <span class="option-number">1</span>
+                        <span class="option-text">Да</span>
+                    </button>
+                    <button class="option-btn" onclick="selectTransit('Нет')">
+                        <span class="option-number">2</span>
+                        <span class="option-text">Нет</span>
+                    </button>
+                </div>
+                
+                <div class="info-box">
+                    <p>Привезли ли вы транзит в машине?</p>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
 
-@keyframes bounce {
-    0%, 20%, 50%, 80%, 100% {transform: translateY(0);}
-    40% {transform: translateY(-30px);}
-    60% {transform: translateY(-15px);}
-}
+        <!-- Шаг 12: Подтверждение -->
+        <div class="step" id="step-confirm" data-step="12" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">12</div>
+                <h2>📋 Подтверждение данных</h2>
+            </div>
+            
+            <div class="step-content">
+                <div class="data-review" id="data-review">
+                    <!-- Данные будут вставлены здесь -->
+                </div>
+                
+                <div class="info-box warning">
+                    <p><strong>⚠️ Важная информация:</strong></p>
+                    <p>После регистрации ожидайте назначения ворот. Вам поступит сообщение.</p>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="submitRegistration()">
+                        ✅ Зарегистрироваться
+                    </button>
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
 
-.success-details {
-    background: #f8f9fa;
-    padding: 20px;
-    border-radius: 12px;
-    margin: 20px 0;
-}
+        <!-- Успешная регистрация -->
+        <div class="step" id="step-success" data-step="13" style="display: none;">
+            <div class="step-header">
+                <div class="success-icon">✅</div>
+                <h2>🎉 Регистрация завершена!</h2>
+            </div>
+            
+            <div class="step-content">
+                <div class="success-message" id="success-message">
+                    <!-- Сообщение будет вставлено здесь -->
+                </div>
+                
+                <div class="info-box">
+                    <h4>📅 График заезда:</h4>
+                    <ul class="schedule-list">
+                        <li><strong>Сухой склад:</strong> с 7:00 - до 16:30</li>
+                        <li><strong>Охлажденная продукция:</strong> с 7:00 - до 14:00</li>
+                        <li><strong>ФРОВ (фрукты, овощи):</strong> с 7:00 - до 14:00</li>
+                        <li><strong>АКЦИЗНЫЙ склад:</strong> с 7:00 - до 13:00</li>
+                    </ul>
+                </div>
+                
+                <div class="warning-box">
+                    <p><strong>⚠️ Внимание!</strong> Прибытие после указанного времени может привести к отказу в приемке!</p>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="resetRegistration()">
+                        📝 Новая регистрация
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-.success-details p {
-    margin: 10px 0;
-    color: #333;
-    line-height: 1.6;
-}
+    <!-- Уведомления (будет создаваться динамически) -->
+    <div id="notification" style="display: none;"></div>
 
-.warning-box {
-    background: #ffebee;
-    border: 2px solid #f44336;
-    border-radius: 12px;
-    padding: 20px;
-    margin: 20px 0;
-    color: #c62828;
-}
+    <!-- Загрузка -->
+    <div id="loader" class="loader-overlay" style="display: none;">
+        <div class="loader"></div>
+    </div>
 
-.warning-box p {
-    margin: 8px 0;
-    line-height: 1.5;
-}
+    <!-- Подключение скриптов -->
+    <script src="./app.js"></script>
+    
+    <!-- PWA Service Worker -->
+    <script>
+        // Регистрация Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(function(registration) {
+                        console.log('ServiceWorker зарегистрирован: ', registration.scope);
+                    }, function(err) {
+                        console.log('ServiceWorker не зарегистрирован: ', err);
+                    });
+            });
+        }
+        
+        // Отключаем автоматический prompt для PWA
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            
+            // Можно показать свою кнопку для установки позже
+            // Например: document.getElementById('installButton').style.display = 'block';
+        });
+        
+        // Функция для показа установки PWA (если понадобится)
+        function showInstallPrompt() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('Пользователь принял установку PWA');
+                    }
+                    deferredPrompt = null;
+                });
+            }
+        }
+        
+        // Проверка иконок при загрузке
+        window.addEventListener('load', function() {
+            console.log('Приложение загружено');
+            
+            // Проверка доступности иконок
+            const iconSizes = [72, 96, 128, 144, 152, 192, 384, 512];
+            
+            iconSizes.forEach(size => {
+                const img = new Image();
+                img.onload = function() {
+                    console.log(`✅ Иконка ${size}x${size} загружена успешно`);
+                };
+                img.onerror = function() {
+                    console.warn(`❌ Иконка ${size}x${size} не найдена`);
+                };
+                img.src = `./icons/icon-${size}x${size}.png`;
+            });
+        });
+    </script>
+</body>
+</html>
