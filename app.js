@@ -1,9 +1,20 @@
-// Конфигурация
+// Конфигурация для GitHub Pages
 const CONFIG = {
+    // Ваш Google Apps Script URL
+    APP_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbzDATeBrTYOYUnP9JrjcUXuKHXbPWl75X-BTE-OFsREZLFB4I9qX-f4Ctu_MzKaGBko/exec',
+    
+    // Базовый URL приложения
+    BASE_URL: 'https://pobeda-user.github.io/reg_driver_ULN/',
+    
+    // ID таблицы Google Sheets
     SPREADSHEET_ID: '1GcF4SDjUse7cDE2gsO50PLeTfjxaw_IAR6sZ-G1eBpA',
-    SHEET_NAME: 'Регистрация водителей',
-    APP_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbzDATeBrTYOYUnP9JrjcUXuKHXbPWl75X-BTE-OFsREZLFB4I9qX-f4Ctu_MzKaGBko/exec', // Замените на ваш URL
-    NOTIFICATION_ENDPOINT: 'https://api.telegram.org/botYOUR_BOT_TOKEN/sendMessage' // Опционально
+    
+    // Настройки PWA
+    PWA: {
+        name: 'УЛН. Регистрация водителей',
+        themeColor: '#4285f4',
+        backgroundColor: '#4285f4'
+    }
 };
 
 // Состояние регистрации
@@ -40,35 +51,56 @@ const ENTRY_SCHEDULE = {
     'Акциз': { start: 7, end: 13, endMinutes: 0 }
 };
 
-// Инициализация
+// Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('Приложение инициализировано');
     loadRegistrationState();
     setupPhoneInput();
+    checkConnection();
+    
+    // Показываем первый шаг
+    showStep(1);
 });
 
 // Сохранение состояния в localStorage
 function saveRegistrationState() {
-    localStorage.setItem('driver_registration_state', JSON.stringify(registrationState));
+    try {
+        localStorage.setItem('driver_registration_state', JSON.stringify(registrationState));
+        console.log('Состояние сохранено');
+    } catch (error) {
+        console.error('Ошибка сохранения состояния:', error);
+    }
 }
 
 function loadRegistrationState() {
-    const saved = localStorage.getItem('driver_registration_state');
-    if (saved) {
-        registrationState = JSON.parse(saved);
-        showStep(registrationState.step);
-        
-        // Восстанавливаем данные в полях
-        if (registrationState.data.phone) {
-            document.getElementById('phone-input').value = registrationState.data.phone;
+    try {
+        const saved = localStorage.getItem('driver_registration_state');
+        if (saved) {
+            registrationState = JSON.parse(saved);
+            console.log('Состояние восстановлено:', registrationState);
+            
+            // Восстанавливаем данные в полях
+            if (registrationState.data.phone) {
+                document.getElementById('phone-input').value = formatPhoneDisplay(registrationState.data.phone);
+            }
+            if (registrationState.data.fio) {
+                document.getElementById('fio-input').value = registrationState.data.fio;
+            }
+            
+            // Показываем текущий шаг
+            showStep(registrationState.step);
         }
-        if (registrationState.data.fio) {
-            document.getElementById('fio-input').value = registrationState.data.fio;
-        }
+    } catch (error) {
+        console.error('Ошибка загрузки состояния:', error);
+        // Сбрасываем на начальный шаг при ошибке
+        showStep(1);
     }
 }
 
 // Навигация по шагам
 function showStep(stepNumber) {
+    console.log('Переход к шагу:', stepNumber);
+    
     // Скрыть все шаги
     const steps = document.querySelectorAll('.step');
     steps.forEach(step => {
@@ -84,6 +116,12 @@ function showStep(stepNumber) {
         
         // Прокрутка вверх
         window.scrollTo(0, 0);
+        
+        // Фокус на первом поле ввода если есть
+        const input = stepElement.querySelector('input, button');
+        if (input && input.type !== 'button') {
+            setTimeout(() => input.focus(), 100);
+        }
     }
 }
 
@@ -108,6 +146,13 @@ function setupPhoneInput() {
         
         e.target.value = value;
     });
+    
+    // Enter для перехода
+    phoneInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            handlePhoneSubmit();
+        }
+    });
 }
 
 function handlePhoneSubmit() {
@@ -116,6 +161,7 @@ function handlePhoneSubmit() {
     
     if (!phone || phone.length < 10) {
         showNotification('Пожалуйста, введите корректный номер телефона', 'error');
+        phoneInput.focus();
         return;
     }
     
@@ -123,35 +169,60 @@ function handlePhoneSubmit() {
     phone = normalizePhone(phone);
     registrationState.data.phone = phone;
     
-    // Проверка существующего водителя
-    checkExistingDriver(phone);
-}
-
-function normalizePhone(phone) {
-    // Убираем все нецифровые символы
-    let cleaned = phone.replace(/\D/g, '');
-    
-    // Добавляем +7 если нужно
-    if (cleaned.length === 10) {
-        cleaned = '7' + cleaned;
-    }
-    
-    return '+' + cleaned;
-}
-
-function checkExistingDriver(phone) {
     showLoader(true);
     
-    // Здесь будет запрос к Google Apps Script для проверки существующего водителя
-    // Временная заглушка
-    setTimeout(() => {
-        showLoader(false);
+    // Проверка существующего водителя через Google Apps Script
+    checkExistingDriver(phone)
+        .then(existingDriver => {
+            showLoader(false);
+            
+            if (existingDriver && existingDriver.exists) {
+                // Водитель найден - используем его данные
+                registrationState.data.fio = existingDriver.driver.fio;
+                showNotification(`Добро пожаловать, ${existingDriver.driver.fio}!`, 'success');
+                
+                // Загружаем историю поставщиков
+                loadSupplierHistory(phone);
+                showStep(3); // Пропускаем ввод ФИО, сразу к поставщикам
+            } else {
+                // Новый водитель
+                showStep(2); // Переход к вводу ФИО
+            }
+        })
+        .catch(error => {
+            showLoader(false);
+            showNotification('Ошибка проверки данных. Попробуйте еще раз.', 'error');
+            console.error('Ошибка проверки водителя:', error);
+            // Продолжаем как новый водитель
+            showStep(2);
+        });
+}
+
+// Проверка существующего водителя через Google Apps Script
+async function checkExistingDriver(phone) {
+    try {
+        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'check_driver',
+                phone: phone
+            })
+        });
         
-        // Если водитель найден
-        // registrationState.data.fio = 'Иванов Иван Иванович'; // Пример
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         
-        showStep(2); // Переход к вводу ФИО
-    }, 1000);
+        const data = await response.json();
+        return data;
+        
+    } catch (error) {
+        console.error('Ошибка при проверке водителя:', error);
+        throw error;
+    }
 }
 
 // Шаг 2: Ввод ФИО
@@ -160,37 +231,61 @@ function handleFioSubmit() {
     const fio = fioInput.value.trim();
     
     if (!fio || fio.length < 5) {
-        showNotification('Пожалуйста, введите полные ФИО', 'error');
+        showNotification('Пожалуйста, введите полные ФИО (например: Иванов Иван Иванович)', 'error');
+        fioInput.focus();
         return;
     }
     
     registrationState.data.fio = fio;
     
     // Загружаем историю поставщиков
-    loadSupplierHistory();
+    loadSupplierHistory(registrationState.data.phone);
     
     showStep(3); // Переход к выбору поставщика
 }
 
 // Шаг 3: Выбор поставщика
-function loadSupplierHistory() {
-    // Здесь будет запрос к Google Apps Script для получения истории поставщиков
-    // Временный пример данных
-    const previousSuppliers = ['ООО "Продукты"', 'ИП Петров', 'ЗАО "Мясокомбинат"'];
-    
+async function loadSupplierHistory(phone) {
     const container = document.getElementById('supplier-buttons');
-    container.innerHTML = '';
     
-    previousSuppliers.forEach((supplier, index) => {
-        const button = document.createElement('button');
-        button.className = 'option-btn';
-        button.innerHTML = `
-            <span class="option-number">${index + 1}</span>
-            <span class="option-text">${supplier}</span>
-        `;
-        button.onclick = () => selectSupplier(supplier);
-        container.appendChild(button);
-    });
+    try {
+        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'get_suppliers',
+                phone: phone
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        container.innerHTML = '';
+        
+        if (data.suppliers && data.suppliers.length > 0) {
+            data.suppliers.forEach((supplier, index) => {
+                const button = document.createElement('button');
+                button.className = 'option-btn';
+                button.innerHTML = `
+                    <span class="option-number">${index + 1}</span>
+                    <span class="option-text">${supplier}</span>
+                `;
+                button.onclick = () => selectSupplier(supplier);
+                container.appendChild(button);
+            });
+        } else {
+            container.innerHTML = '<p class="no-history">История поставщиков не найдена</p>';
+        }
+        
+    } catch (error) {
+        console.error('Ошибка загрузки поставщиков:', error);
+        container.innerHTML = '<p class="error">Ошибка загрузки истории</p>';
+    }
 }
 
 function selectSupplier(supplier) {
@@ -204,6 +299,7 @@ function handleManualSupplier() {
     
     if (!supplier) {
         showNotification('Пожалуйста, введите название поставщика', 'error');
+        supplierInput.focus();
         return;
     }
     
@@ -276,6 +372,7 @@ function handleManualBrand() {
     
     if (!brand) {
         showNotification('Пожалуйста, введите марку авто', 'error');
+        brandInput.focus();
         return;
     }
     
@@ -289,7 +386,8 @@ function handleVehicleNumberSubmit() {
     const vehicleNumber = vehicleNumberInput.value.trim().toUpperCase();
     
     if (!vehicleNumber) {
-        showNotification('Пожалуйста, введите номер ТС', 'error');
+        showNotification('Пожалуйста, введите номер ТС (например: А123ВС777)', 'error');
+        vehicleNumberInput.focus();
         return;
     }
     
@@ -303,7 +401,8 @@ function handlePalletsSubmit() {
     const pallets = parseInt(palletsInput.value);
     
     if (isNaN(pallets) || pallets < 0) {
-        showNotification('Пожалуйста, введите корректное количество поддонов', 'error');
+        showNotification('Пожалуйста, введите корректное количество поддонов (0 или больше)', 'error');
+        palletsInput.focus();
         return;
     }
     
@@ -318,6 +417,7 @@ function handleOrderSubmit() {
     
     if (!orderNumber) {
         showNotification('Пожалуйста, введите номер заказа (0 если не знаете)', 'error');
+        orderInput.focus();
         return;
     }
     
@@ -332,6 +432,7 @@ function handleEtrnSubmit() {
     
     if (!etrn) {
         showNotification('Пожалуйста, введите номер ЭТрН (0 если не знаете)', 'error');
+        etrnInput.focus();
         return;
     }
     
@@ -356,37 +457,6 @@ function selectTransit(value) {
     showStep(12);
 }
 
-function checkScheduleViolation() {
-    if (!registrationState.data.productType) return false;
-    
-    const schedule = ENTRY_SCHEDULE[registrationState.data.productType];
-    if (!schedule) return false;
-    
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    
-    if (hours > schedule.end || (hours === schedule.end && minutes > schedule.endMinutes)) {
-        return true;
-    }
-    
-    return false;
-}
-
-function formatDate(date) {
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}.${month}.${year}`;
-}
-
-function formatTime(date) {
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    return `${hours}:${minutes}:${seconds}`;
-}
-
 // Шаг 12: Подтверждение
 function showConfirmation() {
     const container = document.getElementById('data-review');
@@ -394,53 +464,59 @@ function showConfirmation() {
     
     container.innerHTML = `
         <div class="data-item">
-            <span class="data-label">Телефон:</span>
-            <span class="data-value">${data.phone}</span>
+            <span class="data-label">📱 Телефон:</span>
+            <span class="data-value">${formatPhoneDisplay(data.phone)}</span>
         </div>
         <div class="data-item">
-            <span class="data-label">ФИО:</span>
+            <span class="data-label">👤 ФИО:</span>
             <span class="data-value">${data.fio}</span>
         </div>
         <div class="data-item">
-            <span class="data-label">Поставщик:</span>
+            <span class="data-label">🏢 Поставщик:</span>
             <span class="data-value">${data.supplier}</span>
         </div>
         <div class="data-item">
-            <span class="data-label">Юрлицо:</span>
+            <span class="data-label">🏛️ Юрлицо:</span>
             <span class="data-value">${data.legalEntity}</span>
         </div>
         <div class="data-item">
-            <span class="data-label">Тип товара:</span>
+            <span class="data-label">📦 Тип товара:</span>
             <span class="data-value">${data.productType}</span>
         </div>
         <div class="data-item">
-            <span class="data-label">Марка авто:</span>
+            <span class="data-label">🚗 Марка авто:</span>
             <span class="data-value">${data.vehicleType}</span>
         </div>
         <div class="data-item">
-            <span class="data-label">Номер ТС:</span>
+            <span class="data-label">🔢 Номер ТС:</span>
             <span class="data-value">${data.vehicleNumber}</span>
         </div>
         <div class="data-item">
-            <span class="data-label">Поддоны:</span>
+            <span class="data-label">📦 Поддоны:</span>
             <span class="data-value">${data.pallets}</span>
         </div>
         <div class="data-item">
-            <span class="data-label">Номер заказа:</span>
+            <span class="data-label">📋 Номер заказа:</span>
             <span class="data-value">${data.orderNumber}</span>
         </div>
         <div class="data-item">
-            <span class="data-label">ЭТрН:</span>
+            <span class="data-label">📱 ЭТрН:</span>
             <span class="data-value">${data.etrn}</span>
         </div>
         <div class="data-item">
-            <span class="data-label">Транзит:</span>
+            <span class="data-label">📦 Транзит:</span>
             <span class="data-value">${data.transit}</span>
         </div>
         <div class="data-item highlight">
             <span class="data-label">🚪 Ворота:</span>
             <span class="data-value">${data.gate}</span>
         </div>
+        ${data.scheduleViolation === 'Да' ? `
+        <div class="data-item warning">
+            <span class="data-label">⚠️ Нарушение графика:</span>
+            <span class="data-value">ДА</span>
+        </div>
+        ` : ''}
     `;
 }
 
@@ -454,7 +530,11 @@ async function submitRegistration() {
         
         if (response.success) {
             // Показываем успешное сообщение
-            showSuccessMessage(response.message);
+            showSuccessMessage(response.data);
+            
+            // Логируем успешную регистрацию
+            await logEvent('REGISTRATION_SUCCESS', 
+                `Зарегистрирован: ${registrationState.data.fio}, ${registrationState.data.phone}`);
             
             // Очищаем состояние
             resetRegistrationState();
@@ -462,47 +542,131 @@ async function submitRegistration() {
             // Показываем успешный экран
             showStep(13);
             
-            // Отправляем уведомление (если настроено)
-            if (checkScheduleViolation()) {
+            // Отправляем уведомление если есть нарушение графика
+            if (registrationState.data.scheduleViolation === 'Да') {
                 sendScheduleWarningNotification();
             }
         } else {
             showNotification('Ошибка при сохранении данных: ' + response.message, 'error');
         }
     } catch (error) {
+        console.error('Ошибка отправки регистрации:', error);
         showNotification('Ошибка соединения: ' + error.message, 'error');
+        
+        // Пробуем сохранить локально для оффлайн отправки
+        saveRegistrationOffline();
     } finally {
         showLoader(false);
     }
 }
 
+// Сохранение в Google Sheets через Apps Script
 async function saveToGoogleSheets(data) {
-    // Здесь будет запрос к Google Apps Script
-    // Временная заглушка
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            resolve({
-                success: true,
-                message: 'Данные успешно сохранены'
+    try {
+        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'register_driver',
+                data: data
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        return result;
+        
+    } catch (error) {
+        console.error('Ошибка сохранения в Google Sheets:', error);
+        throw error;
+    }
+}
+
+// Оффлайн сохранение
+function saveRegistrationOffline() {
+    try {
+        const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
+        offlineRegistrations.push({
+            data: registrationState.data,
+            timestamp: new Date().toISOString(),
+            attempts: 0
+        });
+        
+        localStorage.setItem('offline_registrations', JSON.stringify(offlineRegistrations));
+        
+        showNotification('Данные сохранены локально. Будут отправлены при восстановлении связи.', 'warning');
+        
+        // Запускаем фоновую синхронизацию
+        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+            navigator.serviceWorker.ready.then(registration => {
+                registration.sync.register('sync-data');
             });
-        }, 2000);
-    });
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('Ошибка оффлайн сохранения:', error);
+        return false;
+    }
+}
+
+// Синхронизация оффлайн данных
+async function syncOfflineData() {
+    try {
+        const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
+        
+        if (offlineRegistrations.length === 0) return;
+        
+        const successful = [];
+        
+        for (const registration of offlineRegistrations) {
+            try {
+                const response = await saveToGoogleSheets(registration.data);
+                
+                if (response.success) {
+                    successful.push(registration);
+                    await logEvent('OFFLINE_SYNC_SUCCESS', 
+                        `Синхронизировано: ${registration.data.fio}`);
+                }
+            } catch (error) {
+                console.error('Ошибка синхронизации записи:', error);
+            }
+        }
+        
+        // Удаляем успешно синхронизированные записи
+        if (successful.length > 0) {
+            const remaining = offlineRegistrations.filter(r => 
+                !successful.some(s => s.timestamp === r.timestamp));
+            localStorage.setItem('offline_registrations', JSON.stringify(remaining));
+            
+            if (remaining.length === 0) {
+                showNotification('Все оффлайн данные успешно синхронизированы', 'success');
+            }
+        }
+        
+    } catch (error) {
+        console.error('Ошибка синхронизации оффлайн данных:', error);
+    }
 }
 
 // Шаг 13: Успешная регистрация
-function showSuccessMessage() {
+function showSuccessMessage(data) {
     const container = document.getElementById('success-message');
-    const data = registrationState.data;
     
     let message = `
         <div class="success-icon-large">✅</div>
-        <h3>Добро пожаловать, ${data.fio}!</h3>
+        <h3>Добро пожаловать, ${registrationState.data.fio}!</h3>
         <p>Ваша регистрация прошла успешно!</p>
         
         <div class="success-details">
-            <p><strong>Ваши ворота:</strong> ${data.gate}</p>
+            <p><strong>Ваши ворота:</strong> ${registrationState.data.gate}</p>
             <p><strong>Статус:</strong> Зарегистрирован</p>
-            <p><strong>Время регистрации:</strong> ${data.date} ${data.time}</p>
+            <p><strong>Время регистрации:</strong> ${registrationState.data.date} ${registrationState.data.time}</p>
         </div>
         
         <div class="info-box">
@@ -512,7 +676,7 @@ function showSuccessMessage() {
         </div>
     `;
     
-    if (data.scheduleViolation === 'Да') {
+    if (registrationState.data.scheduleViolation === 'Да') {
         message += `
             <div class="warning-box">
                 <p>⚠️ <strong>ВНИМАНИЕ!</strong> Вы нарушили график заезда!</p>
@@ -532,31 +696,31 @@ function sendScheduleWarningNotification() {
     const schedule = ENTRY_SCHEDULE[data.productType];
     const endTime = schedule.end + ':' + (schedule.endMinutes === 0 ? '00' : schedule.endMinutes);
     
-    const message = `
-        ⚠️ *Уважаемый ${data.fio}!*
-        
-        📋 Вы зарегистрировались на доставку товара типа: *${data.productType}*
-        ⏰ Время регистрации: ${data.time}
-        
-        🚨 *ВНИМАНИЕ!* Вы нарушаете график заезда!
-        
-        📅 *График заезда для ${productDesc}:*
-        🕖 С ${schedule.start}:00 - до ${endTime}
-        
-        ❗️ *С большой вероятностью вас могут не принять на складе сегодня!*
-        
-        📍 *Для помощи и уточнения информации вы можете:*
-        👉 Проследовать к окну выдачи/сдачи документов для уточнения
-        📞 Свяжиться с вашим поставщиком
-        
-        💡 *Рекомендация:*
-        В следующий раз планируйте прибытие согласно установленному графику
-        
-        🙏 Спасибо за понимание!
-    `;
+    const message = `⚠️ Уважаемый ${data.fio}!
+
+📋 Вы зарегистрировались на доставку товара типа: ${data.productType}
+⏰ Время регистрации: ${data.time}
+
+🚨 ВНИМАНИЕ! Вы нарушаете график заезда!
+
+📅 График заезда для ${productDesc}:
+🕖 С ${schedule.start}:00 - до ${endTime}
+
+❗️ С большой вероятностью вас могут не принять на складе сегодня!
+
+📍 Для помощи и уточнения информации вы можете:
+👉 Проследовать к окну выдачи/сдачи документов для уточнения
+📞 Свяжиться с вашим поставщиком
+
+💡 Рекомендация:
+В следующий раз планируйте прибытие согласно установленному графику
+
+🙏 Спасибо за понимание!`;
     
-    // Здесь будет отправка в Telegram через Apps Script
-    console.log('Уведомление о нарушении графика:', message);
+    // Логируем уведомление
+    logEvent('SCHEDULE_WARNING', message);
+    
+    // Можно добавить отправку через Google Apps Script если нужно
 }
 
 function getProductDescription(productType) {
@@ -574,8 +738,9 @@ function getProductDescription(productType) {
 function resetRegistration() {
     if (confirm('Вы уверены, что хотите начать регистрацию заново?')) {
         resetRegistrationState();
-        showStep(1);
         clearFormFields();
+        showStep(1);
+        showNotification('Регистрация сброшена', 'info');
     }
 }
 
@@ -616,9 +781,118 @@ function clearFormFields() {
     document.getElementById('etrn-input').value = '';
 }
 
+// Вспомогательные функции
+function normalizePhone(phone) {
+    if (!phone) return '';
+    
+    let cleaned = phone.replace(/\D/g, '');
+    
+    if (cleaned.length === 10) {
+        cleaned = '7' + cleaned;
+    }
+    
+    if (cleaned.length === 11 && cleaned.startsWith('8')) {
+        cleaned = '7' + cleaned.substring(1);
+    }
+    
+    return '+' + cleaned;
+}
+
+function formatPhoneDisplay(phone) {
+    if (!phone) return '';
+    
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length === 11) {
+        const match = cleaned.match(/^(\d{1})(\d{3})(\d{3})(\d{2})(\d{2})$/);
+        if (match) {
+            return `${match[2]} ${match[3]} ${match[4]} ${match[5]}`;
+        }
+    }
+    return phone;
+}
+
+function formatDate(date) {
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}.${month}.${year}`;
+}
+
+function formatTime(date) {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
+}
+
+function checkScheduleViolation() {
+    const productType = registrationState.data.productType;
+    if (!productType || !ENTRY_SCHEDULE[productType]) return false;
+    
+    const schedule = ENTRY_SCHEDULE[productType];
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    
+    if (hours > schedule.end || (hours === schedule.end && minutes > schedule.endMinutes)) {
+        return true;
+    }
+    
+    return false;
+}
+
+// Логирование событий
+async function logEvent(event, details) {
+    try {
+        await fetch(CONFIG.APP_SCRIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'log_event',
+                event: event,
+                details: details
+            })
+        });
+    } catch (error) {
+        console.error('Ошибка логирования:', error);
+    }
+}
+
 // Утилиты
 function showNotification(message, type = 'info') {
     const notification = document.getElementById('notification');
+    if (!notification) {
+        // Создаем временное уведомление если элемента нет
+        const tempNotif = document.createElement('div');
+        tempNotif.className = `notification ${type}`;
+        tempNotif.textContent = message;
+        tempNotif.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            left: 20px;
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 16px 24px;
+            background: ${type === 'error' ? '#f44336' : type === 'success' ? '#4caf50' : '#2196f3'};
+            color: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            z-index: 10000;
+            text-align: center;
+            animation: slideIn 0.3s ease;
+        `;
+        document.body.appendChild(tempNotif);
+        
+        setTimeout(() => {
+            tempNotif.style.animation = 'slideOut 0.3s ease';
+            setTimeout(() => tempNotif.remove(), 300);
+        }, 5000);
+        return;
+    }
+    
     notification.textContent = message;
     notification.className = `notification ${type}`;
     notification.style.display = 'block';
@@ -630,12 +904,23 @@ function showNotification(message, type = 'info') {
 
 function showLoader(show) {
     const loader = document.getElementById('loader');
-    loader.style.display = show ? 'flex' : 'none';
+    if (loader) {
+        loader.style.display = show ? 'flex' : 'none';
+    }
 }
 
-// Оффлайн поддержка
+// Проверка соединения
+function checkConnection() {
+    if (!navigator.onLine) {
+        showNotification('Вы в оффлайн режиме. Данные будут сохранены локально.', 'warning');
+        syncOfflineData(); // Пробуем синхронизировать старые данные
+    }
+}
+
+// Обработчики онлайн/оффлайн
 window.addEventListener('online', () => {
-    showNotification('Соединение восстановлено', 'success');
+    showNotification('Соединение восстановлено. Синхронизируем данные...', 'success');
+    syncOfflineData();
 });
 
 window.addEventListener('offline', () => {
@@ -645,12 +930,35 @@ window.addEventListener('offline', () => {
 // Добавление на домашний экран
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
-    const deferredPrompt = e;
     
-    // Можно показать кнопку для установки
     setTimeout(() => {
         if (confirm('Хотите установить приложение для быстрого доступа?')) {
-            deferredPrompt.prompt();
+            e.prompt();
         }
     }, 3000);
 });
+
+// Проверка Service Worker
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        console.log('Service Worker поддерживается');
+    });
+}
+
+// Экспорт функций для HTML
+window.handlePhoneSubmit = handlePhoneSubmit;
+window.handleFioSubmit = handleFioSubmit;
+window.handleManualSupplier = handleManualSupplier;
+window.selectLegalEntity = selectLegalEntity;
+window.selectProductType = selectProductType;
+window.selectBrand = selectBrand;
+window.handleManualBrand = handleManualBrand;
+window.handleVehicleNumberSubmit = handleVehicleNumberSubmit;
+window.handlePalletsSubmit = handlePalletsSubmit;
+window.handleOrderSubmit = handleOrderSubmit;
+window.handleEtrnSubmit = handleEtrnSubmit;
+window.selectTransit = selectTransit;
+window.submitRegistration = submitRegistration;
+window.resetRegistration = resetRegistration;
+window.goBack = goBack;
+window.selectSupplier = selectSupplier;
