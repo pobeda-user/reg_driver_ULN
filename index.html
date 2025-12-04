@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#4285f4">
+    <title>УЛН. Регистрация водителей</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icons/icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+</head>
+<body>
+    <div class="container" id="app-container">
+        <!-- Шаг 1: Ввод телефона -->
+        <div class="step" id="step-phone" data-step="1">
+            <div class="step-header">
+                <div class="step-number">1</div>
+                <h2>📱 Ввод номера телефона</h2>
+            </div>
+            
+            <div class="step-content">
+                <div class="phone-input-container">
+                    <div class="phone-prefix">+7</div>
+                    <input 
+                        type="tel" 
+                        id="phone-input" 
+                        placeholder="999 123 45 67"
+                        inputmode="tel"
+                        maxlength="10"
+                    >
+                </div>
+                
+                <div class="info-box">
+                    <p><strong>Важно:</strong> Номер телефона нужен для идентификации и связи с вами.</p>
+                    <p>Отправляя свой номер телефона вы автоматически соглашаетесь с обработкой и хранением персональных данных.</p>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="handlePhoneSubmit()">
+                        Продолжить
+                    </button>
+                    <button class="btn btn-secondary" onclick="resetRegistration()">
+                        Сбросить
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Шаг 2: Ввод ФИО -->
+        <div class="step" id="step-fio" data-step="2" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">2</div>
+                <h2>👤 Ввод ФИО</h2>
+            </div>
+            
+            <div class="step-content">
+                <input 
+                    type="text" 
+                    id="fio-input" 
+                    placeholder="Иванов Иван Иванович"
+                    class="form-input"
+                >
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="handleFioSubmit()">
+                        Продолжить
+                    </button>
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Шаг 3: Выбор поставщика -->
+        <div class="step" id="step-supplier" data-step="3" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">3</div>
+                <h2>🏢 Выбор поставщика</h2>
+            </div>
+            
+            <div class="step-content">
+                <div id="supplier-buttons" class="option-buttons">
+                    <!-- Кнопки поставщиков появятся здесь -->
+                </div>
+                
+                <div class="separator">или</div>
+                
+                <div class="manual-input">
+                    <input 
+                        type="text" 
+                        id="supplier-input" 
+                        placeholder="Введите название поставщика"
+                        class="form-input"
+                    >
+                    <button class="btn btn-secondary" onclick="handleManualSupplier()">
+                        Ввести вручную
+                    </button>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Шаг 4: Выбор юрлица -->
+        <div class="step" id="step-legal" data-step="4" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">4</div>
+                <h2>🏛️ Выбор юрлица</h2>
+            </div>
+            
+            <div class="step-content">
+                <div class="option-buttons">
+                    <button class="option-btn" onclick="selectLegalEntity('Гулливер')">
+                        <span class="option-number">1</span>
+                        <span class="option-text">Гулливер</span>
+                    </button>
+                    <button class="option-btn" onclick="selectLegalEntity('ТК Лето')">
+                        <span class="option-number">2</span>
+                        <span class="option-text">ТК Лето</span>
+                    </button>
+                    <button class="option-btn" onclick="selectLegalEntity('Общая машина')">
+                        <span class="option-number">3</span>
+                        <span class="option-text">Общая машина</span>
+                    </button>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Шаг 5: Выбор типа товара -->
+        <div class="step" id="step-product" data-step="5" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">5</div>
+                <h2>📦 Выбор типа товара</h2>
+            </div>
+            
+            <div class="step-content">
+                <div class="option-buttons">
+                    <button class="option-btn" onclick="selectProductType('Сухой')">
+                        <span class="option-number">1</span>
+                        <span class="option-text">Сухой</span>
+                        <span class="option-icon">📦</span>
+                    </button>
+                    <button class="option-btn" onclick="selectProductType('ФРОВ')">
+                        <span class="option-number">2</span>
+                        <span class="option-text">ФРОВ (овощи фрукты)</span>
+                        <span class="option-icon">🍎</span>
+                    </button>
+                    <button class="option-btn" onclick="selectProductType('ФРЕШ')">
+                        <span class="option-number">3</span>
+                        <span class="option-text">ФРЕШ (Охлажденная продукция)</span>
+                        <span class="option-icon">❄️</span>
+                    </button>
+                    <button class="option-btn" onclick="selectProductType('Акциз')">
+                        <span class="option-number">4</span>
+                        <span class="option-text">Акциз (Крепкий алкоголь)</span>
+                        <span class="option-icon">🍷</span>
+                    </button>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Шаг 6: Марка авто -->
+        <div class="step" id="step-vehicle-brand" data-step="6" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">6</div>
+                <h2>🚗 Марка авто</h2>
+            </div>
+            
+            <div class="step-content">
+                <div id="brand-buttons" class="option-buttons">
+                    <!-- Кнопки марок авто появятся здесь -->
+                </div>
+                
+                <div class="separator">или</div>
+                
+                <div class="manual-input">
+                    <input 
+                        type="text" 
+                        id="brand-input" 
+                        placeholder="Введите марку авто"
+                        class="form-input"
+                    >
+                    <button class="btn btn-secondary" onclick="handleManualBrand()">
+                        Ввести вручную
+                    </button>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Шаг 7: Номер ТС -->
+        <div class="step" id="step-vehicle-number" data-step="7" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">7</div>
+                <h2>🔢 Номер ТС</h2>
+            </div>
+            
+            <div class="step-content">
+                <input 
+                    type="text" 
+                    id="vehicle-number-input" 
+                    placeholder="А123ВС777"
+                    class="form-input"
+                >
+                
+                <div class="info-box">
+                    <p>Введите государственный номер автомобиля</p>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="handleVehicleNumberSubmit()">
+                        Продолжить
+                    </button>
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Шаг 8: Количество поддонов -->
+        <div class="step" id="step-pallets" data-step="8" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">8</div>
+                <h2>📦 Количество поддонов</h2>
+            </div>
+            
+            <div class="step-content">
+                <div class="number-input">
+                    <input 
+                        type="number" 
+                        id="pallets-input" 
+                        placeholder="0"
+                        min="0"
+                        step="1"
+                        class="form-input"
+                        inputmode="numeric"
+                    >
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="handlePalletsSubmit()">
+                        Продолжить
+                    </button>
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Шаг 9: Номер заказа -->
+        <div class="step" id="step-order" data-step="9" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">9</div>
+                <h2>📋 Номер заказа</h2>
+            </div>
+            
+            <div class="step-content">
+                <input 
+                    type="text" 
+                    id="order-input" 
+                    placeholder="Номер заказа"
+                    class="form-input"
+                >
+                
+                <div class="info-box">
+                    <p>Найти можно в сопроводительных документах</p>
+                    <p><em>Если не знаете, введите 0</em></p>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="handleOrderSubmit()">
+                        Продолжить
+                    </button>
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Шаг 10: ЭТрН -->
+        <div class="step" id="step-etrn" data-step="10" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">10</div>
+                <h2>📱 ЭТрН</h2>
+            </div>
+            
+            <div class="step-content">
+                <input 
+                    type="text" 
+                    id="etrn-input" 
+                    placeholder="Номер ЭТрН"
+                    class="form-input"
+                >
+                
+                <div class="info-box">
+                    <p>Найти можно в личном кабинете мобильного приложения</p>
+                    <p><em>Если не знаете, введите 0</em></p>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="handleEtrnSubmit()">
+                        Продолжить
+                    </button>
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Шаг 11: Транзит -->
+        <div class="step" id="step-transit" data-step="11" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">11</div>
+                <h2>📦 Транзит</h2>
+            </div>
+            
+            <div class="step-content">
+                <div class="option-buttons">
+                    <button class="option-btn" onclick="selectTransit('Да')">
+                        <span class="option-number">1</span>
+                        <span class="option-text">Да</span>
+                    </button>
+                    <button class="option-btn" onclick="selectTransit('Нет')">
+                        <span class="option-number">2</span>
+                        <span class="option-text">Нет</span>
+                    </button>
+                </div>
+                
+                <div class="info-box">
+                    <p>Привезли ли вы транзит в машине?</p>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Шаг 12: Подтверждение -->
+        <div class="step" id="step-confirm" data-step="12" style="display: none;">
+            <div class="step-header">
+                <div class="step-number">12</div>
+                <h2>📋 Подтверждение данных</h2>
+            </div>
+            
+            <div class="step-content">
+                <div class="data-review" id="data-review">
+                    <!-- Данные будут вставлены здесь -->
+                </div>
+                
+                <div class="info-box warning">
+                    <p><strong>⚠️ Важная информация:</strong></p>
+                    <p>После регистрации ожидайте назначения ворот. Вам поступит сообщение.</p>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="submitRegistration()">
+                        ✅ Зарегистрироваться
+                    </button>
+                    <button class="btn btn-secondary" onclick="goBack()">
+                        Назад
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Успешная регистрация -->
+        <div class="step" id="step-success" data-step="13" style="display: none;">
+            <div class="step-header">
+                <div class="success-icon">✅</div>
+                <h2>🎉 Регистрация завершена!</h2>
+            </div>
+            
+            <div class="step-content">
+                <div class="success-message" id="success-message">
+                    <!-- Сообщение будет вставлено здесь -->
+                </div>
+                
+                <div class="info-box">
+                    <h4>📅 График заезда:</h4>
+                    <ul class="schedule-list">
+                        <li><strong>Сухой склад:</strong> с 7:00 - до 16:30</li>
+                        <li><strong>Охлажденная продукция:</strong> с 7:00 - до 14:00</li>
+                        <li><strong>ФРОВ (фрукты, овощи):</strong> с 7:00 - до 14:00</li>
+                        <li><strong>АКЦИЗНЫЙ склад:</strong> с 7:00 - до 13:00</li>
+                    </ul>
+                </div>
+                
+                <div class="warning-box">
+                    <p><strong>⚠️ Внимание!</strong> Прибытие после указанного времени может привести к отказу в приемке!</p>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="resetRegistration()">
+                        📝 Новая регистрация
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Уведомления -->
+    <div id="notification" class="notification"></div>
+
+    <!-- Загрузка -->
+    <div id="loader" class="loader-overlay" style="display: none;">
+        <div class="loader"></div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        // Регистрация Service Worker для PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registered');
+                    })
+                    .catch(err => {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            });
+        }
+        
+        // Запрос разрешения на уведомления
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    </script>
+</body>
+</html>
