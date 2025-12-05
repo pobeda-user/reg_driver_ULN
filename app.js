@@ -30,25 +30,57 @@ let registrationState = {
 
 // Логирование
 function logToConsole(level, message, data = null) {
-    const timestamp = new Date().toISOString();
+    const timestamp = new Date().toLocaleString('ru-RU');
+    
+    // Форматируем данные для отображения
+    let dataStr = '';
+    if (data !== null && data !== undefined) {
+        try {
+            if (data instanceof Error) {
+                dataStr = `\nОшибка: ${data.message}\nСтек: ${data.stack}`;
+            } else if (typeof data === 'object') {
+                dataStr = '\n' + JSON.stringify(data, null, 2);
+            } else {
+                dataStr = '\n' + String(data);
+            }
+        } catch (e) {
+            dataStr = '\n[Не удалось преобразовать данные]';
+        }
+    }
+    
     const logEntry = {
         timestamp,
         level,
         message,
-        data,
-        url: window.location.href,
-        userAgent: navigator.userAgent
+        data: data instanceof Error ? { 
+            message: data.message, 
+            stack: data.stack,
+            name: data.name 
+        } : data,
+        url: window.location.href
     };
     
-    console.log(`[${level}] ${message}`, data ? data : '');
+    // Выводим в консоль
+    const consoleMessage = `[${level}] ${timestamp} - ${message}${dataStr}`;
+    
+    switch(level) {
+        case 'ERROR':
+            console.error(consoleMessage);
+            break;
+        case 'WARN':
+            console.warn(consoleMessage);
+            break;
+        default:
+            console.log(consoleMessage);
+    }
     
     // Сохраняем логи в localStorage
     try {
         const logs = JSON.parse(localStorage.getItem('app_logs') || '[]');
         logs.unshift(logEntry);
         
-        // Храним только последние 100 записей
-        if (logs.length > 100) {
+        // Храним только последние 200 записей
+        if (logs.length > 200) {
             logs.pop();
         }
         
@@ -56,6 +88,8 @@ function logToConsole(level, message, data = null) {
     } catch (e) {
         console.error('Ошибка сохранения лога:', e);
     }
+    
+    return logEntry;
 }
 
 // ==================== ИНИЦИАЛИЗАЦИЯ ====================
@@ -521,7 +555,10 @@ function showConfirmation() {
 
 // ==================== ШАГ 13: ОТПРАВКА ====================
 async function submitRegistration() {
-    logToConsole('INFO', 'Начинаю отправку регистрации', registrationState.data);
+    logToConsole('INFO', 'Начинаю отправку регистрации', {
+        data: registrationState.data,
+        connectionStatus: navigator.onLine ? 'online' : 'offline'
+    });
     
     // Проверяем заполненность обязательных полей
     const requiredFields = ['phone', 'fio', 'supplier', 'legalEntity', 'productType'];
@@ -532,16 +569,37 @@ async function submitRegistration() {
         return;
     }
     
+    // Проверяем соединение
+    if (!navigator.onLine) {
+        logToConsole('WARN', 'Нет соединения с интернетом');
+        showNotification('⚠️ Нет соединения с интернетом. Данные будут сохранены локально.', 'warning');
+        
+        const saved = saveRegistrationOffline();
+        if (saved) {
+            showSuccessMessage();
+            resetRegistrationState();
+            showStep(13);
+        }
+        return;
+    }
+    
     showLoader(true);
     
     try {
         // Пытаемся отправить онлайн
+        logToConsole('INFO', 'Пытаюсь отправить данные онлайн');
         const response = await sendRegistrationToServer(registrationState.data);
         
-        logToConsole('INFO', 'Ответ от сервера', response);
+        logToConsole('INFO', 'Ответ от сервера получен', {
+            success: response.success,
+            message: response.message,
+            hasData: !!response.data
+        });
         
         if (response && response.success) {
-            logToConsole('SUCCESS', 'Регистрация успешна на сервере!');
+            logToConsole('SUCCESS', 'Регистрация успешна на сервере!', {
+                serverData: response.data
+            });
             
             // Обновляем данные из ответа сервера
             if (response.data) {
@@ -560,18 +618,40 @@ async function submitRegistration() {
             showNotification('✅ Регистрация успешно завершена!', 'success');
             
         } else {
-            logToConsole('ERROR', 'Ошибка от сервера', response?.message);
-            throw new Error(response?.message || 'Неизвестная ошибка сервера');
+            logToConsole('ERROR', 'Ошибка от сервера', {
+                response: response,
+                errorMessage: response?.message
+            });
+            
+            // Показываем более информативное сообщение
+            const errorMsg = response?.message || 'Неизвестная ошибка сервера';
+            showNotification(`❌ Ошибка сервера: ${errorMsg}`, 'error');
+            
+            // Сохраняем оффлайн для повторной отправки
+            const saved = saveRegistrationOffline();
+            if (saved) {
+                showSuccessMessage();
+                resetRegistrationState();
+                showStep(13);
+                showNotification('📱 Данные сохранены локально для повторной отправки.', 'warning');
+            }
         }
         
     } catch (error) {
-        logToConsole('ERROR', 'Ошибка отправки', error);
+        logToConsole('ERROR', 'Критическая ошибка отправки', {
+            error: error,
+            message: error.message,
+            stack: error.stack
+        });
         
         // Сохраняем оффлайн
         const saved = saveRegistrationOffline();
         
         if (saved) {
-            logToConsole('INFO', 'Данные сохранены оффлайн');
+            logToConsole('INFO', 'Данные сохранены оффлайн', { 
+                id: 'saved_offline',
+                timestamp: new Date().toISOString()
+            });
             
             // Показываем успех даже при оффлайн
             showSuccessMessage();
@@ -588,15 +668,201 @@ async function submitRegistration() {
     }
 }
 
+// ==================== ТЕСТИРОВАНИЕ API ====================
+async function testAPIConnectionDetailed() {
+    try {
+        logToConsole('INFO', 'Тестирую соединение с API (детально)');
+        
+        const tests = [
+            { name: 'GET ping', url: CONFIG.APP_SCRIPT_URL + '?action=ping&test=' + Date.now() },
+            { name: 'POST test', url: CONFIG.APP_SCRIPT_URL, method: 'POST' }
+        ];
+        
+        const results = [];
+        
+        for (const test of tests) {
+            try {
+                const startTime = Date.now();
+                const response = await fetch(test.url, {
+                    method: test.method || 'GET',
+                    mode: 'cors',
+                    cache: 'no-cache'
+                });
+                const endTime = Date.now();
+                const duration = endTime - startTime;
+                
+                let result = {
+                    test: test.name,
+                    status: response.status,
+                    ok: response.ok,
+                    duration: duration,
+                    url: test.url
+                };
+                
+                if (response.ok) {
+                    try {
+                        const text = await response.text();
+                        result.response = text.substring(0, 200);
+                        result.success = true;
+                    } catch (e) {
+                        result.success = false;
+                        result.error = 'Не удалось прочитать ответ';
+                    }
+                } else {
+                    result.success = false;
+                    result.error = `HTTP ${response.status}`;
+                }
+                
+                results.push(result);
+                
+            } catch (error) {
+                results.push({
+                    test: test.name,
+                    success: false,
+                    error: error.message,
+                    url: test.url
+                });
+            }
+        }
+        
+        logToConsole('INFO', 'Результаты теста API', results);
+        return results;
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка тестирования API', error);
+        return [];
+    }
+}
+
+// ==================== СЕТЕВЫЕ ЛОГИ ====================
+function showNetworkLogs() {
+    try {
+        const logs = JSON.parse(localStorage.getItem('app_logs') || '[]');
+        const networkLogs = logs.filter(log => 
+            log.message.includes('API') || 
+            log.message.includes('отправк') || 
+            log.message.includes('HTTP') ||
+            log.message.includes('ошибк')
+        );
+        
+        let html = `
+            <div class="modal-overlay" onclick="closeModal(event)">
+                <div class="modal" onclick="event.stopPropagation()" style="max-width: 800px;">
+                    <div class="modal-header">
+                        <h3 class="modal-title">🌐 Сетевые логи</h3>
+                        <button class="modal-close" onclick="closeModal(event)">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <div style="margin-bottom: 20px;">
+                            <button class="btn btn-secondary" onclick="clearNetworkLogs()">Очистить сетевые логи</button>
+                            <button class="btn btn-primary" onclick="retryFailedRequests()">Повторить неудачные запросы</button>
+                        </div>
+                        <div style="max-height: 500px; overflow-y: auto;">
+        `;
+        
+        if (networkLogs.length === 0) {
+            html += '<p>Сетевые логи отсутствуют</p>';
+        } else {
+            networkLogs.forEach((log, index) => {
+                const time = new Date(log.timestamp).toLocaleString('ru-RU');
+                const levelClass = {
+                    'INFO': 'badge-info',
+                    'WARN': 'badge-warning',
+                    'ERROR': 'badge-danger',
+                    'SUCCESS': 'badge-success'
+                }[log.level] || 'badge-info';
+                
+                html += `
+                    <div class="modal-card" style="margin-bottom: 10px; border-left: 4px solid ${
+                        log.level === 'ERROR' ? '#f44336' : 
+                        log.level === 'WARN' ? '#ff9800' : 
+                        log.level === 'SUCCESS' ? '#4caf50' : '#2196f3'
+                    };">
+                        <div class="modal-card-header">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div class="modal-card-badge ${levelClass}">${log.level}</div>
+                                <div style="color: #666; font-size: 11px;">${time}</div>
+                            </div>
+                        </div>
+                        <div class="modal-card-content">
+                            <p style="margin: 0 0 5px 0; font-weight: 600;">${log.message}</p>
+                            ${log.data ? `<pre style="background: #f5f5f5; padding: 5px; border-radius: 4px; margin: 0; font-size: 11px; overflow-x: auto; max-height: 150px; overflow-y: auto;">${JSON.stringify(log.data, null, 2)}</pre>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        html += `
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" onclick="closeModal(event)">Закрыть</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        const modalContainer = document.createElement('div');
+        modalContainer.innerHTML = html;
+        document.body.appendChild(modalContainer);
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка показа сетевых логов', error);
+        alert('Ошибка загрузки сетевых логов: ' + error.message);
+    }
+}
+
+function clearNetworkLogs() {
+    if (confirm('Очистить сетевые логи?')) {
+        try {
+            const logs = JSON.parse(localStorage.getItem('app_logs') || '[]');
+            const filteredLogs = logs.filter(log => 
+                !log.message.includes('API') && 
+                !log.message.includes('отправк') && 
+                !log.message.includes('HTTP')
+            );
+            localStorage.setItem('app_logs', JSON.stringify(filteredLogs));
+            closeModal();
+            showNotification('Сетевые логи очищены', 'info');
+        } catch (error) {
+            showNotification('Ошибка очистки логов', 'error');
+        }
+    }
+}
+
+async function retryFailedRequests() {
+    showLoader(true);
+    try {
+        await sendOfflineData();
+        showNotification('Попытка отправки выполнена', 'info');
+    } catch (error) {
+        showNotification('Ошибка при повторной отправке', 'error');
+    } finally {
+        showLoader(false);
+    }
+}
+
+// Экспортируем
+window.showNetworkLogs = showNetworkLogs;
+
+// Экспортируем для отладки
+window.testAPIConnectionDetailed = testAPIConnectionDetailed;
+
 // ==================== ФУНКЦИЯ ОТПРАВКИ НА СЕРВЕР ====================
 async function sendRegistrationToServer(data) {
     try {
-        logToConsole('INFO', 'Отправляю данные на сервер', { url: CONFIG.APP_SCRIPT_URL, data });
+        logToConsole('INFO', 'Отправляю данные на сервер', { 
+            url: CONFIG.APP_SCRIPT_URL, 
+            dataSize: JSON.stringify(data).length 
+        });
         
         const requestData = {
             action: 'register_driver',
             data: data
         };
+        
+        const startTime = Date.now();
         
         const response = await fetch(CONFIG.APP_SCRIPT_URL, {
             method: 'POST',
@@ -607,17 +873,33 @@ async function sendRegistrationToServer(data) {
             mode: 'cors'
         });
         
-        logToConsole('INFO', 'Статус ответа', { status: response.status, statusText: response.statusText });
+        const endTime = Date.now();
+        const duration = endTime - startTime;
+        
+        logToConsole('INFO', 'Статус ответа', { 
+            status: response.status, 
+            statusText: response.statusText,
+            duration: `${duration}ms`,
+            url: CONFIG.APP_SCRIPT_URL
+        });
         
         if (response.ok) {
             const text = await response.text();
             
             try {
                 const result = JSON.parse(text);
-                logToConsole('INFO', 'Ответ JSON', result);
+                logToConsole('INFO', 'Ответ JSON получен', { 
+                    success: result.success,
+                    message: result.message,
+                    responseSize: text.length
+                });
                 return result;
             } catch (parseError) {
-                logToConsole('ERROR', 'Ошибка парсинга JSON', parseError);
+                logToConsole('ERROR', 'Ошибка парсинга JSON', {
+                    error: parseError.message,
+                    rawText: text.substring(0, 500) + (text.length > 500 ? '...' : ''),
+                    url: CONFIG.APP_SCRIPT_URL
+                });
                 return { 
                     success: false, 
                     message: 'Неверный формат ответа сервера',
@@ -625,13 +907,31 @@ async function sendRegistrationToServer(data) {
                 };
             }
         } else {
-            const errorText = await response.text();
-            logToConsole('ERROR', 'HTTP ошибка', { status: response.status, errorText });
-            throw new Error(`HTTP ошибка ${response.status}: ${errorText}`);
+            let errorText = '';
+            try {
+                errorText = await response.text();
+            } catch (e) {
+                errorText = 'Не удалось прочитать текст ошибки';
+            }
+            
+            logToConsole('ERROR', 'HTTP ошибка', { 
+                status: response.status, 
+                statusText: response.statusText,
+                errorText: errorText.substring(0, 500) + (errorText.length > 500 ? '...' : ''),
+                url: CONFIG.APP_SCRIPT_URL,
+                headers: Object.fromEntries(response.headers.entries())
+            });
+            
+            throw new Error(`HTTP ошибка ${response.status}: ${response.statusText}`);
         }
         
     } catch (error) {
-        logToConsole('ERROR', 'Ошибка отправки на сервер', error);
+        logToConsole('ERROR', 'Ошибка отправки на сервер', {
+            error: error.message,
+            stack: error.stack,
+            url: CONFIG.APP_SCRIPT_URL,
+            timestamp: new Date().toISOString()
+        });
         throw error;
     }
 }
@@ -995,7 +1295,12 @@ function cleanupOldOfflineRecords() {
 // ==================== API ФУНКЦИИ ====================
 async function sendAPIRequest(requestData) {
     try {
-        logToConsole('INFO', 'Отправляю API запрос', requestData);
+        logToConsole('INFO', 'Отправляю API запрос', {
+            action: requestData.action,
+            dataSize: JSON.stringify(requestData).length
+        });
+        
+        const startTime = Date.now();
         
         const response = await fetch(CONFIG.APP_SCRIPT_URL, {
             method: 'POST',
@@ -1006,26 +1311,62 @@ async function sendAPIRequest(requestData) {
             mode: 'cors'
         });
         
-        logToConsole('INFO', 'Статус ответа API', { status: response.status });
+        const endTime = Date.now();
+        const duration = endTime - startTime;
+        
+        logToConsole('INFO', 'Статус ответа API', { 
+            status: response.status,
+            duration: `${duration}ms`,
+            action: requestData.action
+        });
         
         if (response.ok) {
             const text = await response.text();
             try {
                 const result = JSON.parse(text);
-                logToConsole('INFO', 'Ответ API', result);
+                logToConsole('INFO', 'Ответ API получен', {
+                    success: result.success,
+                    action: requestData.action,
+                    responseSize: text.length
+                });
                 return result;
             } catch (parseError) {
-                logToConsole('ERROR', 'Ошибка парсинга JSON API', parseError);
-                return { success: false, message: 'Неверный формат ответа API' };
+                logToConsole('ERROR', 'Ошибка парсинга JSON API', {
+                    error: parseError.message,
+                    action: requestData.action,
+                    rawText: text.substring(0, 200)
+                });
+                return { 
+                    success: false, 
+                    message: 'Неверный формат ответа API',
+                    action: requestData.action
+                };
             }
         } else {
-            const errorText = await response.text();
-            logToConsole('ERROR', 'HTTP ошибка API', { status: response.status, errorText });
-            throw new Error(`HTTP ошибка ${response.status}`);
+            let errorText = '';
+            try {
+                errorText = await response.text();
+            } catch (e) {
+                errorText = 'Не удалось прочитать текст ошибки';
+            }
+            
+            logToConsole('ERROR', 'HTTP ошибка API', { 
+                status: response.status,
+                action: requestData.action,
+                errorText: errorText.substring(0, 200),
+                url: CONFIG.APP_SCRIPT_URL
+            });
+            
+            throw new Error(`HTTP ошибка ${response.status} для действия ${requestData.action}`);
         }
         
     } catch (error) {
-        logToConsole('ERROR', 'Ошибка отправки API запроса', error);
+        logToConsole('ERROR', 'Ошибка отправки API запроса', {
+            error: error.message,
+            stack: error.stack,
+            action: requestData.action,
+            url: CONFIG.APP_SCRIPT_URL
+        });
         throw error;
     }
 }
@@ -1434,3 +1775,4 @@ window.forceSendOfflineData = forceSendOfflineData;
 window.closeModal = closeModal;
 
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
