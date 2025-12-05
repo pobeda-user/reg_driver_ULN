@@ -1,4 +1,4 @@
-// app.js v1.3 - ПОЛНАЯ ВЕРСИЯ С ЛОГИРОВАНИЕМ
+// app.js v1.3 - ПОЛНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ
 
 // Конфигурация
 let CONFIG = {
@@ -668,187 +668,6 @@ async function submitRegistration() {
     }
 }
 
-// ==================== ТЕСТИРОВАНИЕ API ====================
-async function testAPIConnectionDetailed() {
-    try {
-        logToConsole('INFO', 'Тестирую соединение с API (детально)');
-        
-        const tests = [
-            { name: 'GET ping', url: CONFIG.APP_SCRIPT_URL + '?action=ping&test=' + Date.now() },
-            { name: 'POST test', url: CONFIG.APP_SCRIPT_URL, method: 'POST' }
-        ];
-        
-        const results = [];
-        
-        for (const test of tests) {
-            try {
-                const startTime = Date.now();
-                const response = await fetch(test.url, {
-                    method: test.method || 'GET',
-                    mode: 'cors',
-                    cache: 'no-cache'
-                });
-                const endTime = Date.now();
-                const duration = endTime - startTime;
-                
-                let result = {
-                    test: test.name,
-                    status: response.status,
-                    ok: response.ok,
-                    duration: duration,
-                    url: test.url
-                };
-                
-                if (response.ok) {
-                    try {
-                        const text = await response.text();
-                        result.response = text.substring(0, 200);
-                        result.success = true;
-                    } catch (e) {
-                        result.success = false;
-                        result.error = 'Не удалось прочитать ответ';
-                    }
-                } else {
-                    result.success = false;
-                    result.error = `HTTP ${response.status}`;
-                }
-                
-                results.push(result);
-                
-            } catch (error) {
-                results.push({
-                    test: test.name,
-                    success: false,
-                    error: error.message,
-                    url: test.url
-                });
-            }
-        }
-        
-        logToConsole('INFO', 'Результаты теста API', results);
-        return results;
-        
-    } catch (error) {
-        logToConsole('ERROR', 'Ошибка тестирования API', error);
-        return [];
-    }
-}
-
-// ==================== СЕТЕВЫЕ ЛОГИ ====================
-function showNetworkLogs() {
-    try {
-        const logs = JSON.parse(localStorage.getItem('app_logs') || '[]');
-        const networkLogs = logs.filter(log => 
-            log.message.includes('API') || 
-            log.message.includes('отправк') || 
-            log.message.includes('HTTP') ||
-            log.message.includes('ошибк')
-        );
-        
-        let html = `
-            <div class="modal-overlay" onclick="closeModal(event)">
-                <div class="modal" onclick="event.stopPropagation()" style="max-width: 800px;">
-                    <div class="modal-header">
-                        <h3 class="modal-title">🌐 Сетевые логи</h3>
-                        <button class="modal-close" onclick="closeModal(event)">✕</button>
-                    </div>
-                    <div class="modal-body">
-                        <div style="margin-bottom: 20px;">
-                            <button class="btn btn-secondary" onclick="clearNetworkLogs()">Очистить сетевые логи</button>
-                            <button class="btn btn-primary" onclick="retryFailedRequests()">Повторить неудачные запросы</button>
-                        </div>
-                        <div style="max-height: 500px; overflow-y: auto;">
-        `;
-        
-        if (networkLogs.length === 0) {
-            html += '<p>Сетевые логи отсутствуют</p>';
-        } else {
-            networkLogs.forEach((log, index) => {
-                const time = new Date(log.timestamp).toLocaleString('ru-RU');
-                const levelClass = {
-                    'INFO': 'badge-info',
-                    'WARN': 'badge-warning',
-                    'ERROR': 'badge-danger',
-                    'SUCCESS': 'badge-success'
-                }[log.level] || 'badge-info';
-                
-                html += `
-                    <div class="modal-card" style="margin-bottom: 10px; border-left: 4px solid ${
-                        log.level === 'ERROR' ? '#f44336' : 
-                        log.level === 'WARN' ? '#ff9800' : 
-                        log.level === 'SUCCESS' ? '#4caf50' : '#2196f3'
-                    };">
-                        <div class="modal-card-header">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <div class="modal-card-badge ${levelClass}">${log.level}</div>
-                                <div style="color: #666; font-size: 11px;">${time}</div>
-                            </div>
-                        </div>
-                        <div class="modal-card-content">
-                            <p style="margin: 0 0 5px 0; font-weight: 600;">${log.message}</p>
-                            ${log.data ? `<pre style="background: #f5f5f5; padding: 5px; border-radius: 4px; margin: 0; font-size: 11px; overflow-x: auto; max-height: 150px; overflow-y: auto;">${JSON.stringify(log.data, null, 2)}</pre>` : ''}
-                        </div>
-                    </div>
-                `;
-            });
-        }
-        
-        html += `
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button class="btn btn-secondary" onclick="closeModal(event)">Закрыть</button>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        const modalContainer = document.createElement('div');
-        modalContainer.innerHTML = html;
-        document.body.appendChild(modalContainer);
-        
-    } catch (error) {
-        logToConsole('ERROR', 'Ошибка показа сетевых логов', error);
-        alert('Ошибка загрузки сетевых логов: ' + error.message);
-    }
-}
-
-function clearNetworkLogs() {
-    if (confirm('Очистить сетевые логи?')) {
-        try {
-            const logs = JSON.parse(localStorage.getItem('app_logs') || '[]');
-            const filteredLogs = logs.filter(log => 
-                !log.message.includes('API') && 
-                !log.message.includes('отправк') && 
-                !log.message.includes('HTTP')
-            );
-            localStorage.setItem('app_logs', JSON.stringify(filteredLogs));
-            closeModal();
-            showNotification('Сетевые логи очищены', 'info');
-        } catch (error) {
-            showNotification('Ошибка очистки логов', 'error');
-        }
-    }
-}
-
-async function retryFailedRequests() {
-    showLoader(true);
-    try {
-        await sendOfflineData();
-        showNotification('Попытка отправки выполнена', 'info');
-    } catch (error) {
-        showNotification('Ошибка при повторной отправке', 'error');
-    } finally {
-        showLoader(false);
-    }
-}
-
-// Экспортируем
-window.showNetworkLogs = showNetworkLogs;
-
-// Экспортируем для отладки
-window.testAPIConnectionDetailed = testAPIConnectionDetailed;
-
 // ==================== ФУНКЦИЯ ОТПРАВКИ НА СЕРВЕР ====================
 async function sendRegistrationToServer(data) {
     try {
@@ -933,6 +752,125 @@ async function sendRegistrationToServer(data) {
             timestamp: new Date().toISOString()
         });
         throw error;
+    }
+}
+
+// ==================== API ФУНКЦИИ ====================
+async function sendAPIRequest(requestData) {
+    try {
+        logToConsole('INFO', 'Отправляю API запрос', {
+            action: requestData.action,
+            dataSize: JSON.stringify(requestData).length
+        });
+        
+        const startTime = Date.now();
+        
+        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData),
+            mode: 'cors'
+        });
+        
+        const endTime = Date.now();
+        const duration = endTime - startTime;
+        
+        logToConsole('INFO', 'Статус ответа API', { 
+            status: response.status,
+            duration: `${duration}ms`,
+            action: requestData.action
+        });
+        
+        if (response.ok) {
+            const text = await response.text();
+            try {
+                const result = JSON.parse(text);
+                logToConsole('INFO', 'Ответ API получен', {
+                    success: result.success,
+                    action: requestData.action,
+                    responseSize: text.length
+                });
+                return result;
+            } catch (parseError) {
+                logToConsole('ERROR', 'Ошибка парсинга JSON API', {
+                    error: parseError.message,
+                    action: requestData.action,
+                    rawText: text.substring(0, 200)
+                });
+                return { 
+                    success: false, 
+                    message: 'Неверный формат ответа API',
+                    action: requestData.action
+                };
+            }
+        } else {
+            let errorText = '';
+            try {
+                errorText = await response.text();
+            } catch (e) {
+                errorText = 'Не удалось прочитать текст ошибки';
+            }
+            
+            logToConsole('ERROR', 'HTTP ошибка API', { 
+                status: response.status,
+                action: requestData.action,
+                errorText: errorText.substring(0, 200),
+                url: CONFIG.APP_SCRIPT_URL
+            });
+            
+            throw new Error(`HTTP ошибка ${response.status} для действия ${requestData.action}`);
+        }
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка отправки API запроса', {
+            error: error.message,
+            stack: error.stack,
+            action: requestData.action,
+            url: CONFIG.APP_SCRIPT_URL
+        });
+        throw error;
+    }
+}
+
+async function testAPIConnection() {
+    try {
+        logToConsole('INFO', 'Тестирую соединение с API');
+        
+        // Тест GET запросом
+        const testUrl = CONFIG.APP_SCRIPT_URL + '?action=ping&test=' + Date.now();
+        
+        const response = await fetch(testUrl, {
+            method: 'GET',
+            mode: 'cors',
+            cache: 'no-cache'
+        });
+        
+        logToConsole('INFO', 'Статус теста API', { 
+            status: response.status, 
+            online: response.ok 
+        });
+        
+        updateConnectionStatus(response.ok);
+        
+        if (response.ok) {
+            try {
+                const data = await response.json();
+                logToConsole('INFO', 'API тест успешен', data);
+                return true;
+            } catch (jsonError) {
+                logToConsole('WARN', 'API тест: ответ не JSON', jsonError);
+                return true;
+            }
+        }
+        
+        return false;
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка тестирования API', error);
+        updateConnectionStatus(false);
+        return false;
     }
 }
 
@@ -1178,60 +1116,6 @@ function showOfflineDataModal() {
         modalContainer.innerHTML = html;
         document.body.appendChild(modalContainer);
         
-        // Добавляем стили для модального окна
-        if (!document.querySelector('#modal-styles')) {
-            const style = document.createElement('style');
-            style.id = 'modal-styles';
-            style.textContent = `
-                .modal-overlay {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background: rgba(0,0,0,0.5);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    z-index: 10000;
-                }
-                .modal {
-                    background: white;
-                    border-radius: 12px;
-                    padding: 20px;
-                    max-width: 600px;
-                    width: 90%;
-                    max-height: 90vh;
-                    overflow-y: auto;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-                }
-                .modal-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 20px;
-                }
-                .modal-title {
-                    margin: 0;
-                    font-size: 20px;
-                }
-                .modal-close {
-                    background: none;
-                    border: none;
-                    font-size: 24px;
-                    cursor: pointer;
-                    color: #666;
-                }
-                .modal-footer {
-                    display: flex;
-                    gap: 10px;
-                    justify-content: flex-end;
-                    margin-top: 20px;
-                }
-            `;
-            document.head.appendChild(style);
-        }
-        
     } catch (error) {
         logToConsole('ERROR', 'Ошибка показа оффлайн данных', error);
         alert('Ошибка загрузки оффлайн данных: ' + error.message);
@@ -1289,125 +1173,6 @@ function cleanupOldOfflineRecords() {
         }
     } catch (error) {
         logToConsole('ERROR', 'Ошибка очистки старых записей', error);
-    }
-}
-
-// ==================== API ФУНКЦИИ ====================
-async function sendAPIRequest(requestData) {
-    try {
-        logToConsole('INFO', 'Отправляю API запрос', {
-            action: requestData.action,
-            dataSize: JSON.stringify(requestData).length
-        });
-        
-        const startTime = Date.now();
-        
-        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestData),
-            mode: 'cors'
-        });
-        
-        const endTime = Date.now();
-        const duration = endTime - startTime;
-        
-        logToConsole('INFO', 'Статус ответа API', { 
-            status: response.status,
-            duration: `${duration}ms`,
-            action: requestData.action
-        });
-        
-        if (response.ok) {
-            const text = await response.text();
-            try {
-                const result = JSON.parse(text);
-                logToConsole('INFO', 'Ответ API получен', {
-                    success: result.success,
-                    action: requestData.action,
-                    responseSize: text.length
-                });
-                return result;
-            } catch (parseError) {
-                logToConsole('ERROR', 'Ошибка парсинга JSON API', {
-                    error: parseError.message,
-                    action: requestData.action,
-                    rawText: text.substring(0, 200)
-                });
-                return { 
-                    success: false, 
-                    message: 'Неверный формат ответа API',
-                    action: requestData.action
-                };
-            }
-        } else {
-            let errorText = '';
-            try {
-                errorText = await response.text();
-            } catch (e) {
-                errorText = 'Не удалось прочитать текст ошибки';
-            }
-            
-            logToConsole('ERROR', 'HTTP ошибка API', { 
-                status: response.status,
-                action: requestData.action,
-                errorText: errorText.substring(0, 200),
-                url: CONFIG.APP_SCRIPT_URL
-            });
-            
-            throw new Error(`HTTP ошибка ${response.status} для действия ${requestData.action}`);
-        }
-        
-    } catch (error) {
-        logToConsole('ERROR', 'Ошибка отправки API запроса', {
-            error: error.message,
-            stack: error.stack,
-            action: requestData.action,
-            url: CONFIG.APP_SCRIPT_URL
-        });
-        throw error;
-    }
-}
-
-async function testAPIConnection() {
-    try {
-        logToConsole('INFO', 'Тестирую соединение с API');
-        
-        // Тест GET запросом
-        const testUrl = CONFIG.APP_SCRIPT_URL + '?action=ping&test=' + Date.now();
-        
-        const response = await fetch(testUrl, {
-            method: 'GET',
-            mode: 'cors',
-            cache: 'no-cache'
-        });
-        
-        logToConsole('INFO', 'Статус теста API', { 
-            status: response.status, 
-            online: response.ok 
-        });
-        
-        updateConnectionStatus(response.ok);
-        
-        if (response.ok) {
-            try {
-                const data = await response.json();
-                logToConsole('INFO', 'API тест успешен', data);
-                return true;
-            } catch (jsonError) {
-                logToConsole('WARN', 'API тест: ответ не JSON', jsonError);
-                return true;
-            }
-        }
-        
-        return false;
-        
-    } catch (error) {
-        logToConsole('ERROR', 'Ошибка тестирования API', error);
-        updateConnectionStatus(false);
-        return false;
     }
 }
 
@@ -1529,7 +1294,7 @@ function showLogsModal() {
                             <div style="color: #666; font-size: 11px;">${time}</div>
                         </div>
                         <div class="card-body">
-                            <p style="margin: 0 0 5px 0;"><strong>${log.message}</strong></p>
+                            <p style="margin: 0 0 5px 0; font-weight: 600;">${log.message}</p>
                             ${log.data ? `<pre style="background: #f5f5f5; padding: 5px; border-radius: 4px; margin: 0; font-size: 11px; overflow-x: auto;">${JSON.stringify(log.data, null, 2)}</pre>` : ''}
                         </div>
                     </div>
@@ -1587,6 +1352,181 @@ function clearLogs() {
         localStorage.removeItem('app_logs');
         closeModal();
         showNotification('Логи очищены', 'info');
+    }
+}
+
+// ==================== ТЕСТИРОВАНИЕ API ====================
+async function testAPIConnectionDetailed() {
+    try {
+        logToConsole('INFO', 'Тестирую соединение с API (детально)');
+        
+        const tests = [
+            { name: 'GET ping', url: CONFIG.APP_SCRIPT_URL + '?action=ping&test=' + Date.now() },
+            { name: 'POST test', url: CONFIG.APP_SCRIPT_URL, method: 'POST' }
+        ];
+        
+        const results = [];
+        
+        for (const test of tests) {
+            try {
+                const startTime = Date.now();
+                const response = await fetch(test.url, {
+                    method: test.method || 'GET',
+                    mode: 'cors',
+                    cache: 'no-cache'
+                });
+                const endTime = Date.now();
+                const duration = endTime - startTime;
+                
+                let result = {
+                    test: test.name,
+                    status: response.status,
+                    ok: response.ok,
+                    duration: duration,
+                    url: test.url
+                };
+                
+                if (response.ok) {
+                    try {
+                        const text = await response.text();
+                        result.response = text.substring(0, 200);
+                        result.success = true;
+                    } catch (e) {
+                        result.success = false;
+                        result.error = 'Не удалось прочитать ответ';
+                    }
+                } else {
+                    result.success = false;
+                    result.error = `HTTP ${response.status}`;
+                }
+                
+                results.push(result);
+                
+            } catch (error) {
+                results.push({
+                    test: test.name,
+                    success: false,
+                    error: error.message,
+                    url: test.url
+                });
+            }
+        }
+        
+        logToConsole('INFO', 'Результаты теста API', results);
+        return results;
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка тестирования API', error);
+        return [];
+    }
+}
+
+// ==================== СЕТЕВЫЕ ЛОГИ ====================
+function showNetworkLogs() {
+    try {
+        const logs = JSON.parse(localStorage.getItem('app_logs') || '[]');
+        const networkLogs = logs.filter(log => 
+            log.message.includes('API') || 
+            log.message.includes('отправк') || 
+            log.message.includes('HTTP') ||
+            log.message.includes('ошибк')
+        );
+        
+        let html = `
+            <div class="modal-overlay" onclick="closeModal(event)">
+                <div class="modal" onclick="event.stopPropagation()" style="max-width: 800px;">
+                    <div class="modal-header">
+                        <h3 class="modal-title">🌐 Сетевые логи</h3>
+                        <button class="modal-close" onclick="closeModal(event)">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <div style="margin-bottom: 20px;">
+                            <button class="btn btn-secondary" onclick="clearNetworkLogs()">Очистить сетевые логи</button>
+                            <button class="btn btn-primary" onclick="retryFailedRequests()">Повторить неудачные запросы</button>
+                        </div>
+                        <div style="max-height: 500px; overflow-y: auto;">
+        `;
+        
+        if (networkLogs.length === 0) {
+            html += '<p>Сетевые логи отсутствуют</p>';
+        } else {
+            networkLogs.forEach((log, index) => {
+                const time = new Date(log.timestamp).toLocaleString('ru-RU');
+                const levelClass = {
+                    'INFO': 'badge-info',
+                    'WARN': 'badge-warning',
+                    'ERROR': 'badge-danger',
+                    'SUCCESS': 'badge-success'
+                }[log.level] || 'badge-info';
+                
+                html += `
+                    <div class="modal-card" style="margin-bottom: 10px; border-left: 4px solid ${
+                        log.level === 'ERROR' ? '#f44336' : 
+                        log.level === 'WARN' ? '#ff9800' : 
+                        log.level === 'SUCCESS' ? '#4caf50' : '#2196f3'
+                    };">
+                        <div class="modal-card-header">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div class="modal-card-badge ${levelClass}">${log.level}</div>
+                                <div style="color: #666; font-size: 11px;">${time}</div>
+                            </div>
+                        </div>
+                        <div class="modal-card-content">
+                            <p style="margin: 0 0 5px 0; font-weight: 600;">${log.message}</p>
+                            ${log.data ? `<pre style="background: #f5f5f5; padding: 5px; border-radius: 4px; margin: 0; font-size: 11px; overflow-x: auto; max-height: 150px; overflow-y: auto;">${JSON.stringify(log.data, null, 2)}</pre>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        html += `
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" onclick="closeModal(event)">Закрыть</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        const modalContainer = document.createElement('div');
+        modalContainer.innerHTML = html;
+        document.body.appendChild(modalContainer);
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка показа сетевых логов', error);
+        alert('Ошибка загрузки сетевых логов: ' + error.message);
+    }
+}
+
+function clearNetworkLogs() {
+    if (confirm('Очистить сетевые логи?')) {
+        try {
+            const logs = JSON.parse(localStorage.getItem('app_logs') || '[]');
+            const filteredLogs = logs.filter(log => 
+                !log.message.includes('API') && 
+                !log.message.includes('отправк') && 
+                !log.message.includes('HTTP')
+            );
+            localStorage.setItem('app_logs', JSON.stringify(filteredLogs));
+            closeModal();
+            showNotification('Сетевые логи очищены', 'info');
+        } catch (error) {
+            showNotification('Ошибка очистки логов', 'error');
+        }
+    }
+}
+
+async function retryFailedRequests() {
+    showLoader(true);
+    try {
+        await sendOfflineData();
+        showNotification('Попытка отправки выполнена', 'info');
+    } catch (error) {
+        showNotification('Ошибка при повторной отправке', 'error');
+    } finally {
+        showLoader(false);
     }
 }
 
@@ -1752,6 +1692,55 @@ function checkConnectionAndSendOffline() {
     }
 }
 
+function showSuccessMessage(serverData = null) {
+    logToConsole('INFO', 'Показываю сообщение об успехе');
+    
+    const container = document.getElementById('success-message');
+    if (!container) return;
+    
+    const data = registrationState.data;
+    const gate = serverData?.gate || data.gate || 'Не назначены';
+    const date = serverData?.date || data.date || '';
+    const time = serverData?.time || data.time || '';
+    
+    let html = `
+        <div class="success-icon-large">✅</div>
+        <div class="success-message">
+            <h3>Добро пожаловать, ${data.fio}!</h3>
+            <p>Ваша регистрация прошла успешно!</p>
+        </div>
+        
+        <div class="success-details">
+            <p><strong>Ваши ворота:</strong> ${gate}</p>
+            <p><strong>Статус:</strong> Зарегистрирован</p>
+    `;
+    
+    if (date && time) {
+        html += `<p><strong>Время регистрации:</strong> ${date} ${time}</p>`;
+    }
+    
+    html += `
+        </div>
+        
+        <div class="info-box">
+            <p>📍 Придерживайтесь схемы движения</p>
+            <p>🚛 Соблюдайте скоростной режим 5 км/ч</p>
+            <p>📋 Следуйте указаниям персонала</p>
+        </div>
+    `;
+    
+    if (data.scheduleViolation === 'Да') {
+        html += `
+            <div class="warning-box">
+                <p>⚠️ <strong>ВНИМАНИЕ!</strong> Вы нарушили график заезда!</p>
+                <p>Рекомендуем связаться с вашим поставщиком.</p>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
 // ==================== ЭКСПОРТ ФУНКЦИЙ ====================
 window.handlePhoneSubmit = handlePhoneSubmit;
 window.handleFioSubmit = handleFioSubmit;
@@ -1773,6 +1762,10 @@ window.showLogsModal = showLogsModal;
 window.showOfflineDataModal = showOfflineDataModal;
 window.forceSendOfflineData = forceSendOfflineData;
 window.closeModal = closeModal;
+window.testAPIConnectionDetailed = testAPIConnectionDetailed;
+window.showNetworkLogs = showNetworkLogs;
+window.showLoader = showLoader;
+window.clearLogs = clearLogs;
+window.exportLogs = exportLogs;
 
 logToConsole('INFO', 'app.js загружен и готов к работе');
-
