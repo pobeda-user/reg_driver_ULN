@@ -607,47 +607,57 @@
                 </div>
             </div>
         </div>       
-        <!-- Шаг 3: Выбор поставщика -->
+        <!-- Шаг 3: Выберите поставщика -->
 <div class="step" data-step="3">
     <div class="step-header">
         <div class="step-number">3</div>
         <h2>Выберите поставщика</h2>
     </div>
     <div class="step-content">
-        <div class="info-box">
-            <p>📱 Поиск поставщиков по вашему номеру телефона...</p>
+        <!-- Заголовок для истории -->
+        <div style="margin-bottom: 15px;">
+            <p style="color: #666; font-size: 14px; margin-bottom: 8px;">
+                <strong>История поставщиков:</strong> (поиск по номеру телефона)
+            </p>
         </div>
         
-        <div id="supplier-buttons" class="option-buttons">
-            <!-- История поставщиков будет загружена сюда -->
+        <!-- Контейнер для кнопок поставщиков -->
+        <div id="supplier-buttons" class="option-buttons" style="min-height: 100px;">
+            <!-- Будет загружено динамически -->
         </div>
         
-        <div class="separator">или введите нового поставщика</div>
+        <!-- Разделитель -->
+        <div class="separator">или</div>
         
-        <p style="margin-bottom: 10px; color: #666; font-size: 14px;">
-            Введите полное наименование поставщика:
-        </p>
-        
-        <div class="manual-input">
-            <input 
-                type="text" 
-                id="supplier-input" 
-                class="form-input" 
-                placeholder="Например: ООО 'Ромашка', ИП Иванов А.В., ЗАО 'Весна'"
-                autocomplete="organization"
-            >
-            <button type="button" class="btn btn-primary" onclick="handleManualSupplier()">
-                Подтвердить
-            </button>
+        <!-- Ручной ввод -->
+        <div style="margin-top: 20px;">
+            <p style="color: #666; font-size: 14px; margin-bottom: 8px;">
+                <strong>Введите нового поставщика:</strong>
+            </p>
+            <div class="manual-input">
+                <input 
+                    type="text" 
+                    id="supplier-input" 
+                    class="form-input" 
+                    placeholder="Например: ООО 'Ромашка', ИП Иванов А.В."
+                    autocomplete="off"
+                    style="flex: 1;"
+                >
+                <button type="button" class="btn btn-primary" onclick="handleManualSupplier()" style="min-width: 80px;">
+                    OK
+                </button>
+            </div>
         </div>
         
-        <div class="info-box warning" style="margin-top: 15px;">
-            <p>⚠️ Внимание: Поставщик определяется на основе вашего телефона</p>
+        <!-- Информационное сообщение -->
+        <div class="info-box" style="margin-top: 20px;">
+            <p>ℹ️ Поставщик будет сохранен в вашу историю для будущих визитов</p>
         </div>
         
-        <div class="button-group">
+        <!-- Кнопка назад -->
+        <div class="button-group" style="margin-top: 30px;">
             <button type="button" class="btn btn-secondary" onclick="goBack()">
-                ← Назад
+                Назад
             </button>
         </div>
     </div>
@@ -917,35 +927,38 @@
         </div>
 
         <!-- Шаг 12: Подтверждение -->
-        <div class="step" data-step="12">
-            <div class="step-header">
-                <div class="step-number">12</div>
-                <h2>Проверьте данные</h2>
-            </div>
-            <div class="step-content">
-                <div class="data-review" id="data-review">
-                    <!-- Данные будут загружены сюда -->
-                </div>
-                
-                <div class="info-box">
-                    <p>✅ Проверьте все данные перед отправкой</p>
-                    <p>📝 При необходимости вернитесь и исправьте</p>
-                </div>
-                
-                <div class="button-group">
-                    <button type="button" class="btn btn-secondary" onclick="goBack()">
-                        Назад
-                    </button>
-                    <button type="button" class="btn btn-secondary" onclick="resetRegistration()">
-                        Сбросить
-                    </button>
-                    <button type="button" class="btn btn-primary" onclick="submitRegistration()">
-                        ✅ Отправить регистрацию
-                    </button>
-                </div>
-            </div>
+<div class="step" data-step="12">
+    <div class="step-header">
+        <div class="step-number">12</div>
+        <h2>Проверьте данные</h2>
+    </div>
+    <div class="step-content">
+        <div class="data-review" id="data-review">
+            <!-- Данные будут загружены сюда -->
         </div>
-
+        
+        <div class="info-box warning" id="connection-status" style="display: none;">
+            <p>⚠️ Вы в оффлайн режиме. Данные будут сохранены локально.</p>
+        </div>
+        
+        <div class="button-group">
+            <button type="button" class="btn btn-secondary" onclick="goBack()">
+                Назад
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="resetRegistration()">
+                Сбросить
+            </button>
+            <button type="button" class="btn btn-primary" onclick="submitRegistration()" id="submit-btn">
+                ✅ Отправить регистрацию
+            </button>
+        </div>
+        
+        <div id="submit-status" style="text-align: center; margin-top: 15px; display: none;">
+            <div class="loader" style="width: 30px; height: 30px; margin: 0 auto;"></div>
+            <p style="color: #666; margin-top: 10px; font-size: 14px;">Отправка данных...</p>
+        </div>
+    </div>
+</div>
         <!-- Шаг 13: Успешно -->
         <div class="step" data-step="13">
             <div class="step-header">
@@ -988,9 +1001,27 @@
                 });
             });
         }
-    </script>
+        // Добавьте в конец index.html перед закрывающим тегом body
+document.addEventListener('DOMContentLoaded', function() {
+    // Обновляем статус соединения
+    function updateConnectionStatus() {
+        const statusElement = document.getElementById('connection-status');
+        if (statusElement) {
+            statusElement.style.display = navigator.onLine ? 'none' : 'block';
+        }
+    }
+    
+    // Обновляем при изменении состояния сети
+    window.addEventListener('online', updateConnectionStatus);
+    window.addEventListener('offline', updateConnectionStatus);
+    
+    // Инициализируем статус
+    setTimeout(updateConnectionStatus, 100);
+});
+</script>
 </body>
 </html>
+
 
 
 
