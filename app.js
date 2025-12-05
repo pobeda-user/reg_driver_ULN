@@ -882,21 +882,30 @@ async function testAPIConnection() {
     try {
         console.log('Тестирование соединения с API...');
         
-        const url = CONFIG.APP_SCRIPT_URL + '?action=ping';
-        const response = await fetch(url);
+        // Используем параметр action=ping для GET запроса
+        const url = CONFIG.APP_SCRIPT_URL + '?action=ping&test=' + Date.now();
+        console.log('Тестирую URL:', url);
+        
+        const response = await fetch(url, {
+            method: 'GET',
+            cache: 'no-cache' // Отключаем кеширование
+        });
+        
+        console.log('Статус ответа теста:', response.status);
         
         if (response.ok) {
             const data = await response.json();
             console.log('API доступен:', data);
             updateConnectionStatus(true);
             return true;
+        } else {
+            console.warn('API недоступен, статус:', response.status);
+            updateConnectionStatus(false);
+            return false;
         }
         
-        updateConnectionStatus(false);
-        return false;
-        
     } catch (error) {
-        console.warn('API недоступен:', error);
+        console.warn('API недоступен, ошибка:', error);
         updateConnectionStatus(false);
         return false;
     }
@@ -1100,3 +1109,4 @@ window.goBack = goBack;
 window.selectSupplier = selectSupplier;
 
 console.log('app.js загружен, функции экспортированы');
+
