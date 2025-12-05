@@ -843,37 +843,32 @@ function saveRegistrationOffline() {
 // ==================== API ФУНКЦИИ ====================
 async function sendRequest(action, data = {}) {
     try {
-        const url = CONFIG.APP_SCRIPT_URL;
-        console.log(`Отправка запроса ${action} на ${url}`);
+        console.log(`Отправка ${action} на ${CONFIG.APP_SCRIPT_URL}`);
         
-        const requestData = {
-            action: action,
-            ...data
-        };
-        
-        console.log('Данные запроса:', requestData);
-        
-        const response = await fetch(url, {
+        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(requestData)
+            body: JSON.stringify({
+                action: action,
+                ...data
+            })
         });
         
-        console.log('Статус ответа:', response.status, response.statusText);
+        console.log('Статус ответа:', response.status);
         
         if (!response.ok) {
-            throw new Error(`HTTP ошибка ${response.status}: ${response.statusText}`);
+            throw new Error(`HTTP ошибка ${response.status}`);
         }
         
         const result = await response.json();
-        console.log('Ответ API:', result);
+        console.log('Ответ сервера:', result);
         
         return result;
         
     } catch (error) {
-        console.error('Ошибка API запроса:', error);
+        console.error('Ошибка отправки запроса:', error);
         throw error;
     }
 }
@@ -1164,5 +1159,6 @@ window.goBack = goBack;
 window.selectSupplier = selectSupplier;
 
 console.log('app.js загружен, функции экспортированы');
+
 
 
