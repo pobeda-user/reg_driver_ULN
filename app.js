@@ -1088,6 +1088,61 @@ function showLoader(show) {
         console.log('Лоадер:', show ? 'показан' : 'скрыт');
     }
 }
+async function debugTestConnection() {
+    console.log('=== ДЕТАЛЬНОЕ ТЕСТИРОВАНИЕ API ===');
+    
+    showLoader(true);
+    
+    try {
+        // Тест 1: Простой GET запрос
+        console.log('Тест 1: Простой GET запрос...');
+        const url1 = CONFIG.APP_SCRIPT_URL + '?test=' + Date.now();
+        console.log('URL:', url1);
+        
+        const response1 = await fetch(url1);
+        console.log('Статус:', response1.status, response1.statusText);
+        
+        if (response1.ok) {
+            const data1 = await response1.json();
+            console.log('Ответ 1:', data1);
+        } else {
+            console.log('Текст ошибки:', await response1.text());
+        }
+        
+        // Тест 2: GET с параметром action
+        console.log('\nТест 2: GET с action=ping...');
+        const url2 = CONFIG.APP_SCRIPT_URL + '?action=ping&timestamp=' + Date.now();
+        const response2 = await fetch(url2);
+        console.log('Статус:', response2.status);
+        
+        if (response2.ok) {
+            const data2 = await response2.json();
+            console.log('Ответ 2:', data2);
+        }
+        
+        // Тест 3: POST запрос
+        console.log('\nТест 3: POST запрос...');
+        const response3 = await fetch(CONFIG.APP_SCRIPT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'test', data: { test: true } })
+        });
+        console.log('Статус POST:', response3.status);
+        
+        if (response3.ok) {
+            const data3 = await response3.json();
+            console.log('Ответ POST:', data3);
+        }
+        
+        alert('Тестирование завершено. Проверьте консоль браузера (F12) для деталей.');
+        
+    } catch (error) {
+        console.error('Ошибка тестирования:', error);
+        alert('Ошибка: ' + error.message + '\n\nПроверьте консоль браузера (F12)');
+    } finally {
+        showLoader(false);
+    }
+}
 
 // ==================== ЭКСПОРТ ФУНКЦИЙ ДЛЯ HTML ====================
 // Экспортируем все функции, которые вызываются из HTML
@@ -1109,4 +1164,5 @@ window.goBack = goBack;
 window.selectSupplier = selectSupplier;
 
 console.log('app.js загружен, функции экспортированы');
+
 
