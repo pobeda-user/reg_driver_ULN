@@ -606,47 +606,52 @@
                     </button>
                 </div>
             </div>
-        </div>
-
+        </div>       
         <!-- Шаг 3: Выбор поставщика -->
-        <div class="step" data-step="3">
+<div class="step" data-step="3">
     <div class="step-header">
         <div class="step-number">3</div>
         <h2>Выберите поставщика</h2>
     </div>
     <div class="step-content">
-        <p style="margin-bottom: 15px; color: #666; font-size: 14px;">
-            Исторические поставщики:
-        </p>
-        <div class="option-buttons" id="supplier-buttons">
+        <div class="info-box">
+            <p>📱 Поиск поставщиков по вашему номеру телефона...</p>
+        </div>
+        
+        <div id="supplier-buttons" class="option-buttons">
             <!-- История поставщиков будет загружена сюда -->
         </div>
         
-        <div class="separator">или</div>
+        <div class="separator">или введите нового поставщика</div>
         
-        <p style="margin-bottom: 15px; color: #666; font-size: 14px;">
-            Введите название поставщика вручную:
+        <p style="margin-bottom: 10px; color: #666; font-size: 14px;">
+            Введите полное наименование поставщика:
         </p>
+        
         <div class="manual-input">
             <input 
                 type="text" 
                 id="supplier-input" 
                 class="form-input" 
-                placeholder="Например: ООО Ромашка, ИП Иванов"
+                placeholder="Например: ООО 'Ромашка', ИП Иванов А.В., ЗАО 'Весна'"
+                autocomplete="organization"
             >
             <button type="button" class="btn btn-primary" onclick="handleManualSupplier()">
-                ОК
+                Подтвердить
             </button>
+        </div>
+        
+        <div class="info-box warning" style="margin-top: 15px;">
+            <p>⚠️ Внимание: Поставщик определяется на основе вашего телефона</p>
         </div>
         
         <div class="button-group">
             <button type="button" class="btn btn-secondary" onclick="goBack()">
-                Назад
+                ← Назад
             </button>
         </div>
     </div>
 </div>
-
         <!-- Шаг 4: Выбор юрлица -->
         <div class="step" data-step="4">
             <div class="step-header">
@@ -973,4 +978,5 @@
     </script>
 </body>
 </html>
+
 
