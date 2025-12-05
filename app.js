@@ -669,7 +669,6 @@ async function submitRegistration() {
 }
 
 // ==================== ФУНКЦИЯ ОТПРАВКИ НА СЕРВЕР ====================
-// ==================== ФУНКЦИЯ ОТПРАВКИ НА СЕРВЕР ====================
 async function sendRegistrationToServer(data) {
     try {
         logToConsole('INFO', 'Отправляю данные на сервер', { 
@@ -684,33 +683,16 @@ async function sendRegistrationToServer(data) {
         
         const startTime = Date.now();
         
-        // Пробуем разные варианты отправки
-        let response;
-        
-        try {
-            // Вариант 1: Стандартный fetch с mode 'cors'
-            response = await fetch(CONFIG.APP_SCRIPT_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestData),
-                mode: 'cors',
-                cache: 'no-cache',
-                credentials: 'omit' // Не отправляем куки
-            });
-        } catch (fetchError) {
-            logToConsole('WARN', 'Ошибка fetch с CORS, пробую без mode', fetchError);
-            
-            // Вариант 2: Без mode (браузер сам выберет)
-            response = await fetch(CONFIG.APP_SCRIPT_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestData)
-            });
-        }
+        // Вариант 1: Используем HtmlService подход
+        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify(requestData),
+            mode: 'no-cors' // ← ИЗМЕНИТЕ НА 'no-cors'
+        });
         
         const endTime = Date.now();
         const duration = endTime - startTime;
@@ -723,46 +705,36 @@ async function sendRegistrationToServer(data) {
             ok: response.ok
         });
         
-        if (response.ok) {
-            const text = await response.text();
-            
-            try {
-                const result = JSON.parse(text);
-                logToConsole('INFO', 'Ответ JSON получен', { 
-                    success: result.success,
-                    message: result.message,
-                    responseSize: text.length
-                });
-                return result;
-            } catch (parseError) {
-                logToConsole('ERROR', 'Ошибка парсинга JSON', {
-                    error: parseError.message,
-                    rawText: text.substring(0, 500) + (text.length > 500 ? '...' : ''),
-                    url: CONFIG.APP_SCRIPT_URL
-                });
-                return { 
-                    success: false, 
-                    message: 'Неверный формат ответа сервера',
-                    rawResponse: text
-                };
-            }
-        } else {
-            let errorText = '';
-            try {
-                errorText = await response.text();
-            } catch (e) {
-                errorText = 'Не удалось прочитать текст ошибки';
-            }
-            
-            logToConsole('ERROR', 'HTTP ошибка', { 
-                status: response.status, 
-                statusText: response.statusText,
-                errorText: errorText.substring(0, 500) + (errorText.length > 500 ? '...' : ''),
-                url: CONFIG.APP_SCRIPT_URL,
-                headers: Object.fromEntries(response.headers.entries())
+        // В режиме 'no-cors' response будет непрозрачным
+        // Нужно попробовать альтернативный подход
+        
+        // Альтернатива: Отправляем через форму
+        if (!response.ok) {
+            logToConsole('WARN', 'POST запрос не удался, пробую альтернативный метод');
+            return await sendViaAlternativeMethod(data);
+        }
+        
+        const text = await response.text();
+        
+        try {
+            const result = JSON.parse(text);
+            logToConsole('INFO', 'Ответ JSON получен', { 
+                success: result.success,
+                message: result.message,
+                responseSize: text.length
             });
-            
-            throw new Error(`HTTP ошибка ${response.status}: ${response.statusText}`);
+            return result;
+        } catch (parseError) {
+            logToConsole('ERROR', 'Ошибка парсинга JSON', {
+                error: parseError.message,
+                rawText: text.substring(0, 500) + (text.length > 500 ? '...' : ''),
+                url: CONFIG.APP_SCRIPT_URL
+            });
+            return { 
+                success: false, 
+                message: 'Неверный формат ответа сервера',
+                rawResponse: text
+            };
         }
         
     } catch (error) {
@@ -773,7 +745,57 @@ async function sendRegistrationToServer(data) {
             timestamp: new Date().toISOString(),
             errorType: error.name
         });
-        throw error;
+        
+        // Пробуем альтернативный метод
+        return await sendViaAlternativeMethod(data);
+    }
+}
+
+// ==================== АЛЬТЕРНАТИВНЫЙ МЕТОД ОТПРАВКИ ====================
+async function sendViaAlternativeMethod(data) {
+    try {
+        logToConsole('INFO', 'Пробую альтернативный метод отправки');
+        
+        // Создаем форму с данными
+        const formData = new URLSearchParams();
+        formData.append('action', 'register_driver');
+        formData.append('data', JSON.stringify(data));
+        
+        // Используем GET запрос через параметры URL
+        const url = new URL(CONFIG.APP_SCRIPT_URL);
+        url.searchParams.append('action', 'register_driver');
+        url.searchParams.append('data', JSON.stringify(data));
+        url.searchParams.append('format', 'json');
+        
+        const response = await fetch(url.toString(), {
+            method: 'GET',
+            mode: 'cors',
+            cache: 'no-cache'
+        });
+        
+        if (response.ok) {
+            const text = await response.text();
+            try {
+                const result = JSON.parse(text);
+                logToConsole('SUCCESS', 'Альтернативный метод успешен', result);
+                return result;
+            } catch (parseError) {
+                logToConsole('ERROR', 'Ошибка парсинга в альтернативном методе', parseError);
+                return {
+                    success: false,
+                    message: 'Ошибка парсинга ответа'
+                };
+            }
+        } else {
+            throw new Error(`Альтернативный метод HTTP ошибка: ${response.status}`);
+        }
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Альтернативный метод также не сработал', error);
+        return {
+            success: false,
+            message: 'Не удалось отправить данные: ' + error.message
+        };
     }
 }
 
@@ -1885,6 +1907,8 @@ window.showLoader = showLoader;
 window.clearLogs = clearLogs;
 window.exportLogs = exportLogs;
 window.resetOfflineAttempts = resetOfflineAttempts;
+window.sendViaAlternativeMethod = sendViaAlternativeMethod;
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
 
 
