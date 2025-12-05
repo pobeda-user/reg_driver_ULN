@@ -116,95 +116,6 @@ async function testConnection() {
     }
 }
 
-// Обновите submitRegistration для лучшей диагностики
-async function submitRegistration() {
-    showLoader(true);
-    
-    try {
-        console.log('=== ОТПРАВКА РЕГИСТРАЦИИ ===');
-        
-        // Проверяем заполненность обязательных полей
-        const requiredFields = ['phone', 'fio', 'supplier', 'legalEntity', 'productType'];
-        const missingFields = requiredFields.filter(field => !registrationState.data[field]);
-        
-        if (missingFields.length > 0) {
-            throw new Error('Не заполнены обязательные поля: ' + missingFields.join(', '));
-        }
-        
-        // Подготовка данных
-        const postData = {
-            action: 'register_driver',
-            data: {
-                phone: registrationState.data.phone,
-                fio: registrationState.data.fio,
-                supplier: registrationState.data.supplier,
-                legalEntity: registrationState.data.legalEntity,
-                productType: registrationState.data.productType,
-                vehicleType: registrationState.data.vehicleType,
-                vehicleNumber: registrationState.data.vehicleNumber,
-                pallets: registrationState.data.pallets,
-                orderNumber: registrationState.data.orderNumber,
-                etrn: registrationState.data.etrn,
-                transit: registrationState.data.transit,
-                gate: registrationState.data.gate
-            }
-        };
-        
-        console.log('Отправляемые данные:', postData);
-        
-        // Отправка через XMLHttpRequest
-        const response = await sendXHRRequest(CONFIG.APP_SCRIPT_URL, postData);
-        console.log('Ответ сервера:', response);
-        
-        if (response && response.success) {
-            console.log('✅ Успешная регистрация!');
-            
-            // Обновляем данные из ответа сервера
-            if (response.data) {
-                Object.assign(registrationState.data, response.data);
-            }
-            
-            showSuccessMessage();
-            resetRegistrationState();
-            showStep(13);
-            
-        } else {
-            console.error('❌ Ошибка от сервера:', response);
-            
-            // Пробуем альтернативный метод
-            const altResponse = await sendAlternativeRegistration(postData.data);
-            
-            if (altResponse && altResponse.success) {
-                console.log('✅ Успех через альтернативный метод');
-                showSuccessMessage();
-                resetRegistrationState();
-                showStep(13);
-            } else {
-                throw new Error(response ? response.message : 'Неизвестная ошибка сервера');
-            }
-        }
-        
-    } catch (error) {
-        console.error('❌ Все способы отправки не удались:', error);
-        
-        // Сохраняем оффлайн
-        const saved = saveRegistrationOffline();
-        
-        if (saved) {
-            console.log('📱 Данные сохранены оффлайн');
-            showSuccessMessage();
-            resetRegistrationState();
-            showStep(13);
-            showNotification('Данные сохранены локально и будут отправлены при восстановлении связи', 'warning');
-        } else {
-            console.error('❌ Ошибка сохранения оффлайн');
-            showNotification('Ошибка сохранения данных. Попробуйте еще раз.', 'error');
-        }
-    } finally {
-        showLoader(false);
-    }
-}
-
 // Улучшенная функция отправки XHR
 function sendXHRRequest(url, data) {
     return new Promise((resolve) => {
@@ -260,30 +171,6 @@ function sendXHRRequest(url, data) {
     });
 }
 
-// Добавьте в initApp тестирование при загрузке
-function initApp() {
-    console.log('Инициализация приложения v2.0');
-    
-    loadRegistrationState();
-    setupPhoneInput();
-    setupEventListeners();
-    
-    // Тестируем соединение при загрузке
-    setTimeout(() => {
-        testConnection().then(isConnected => {
-            if (!isConnected) {
-                showNotification('Режим оффлайн. Данные будут сохранены локально.', 'warning');
-            }
-        });
-    }, 1000);
-    
-    // Загружаем популярные марки авто
-    loadPopularBrands();
-    
-    // Показываем текущий шаг
-    showStep(registrationState.step);
-}
-
 // Проверка существования основных элементов
 function checkElementsExist() {
     const requiredElements = [
@@ -306,21 +193,21 @@ function checkElementsExist() {
     return true;
 }
 
-// Инициализация приложения
 function initApp() {
-    console.log('Инициализация приложения');
+    console.log('Инициализация приложения v2.0');
     
     loadRegistrationState();
     setupPhoneInput();
     setupEventListeners();
-    checkConnection();
     
-    // Тестируем соединение при запуске
-    testConnection().then(isConnected => {
-        if (!isConnected) {
-            showNotification('Оффлайн режим. Данные будут сохранены локально.', 'warning');
-        }
-    });
+    // Тестируем соединение при загрузке
+    setTimeout(() => {
+        testConnection().then(isConnected => {
+            if (!isConnected) {
+                showNotification('Режим оффлайн. Данные будут сохранены локально.', 'warning');
+            }
+        });
+    }, 1000);
     
     // Загружаем популярные марки авто
     loadPopularBrands();
@@ -906,12 +793,21 @@ function showConfirmation() {
     `;
 }
 
-// Отправка регистрации
 async function submitRegistration() {
     showLoader(true);
     
     try {
-        // Подготовка данных для отправки
+        console.log('=== ОТПРАВКА РЕГИСТРАЦИИ ===');
+        
+        // Проверяем заполненность обязательных полей
+        const requiredFields = ['phone', 'fio', 'supplier', 'legalEntity', 'productType'];
+        const missingFields = requiredFields.filter(field => !registrationState.data[field]);
+        
+        if (missingFields.length > 0) {
+            throw new Error('Не заполнены обязательные поля: ' + missingFields.join(', '));
+        }
+        
+        // Подготовка данных
         const postData = {
             action: 'register_driver',
             data: {
@@ -930,89 +826,55 @@ async function submitRegistration() {
             }
         };
         
-        console.log('Отправляю данные:', postData);
+        console.log('Отправляемые данные:', postData);
         
-        // Способ 1: Прямой POST запрос
-        try {
-            const response = await fetch(CONFIG.APP_SCRIPT_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(postData)
-            });
+        // Отправка через XMLHttpRequest
+        const response = await sendXHRRequest(CONFIG.APP_SCRIPT_URL, postData);
+        console.log('Ответ сервера:', response);
+        
+        if (response && response.success) {
+            console.log('✅ Успешная регистрация!');
             
-            console.log('Статус ответа:', response.status);
-            
-            if (response.ok) {
-                const result = await response.json();
-                console.log('Ответ сервера:', result);
-                
-                if (result.success) {
-                    showSuccessMessage();
-                    resetRegistrationState();
-                    showStep(13);
-                    return;
-                } else {
-                    throw new Error(result.message || 'Ошибка сервера');
-                }
-            } else {
-                throw new Error(`HTTP ошибка: ${response.status}`);
+            // Обновляем данные из ответа сервера
+            if (response.data) {
+                Object.assign(registrationState.data, response.data);
             }
-        } catch (fetchError) {
-            console.log('POST не удался, пробуем альтернативный метод:', fetchError);
             
-            // Способ 2: Используем Google Forms URL
-            const formData = new FormData();
-            Object.keys(postData.data).forEach(key => {
-                formData.append(key, postData.data[key]);
-            });
+            showSuccessMessage();
+            resetRegistrationState();
+            showStep(13);
             
-            const altResponse = await fetch(CONFIG.APP_SCRIPT_URL, {
-                method: 'POST',
-                body: formData
-            });
+        } else {
+            console.error('❌ Ошибка от сервера:', response);
             
-            if (altResponse.ok) {
+            // Пробуем альтернативный метод
+            const altResponse = await sendAlternativeRegistration(postData.data);
+            
+            if (altResponse && altResponse.success) {
+                console.log('✅ Успех через альтернативный метод');
                 showSuccessMessage();
                 resetRegistrationState();
                 showStep(13);
-                return;
+            } else {
+                throw new Error(response ? response.message : 'Неизвестная ошибка сервера');
             }
-            
-            throw fetchError;
         }
         
     } catch (error) {
-        console.error('Все способы отправки не удались:', error);
+        console.error('❌ Все способы отправки не удались:', error);
         
-        // Пробуем через GET как последний вариант
-        try {
-            const params = new URLSearchParams();
-            Object.keys(registrationState.data).forEach(key => {
-                if (registrationState.data[key]) {
-                    params.append(key, registrationState.data[key]);
-                }
-            });
-            
-            await fetch(`${CONFIG.APP_SCRIPT_URL}?${params.toString()}&action=register_driver`);
-            
+        // Сохраняем оффлайн
+        const saved = saveRegistrationOffline();
+        
+        if (saved) {
+            console.log('📱 Данные сохранены оффлайн');
             showSuccessMessage();
             resetRegistrationState();
             showStep(13);
-            
-        } catch (lastError) {
-            console.error('Последняя попытка тоже не удалась:', lastError);
-            
-            // Сохраняем оффлайн
-            saveRegistrationOffline();
-            
-            // Все равно показываем успех пользователю
-            showSuccessMessage();
-            resetRegistrationState();
-            showStep(13);
-            
             showNotification('Данные сохранены локально и будут отправлены при восстановлении связи', 'warning');
+        } else {
+            console.error('❌ Ошибка сохранения оффлайн');
+            showNotification('Ошибка сохранения данных. Попробуйте еще раз.', 'error');
         }
     } finally {
         showLoader(false);
@@ -1336,4 +1198,5 @@ window.addEventListener('online', () => {
     showNotification('Соединение восстановлено', 'success');
     setTimeout(syncOfflineData, 1000); // Синхронизируем через 1 секунду
 });
+
 
