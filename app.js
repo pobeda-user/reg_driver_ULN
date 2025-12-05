@@ -187,22 +187,39 @@ function setupPhoneInput() {
     const phoneInput = document.getElementById('phone-input');
     
     phoneInput.addEventListener('input', function(e) {
-        let value = e.target.value.replace(/\D/g, '');
+        let value = e.target.value.replace(/\s/g, ''); // Убираем пробелы
         
-        // Ограничиваем до 10 цифр (без +7)
+        // Если цифр больше 10, обрезаем
         if (value.length > 10) {
             value = value.substring(0, 10);
         }
         
         // Форматирование: XXX XXX XX XX
-        if (value.length > 0) {
-            let formatted = '';
-            if (value.length > 0) formatted = value.substring(0, Math.min(3, value.length));
-            if (value.length > 3) formatted += ' ' + value.substring(3, Math.min(6, value.length));
-            if (value.length > 6) formatted += ' ' + value.substring(6, Math.min(8, value.length));
-            if (value.length > 8) formatted += ' ' + value.substring(8, Math.min(10, value.length));
-            
-            e.target.value = formatted;
+        let formatted = '';
+        for (let i = 0; i < value.length; i++) {
+            if (i === 3 || i === 6 || i === 8) {
+                formatted += ' ';
+            }
+            formatted += value[i];
+        }
+        
+        e.target.value = formatted;
+        
+        // Позиция курсора в конец
+        setTimeout(() => {
+            phoneInput.selectionStart = phoneInput.selectionEnd = formatted.length;
+        }, 0);
+    });
+    
+    // Обработка клавиш Backspace и Delete
+    phoneInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+            setTimeout(() => {
+                let value = phoneInput.value.replace(/\s/g, '');
+                if (value.length < phoneInput.value.length) {
+                    phoneInput.value = value;
+                }
+            }, 10);
         }
     });
     
@@ -212,6 +229,9 @@ function setupPhoneInput() {
             handlePhoneSubmit();
         }
     });
+    
+    // Фокус при загрузке
+    setTimeout(() => phoneInput.focus(), 100);
 }
 
 function handlePhoneSubmit() {
@@ -792,4 +812,5 @@ window.submitRegistration = submitRegistration;
 window.resetRegistration = resetRegistration;
 window.goBack = goBack;
 window.selectSupplier = selectSupplier;
+
 
