@@ -1312,10 +1312,63 @@ User Agent: ${navigator.userAgent}
                 e.returnValue = confirmationMessage;
                 return confirmationMessage;
             }
-        });
-        
+        });        
         // Экспортируем CONFIG для использования в app.js
         window.CONFIG = CONFIG;
+        async function testConnection() {
+    try {
+        showLoader(true);
+        
+        const url = CONFIG.APP_SCRIPT_URL + '?action=ping';
+        console.log('Тестирую URL:', url);
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        console.log('Ответ теста:', data);
+        
+        alert(`✅ API работает!\n\nСообщение: ${data.message}\nВремя: ${data.timestamp || 'нет'}`);
+        
+    } catch (error) {
+        console.error('Ошибка теста:', error);
+        alert(`❌ API не доступен\n\nОшибка: ${error.message}\nURL: ${CONFIG.APP_SCRIPT_URL}`);
+    } finally {
+        showLoader(false);
+    }
+}
+
+function showDebugInfo() {
+    const state = JSON.parse(localStorage.getItem('driver_registration_state') || '{}');
+    const offline = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
+    
+    const info = `
+API URL: ${CONFIG.APP_SCRIPT_URL}
+Текущий шаг: ${state.step || 'нет'}
+Оффлайн записей: ${offline.length}
+
+Состояние:
+${JSON.stringify(state, null, 2)}
+
+Оффлайн данные:
+${JSON.stringify(offline, null, 2)}
+    `;
+    
+    console.log(info);
+    alert(info);
+}
+
+function clearLocalData() {
+    if (confirm('Очистить все локальные данные?')) {
+        localStorage.clear();
+        location.reload();
+    }
+}
+
+// Экспорт для теста
+window.testConnection = testConnection;
+window.showDebugInfo = showDebugInfo;
+window.clearLocalData = clearLocalData;
     </script>
 </body>
 </html>
+
