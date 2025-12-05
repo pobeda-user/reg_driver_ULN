@@ -113,6 +113,37 @@ function setupEventListeners() {
     });
 }
 
+// app.js - добавьте этот код в initApp()
+function initPopularBrands() {
+    const container = document.getElementById('brand-buttons');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    POPULAR_BRANDS.forEach((brand, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'option-btn';
+        button.innerHTML = `
+            <span class="option-number">${index + 1}</span>
+            <span class="option-text">${brand}</span>
+        `;
+        button.onclick = () => selectBrand(brand);
+        container.appendChild(button);
+    });
+}
+
+// Вызовите эту функцию перед showStep(6) в selectProductType
+function selectProductType(type) {
+    registrationState.data.productType = type;
+    const gate = assignGateAutomatically(registrationState.data.legalEntity, type);
+    registrationState.data.gate = gate;
+    
+    // Инициализируем популярные марки перед переходом
+    initPopularBrands();
+    showStep(6);
+}
+
 // Сохранение состояния в localStorage
 function saveRegistrationState() {
     try {
@@ -144,6 +175,78 @@ function loadRegistrationState() {
     } catch (error) {
         console.error('Ошибка загрузки состояния:', error);
     }
+}
+
+// app.js - добавьте эти функции
+async function loadSupplierHistory() {
+    try {
+        showLoader(true);
+        
+        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'get_suppliers',
+                phone: registrationState.data.phone
+            })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            initSupplierButtons(data.suppliers);
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки истории поставщиков:', error);
+    } finally {
+        showLoader(false);
+    }
+}
+
+function initSupplierButtons(suppliers) {
+    const container = document.getElementById('supplier-buttons');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (suppliers && suppliers.length > 0) {
+        suppliers.forEach((supplier, index) => {
+            if (supplier && supplier.trim()) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'option-btn';
+                button.innerHTML = `
+                    <span class="option-number">${index + 1}</span>
+                    <span class="option-text">${supplier}</span>
+                `;
+                button.onclick = () => selectSupplier(supplier);
+                container.appendChild(button);
+            }
+        });
+    } else {
+        container.innerHTML = '<div class="info-box">История поставщиков не найдена</div>';
+    }
+}
+
+// Измените handleFioSubmit для загрузки истории
+function handleFioSubmit() {
+    const fioInput = document.getElementById('fio-input');
+    if (!fioInput) return;
+    
+    const fio = fioInput.value.trim();
+    
+    if (!fio || fio.length < 5) {
+        showNotification('Пожалуйста, введите полные ФИО', 'error');
+        fioInput.focus();
+        return;
+    }
+    
+    registrationState.data.fio = fio;
+    
+    // Загружаем историю поставщиков
+    loadSupplierHistory();
+    showStep(3);
 }
 
 // Навигация по шагам
@@ -812,5 +915,6 @@ window.submitRegistration = submitRegistration;
 window.resetRegistration = resetRegistration;
 window.goBack = goBack;
 window.selectSupplier = selectSupplier;
+
 
 
