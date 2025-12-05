@@ -586,25 +586,44 @@ async function submitRegistration() {
     showLoader(true);
     
     try {
-        // Пытаемся отправить онлайн
-        logToConsole('INFO', 'Пытаюсь отправить данные онлайн');
+        // Добавляем временную метку и уникальный ID для отслеживания
+        registrationState.data._timestamp = Date.now();
+        registrationState.data._localId = `local_${registrationState.data._timestamp}_${Math.random().toString(36).substr(2, 6)}`;
+        registrationState.data._attempt = 1;
+        registrationState.data._sentFrom = 'online_submit';
+        
+        logToConsole('INFO', 'Подготовка данных для отправки', {
+            localId: registrationState.data._localId,
+            timestamp: registrationState.data._timestamp,
+            phone: registrationState.data.phone
+        });
+        
         const response = await sendRegistrationToServer(registrationState.data);
         
         logToConsole('INFO', 'Ответ от сервера получен', {
             success: response.success,
             message: response.message,
-            hasData: !!response.data
+            hasData: !!response.data,
+            serverRegistrationId: response.data?.registrationId,
+            rowNumber: response.data?.rowNumber
         });
         
         if (response && response.success) {
             logToConsole('SUCCESS', 'Регистрация успешна на сервере!', {
-                serverData: response.data
+                serverData: response.data,
+                localId: registrationState.data._localId,
+                serverTime: response.data?.date + ' ' + response.data?.time
             });
             
             // Обновляем данные из ответа сервера
             if (response.data) {
                 Object.assign(registrationState.data, response.data);
             }
+            
+            // Помечаем как отправленное на сервере
+            registrationState.data._sentToServer = true;
+            registrationState.data._serverConfirmed = true;
+            registrationState.data._serverResponse = response;
             
             // Показываем успешное сообщение
             showSuccessMessage(response.data);
@@ -620,14 +639,31 @@ async function submitRegistration() {
         } else {
             logToConsole('ERROR', 'Ошибка от сервера', {
                 response: response,
-                errorMessage: response?.message
+                errorMessage: response?.message,
+                localId: registrationState.data._localId
             });
             
             // Показываем более информативное сообщение
             const errorMsg = response?.message || 'Неизвестная ошибка сервера';
-            showNotification(`❌ Ошибка сервера: ${errorMsg}`, 'error');
+            const fullErrorMsg = errorMsg.length > 100 ? errorMsg.substring(0, 100) + '...' : errorMsg;
+            
+            // Проверяем, если это ошибка дублирования
+            if (errorMsg.includes('уже зарегистрирован') || errorMsg.includes('дубликат')) {
+                showNotification('⚠️ Вы уже зарегистрированы сегодня!', 'warning');
+                
+                // Показываем успех, но с предупреждением
+                showSuccessMessage(registrationState.data);
+                resetRegistrationState();
+                showStep(13);
+                return;
+            }
+            
+            showNotification(`❌ Ошибка: ${fullErrorMsg}`, 'error');
             
             // Сохраняем оффлайн для повторной отправки
+            registrationState.data._lastError = errorMsg;
+            registrationState.data._serverError = true;
+            
             const saved = saveRegistrationOffline();
             if (saved) {
                 showSuccessMessage();
@@ -641,16 +677,22 @@ async function submitRegistration() {
         logToConsole('ERROR', 'Критическая ошибка отправки', {
             error: error,
             message: error.message,
-            stack: error.stack
+            stack: error.stack,
+            localId: registrationState.data._localId
         });
         
         // Сохраняем оффлайн
+        registrationState.data._isRetry = true;
+        registrationState.data._lastError = error.message;
+        registrationState.data._networkError = true;
+        
         const saved = saveRegistrationOffline();
         
         if (saved) {
             logToConsole('INFO', 'Данные сохранены оффлайн', { 
                 id: 'saved_offline',
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                localId: registrationState.data._localId
             });
             
             // Показываем успех даже при оффлайн
@@ -671,9 +713,16 @@ async function submitRegistration() {
 // ==================== ФУНКЦИЯ ОТПРАВКИ НА СЕРВЕР ====================
 async function sendRegistrationToServer(data) {
     try {
+        // Добавляем уникальный ID регистрации
+        const registrationId = `reg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        data.registrationId = registrationId;
+        data._clientTimestamp = new Date().toISOString();
+        
         logToConsole('INFO', 'Отправляю данные на сервер', { 
             url: CONFIG.APP_SCRIPT_URL, 
-            dataSize: JSON.stringify(data).length 
+            dataSize: JSON.stringify(data).length,
+            registrationId: registrationId,
+            clientTime: data._clientTimestamp
         });
         
         const requestData = {
@@ -683,7 +732,7 @@ async function sendRegistrationToServer(data) {
         
         const startTime = Date.now();
         
-        // Вариант 1: Используем HtmlService подход
+        // ИСПРАВЛЕНИЕ: Правильный Content-Type и режим 'cors'
         const response = await fetch(CONFIG.APP_SCRIPT_URL, {
             method: 'POST',
             headers: {
@@ -691,7 +740,7 @@ async function sendRegistrationToServer(data) {
                 'Accept': 'application/json',
             },
             body: JSON.stringify(requestData),
-            mode: 'no-cors' // ← ИЗМЕНИТЕ НА 'no-cors'
+            mode: 'cors' // Изменено с 'no-cors'
         });
         
         const endTime = Date.now();
@@ -705,12 +754,8 @@ async function sendRegistrationToServer(data) {
             ok: response.ok
         });
         
-        // В режиме 'no-cors' response будет непрозрачным
-        // Нужно попробовать альтернативный подход
-        
-        // Альтернатива: Отправляем через форму
         if (!response.ok) {
-            logToConsole('WARN', 'POST запрос не удался, пробую альтернативный метод');
+            logToConsole('WARN', 'POST запрос не удался, пробую GET метод');
             return await sendViaAlternativeMethod(data);
         }
         
@@ -721,6 +766,7 @@ async function sendRegistrationToServer(data) {
             logToConsole('INFO', 'Ответ JSON получен', { 
                 success: result.success,
                 message: result.message,
+                registrationId: result.data?.registrationId,
                 responseSize: text.length
             });
             return result;
@@ -730,6 +776,17 @@ async function sendRegistrationToServer(data) {
                 rawText: text.substring(0, 500) + (text.length > 500 ? '...' : ''),
                 url: CONFIG.APP_SCRIPT_URL
             });
+            
+            // Проверяем, если это HTML страница с ошибкой
+            if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+                logToConsole('ERROR', 'Получен HTML вместо JSON');
+                return { 
+                    success: false, 
+                    message: 'Сервер вернул HTML вместо JSON. Проверьте URL Google Apps Script.',
+                    rawResponse: text.substring(0, 300)
+                };
+            }
+            
             return { 
                 success: false, 
                 message: 'Неверный формат ответа сервера',
@@ -756,42 +813,72 @@ async function sendViaAlternativeMethod(data) {
     try {
         logToConsole('INFO', 'Пробую альтернативный метод отправки');
         
-        // Создаем форму с данными
-        const formData = new URLSearchParams();
-        formData.append('action', 'register_driver');
-        formData.append('data', JSON.stringify(data));
-        
         // Используем GET запрос через параметры URL
         const url = new URL(CONFIG.APP_SCRIPT_URL);
         url.searchParams.append('action', 'register_driver');
         url.searchParams.append('data', JSON.stringify(data));
         url.searchParams.append('format', 'json');
+        url.searchParams.append('_method', 'get');
         
         const response = await fetch(url.toString(), {
             method: 'GET',
             mode: 'cors',
-            cache: 'no-cache'
+            cache: 'no-cache',
+            headers: {
+                'Accept': 'application/json',
+            }
+        });
+        
+        logToConsole('INFO', 'Альтернативный метод статус', {
+            status: response.status,
+            url: url.toString()
         });
         
         if (response.ok) {
             const text = await response.text();
             try {
                 const result = JSON.parse(text);
-                logToConsole('SUCCESS', 'Альтернативный метод успешен', result);
+                logToConsole('SUCCESS', 'Альтернативный метод успешен', {
+                    success: result.success,
+                    message: result.message
+                });
                 return result;
             } catch (parseError) {
-                logToConsole('ERROR', 'Ошибка парсинга в альтернативном методе', parseError);
+                logToConsole('ERROR', 'Ошибка парсинга в альтернативном методе', {
+                    error: parseError.message,
+                    rawText: text.substring(0, 200)
+                });
+                
+                // Если ответ содержит успех в текстовом виде
+                if (text.includes('success') && text.includes('true')) {
+                    return {
+                        success: true,
+                        message: 'Запрос обработан (парсинг не удался)',
+                        rawResponse: text
+                    };
+                }
+                
                 return {
                     success: false,
                     message: 'Ошибка парсинга ответа'
                 };
             }
         } else {
-            throw new Error(`Альтернативный метод HTTP ошибка: ${response.status}`);
+            let errorText = '';
+            try {
+                errorText = await response.text();
+            } catch (e) {
+                errorText = 'Не удалось прочитать текст ошибки';
+            }
+            
+            throw new Error(`Альтернативный метод HTTP ошибка: ${response.status}, ${errorText}`);
         }
         
     } catch (error) {
-        logToConsole('ERROR', 'Альтернативный метод также не сработал', error);
+        logToConsole('ERROR', 'Альтернативный метод также не сработал', {
+            error: error.message,
+            stack: error.stack
+        });
         return {
             success: false,
             message: 'Не удалось отправить данные: ' + error.message
@@ -952,7 +1039,7 @@ function saveRegistrationOffline() {
     }
 }
 
-// ==================== ОТПРАВКА ОФФЛАЙН ДАННЫХ ====================
+
 // ==================== ОТПРАВКА ОФФЛАЙН ДАННЫХ ====================
 async function sendOfflineData(resetAttempts = false) {
     if (!navigator.onLine) {
@@ -1001,25 +1088,41 @@ async function sendOfflineData(resetAttempts = false) {
                 continue;
             }
             
+            // Добавляем информацию о попытке отправки
+            record.data._offlineId = record.id;
+            record.data._offlineAttempt = (record.attempts || 0) + 1;
+            record.data._sentFrom = 'offline_retry';
+            
             try {
                 logToConsole('INFO', `Отправляю запись ${record.id}`, { 
                     attempt: record.attempts + 1,
-                    data: record.data 
+                    offlineId: record.id,
+                    phone: record.data.phone
                 });
                 
                 const response = await sendRegistrationToServer(record.data);
                 
                 logToConsole('INFO', `Ответ для записи ${record.id}`, {
                     success: response.success,
-                    message: response.message
+                    message: response.message,
+                    serverId: response.data?.registrationId
                 });
                 
                 if (response && response.success) {
-                    record.status = 'sent';
-                    record.sentAt = new Date().toISOString();
-                    record.response = response;
-                    successful.push(record.id);
-                    logToConsole('SUCCESS', `Запись ${record.id} отправлена успешно`);
+                    // Проверяем, не является ли это дублирующей записью
+                    if (response.message && response.message.includes('уже зарегистрирован')) {
+                        record.status = 'duplicate';
+                        record.duplicateAt = new Date().toISOString();
+                        record.response = response;
+                        successful.push({id: record.id, type: 'duplicate'});
+                        logToConsole('WARN', `Запись ${record.id} - дубликат`);
+                    } else {
+                        record.status = 'sent';
+                        record.sentAt = new Date().toISOString();
+                        record.response = response;
+                        successful.push(record.id);
+                        logToConsole('SUCCESS', `Запись ${record.id} отправлена успешно`);
+                    }
                 } else {
                     record.attempts = (record.attempts || 0) + 1;
                     record.lastError = response?.message || 'Неизвестная ошибка сервера';
@@ -1059,7 +1162,19 @@ async function sendOfflineData(resetAttempts = false) {
         
         // Показываем результат
         if (successful.length > 0) {
-            showNotification(`✅ ${successful.length} оффлайн записей отправлено`, 'success');
+            const sentCount = successful.filter(s => typeof s === 'string').length;
+            const duplicateCount = successful.filter(s => typeof s === 'object' && s.type === 'duplicate').length;
+            
+            let message = '';
+            if (sentCount > 0) {
+                message += `✅ ${sentCount} оффлайн записей отправлено`;
+            }
+            if (duplicateCount > 0) {
+                if (message) message += '\n';
+                message += `⚠️ ${duplicateCount} записей уже были в системе (дубликаты)`;
+            }
+            
+            showNotification(message, 'success');
         }
         
         if (failed.length > 0) {
@@ -1909,6 +2024,7 @@ window.exportLogs = exportLogs;
 window.resetOfflineAttempts = resetOfflineAttempts;
 window.sendViaAlternativeMethod = sendViaAlternativeMethod;
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
 
 
 
