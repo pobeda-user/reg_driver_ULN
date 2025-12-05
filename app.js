@@ -669,6 +669,7 @@ async function submitRegistration() {
 }
 
 // ==================== ФУНКЦИЯ ОТПРАВКИ НА СЕРВЕР ====================
+// ==================== ФУНКЦИЯ ОТПРАВКИ НА СЕРВЕР ====================
 async function sendRegistrationToServer(data) {
     try {
         logToConsole('INFO', 'Отправляю данные на сервер', { 
@@ -683,14 +684,33 @@ async function sendRegistrationToServer(data) {
         
         const startTime = Date.now();
         
-        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestData),
-            mode: 'cors'
-        });
+        // Пробуем разные варианты отправки
+        let response;
+        
+        try {
+            // Вариант 1: Стандартный fetch с mode 'cors'
+            response = await fetch(CONFIG.APP_SCRIPT_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData),
+                mode: 'cors',
+                cache: 'no-cache',
+                credentials: 'omit' // Не отправляем куки
+            });
+        } catch (fetchError) {
+            logToConsole('WARN', 'Ошибка fetch с CORS, пробую без mode', fetchError);
+            
+            // Вариант 2: Без mode (браузер сам выберет)
+            response = await fetch(CONFIG.APP_SCRIPT_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData)
+            });
+        }
         
         const endTime = Date.now();
         const duration = endTime - startTime;
@@ -699,7 +719,8 @@ async function sendRegistrationToServer(data) {
             status: response.status, 
             statusText: response.statusText,
             duration: `${duration}ms`,
-            url: CONFIG.APP_SCRIPT_URL
+            url: CONFIG.APP_SCRIPT_URL,
+            ok: response.ok
         });
         
         if (response.ok) {
@@ -749,7 +770,8 @@ async function sendRegistrationToServer(data) {
             error: error.message,
             stack: error.stack,
             url: CONFIG.APP_SCRIPT_URL,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            errorType: error.name
         });
         throw error;
     }
@@ -1864,4 +1886,5 @@ window.clearLogs = clearLogs;
 window.exportLogs = exportLogs;
 window.resetOfflineAttempts = resetOfflineAttempts;
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
 
