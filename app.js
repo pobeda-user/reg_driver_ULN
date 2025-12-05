@@ -185,21 +185,32 @@ function goBack() {
 // Шаг 1: Ввод телефона
 function setupPhoneInput() {
     const phoneInput = document.getElementById('phone-input');
-    if (!phoneInput) {
-        console.error('Поле phone-input не найдено');
-        return;
-    }
     
     phoneInput.addEventListener('input', function(e) {
         let value = e.target.value.replace(/\D/g, '');
         
-        // Форматирование: 999 123 45 67
-        if (value.length > 0) {
-            value = value.match(/(\d{0,3})(\d{0,3})(\d{0,2})(\d{0,2})/);
-            value = [value[1], value[2], value[3], value[4]].filter(Boolean).join(' ');
+        // Ограничиваем до 10 цифр (без +7)
+        if (value.length > 10) {
+            value = value.substring(0, 10);
         }
         
-        e.target.value = value;
+        // Форматирование: XXX XXX XX XX
+        if (value.length > 0) {
+            let formatted = '';
+            if (value.length > 0) formatted = value.substring(0, Math.min(3, value.length));
+            if (value.length > 3) formatted += ' ' + value.substring(3, Math.min(6, value.length));
+            if (value.length > 6) formatted += ' ' + value.substring(6, Math.min(8, value.length));
+            if (value.length > 8) formatted += ' ' + value.substring(8, Math.min(10, value.length));
+            
+            e.target.value = formatted;
+        }
+    });
+    
+    // Enter для перехода
+    phoneInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            handlePhoneSubmit();
+        }
     });
 }
 
@@ -781,3 +792,4 @@ window.submitRegistration = submitRegistration;
 window.resetRegistration = resetRegistration;
 window.goBack = goBack;
 window.selectSupplier = selectSupplier;
+
