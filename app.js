@@ -1062,3 +1062,46 @@ async function testConnection() {
         return false;
     }
 }
+// Функция для отправки оффлайн данных при восстановлении соединения
+async function syncOfflineData() {
+    try {
+        const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
+        
+        if (offlineRegistrations.length === 0) return;
+        
+        console.log(`Найдено ${offlineRegistrations.length} оффлайн регистраций`);
+        
+        for (const registration of offlineRegistrations) {
+            try {
+                await fetch(CONFIG.APP_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        action: 'register_driver',
+                        data: registration.data
+                    })
+                });
+                
+                console.log('Оффлайн регистрация отправлена:', registration.data);
+            } catch (error) {
+                console.error('Ошибка отправки оффлайн данных:', error);
+                break; // Прерываем если ошибка
+            }
+        }
+        
+        // Очищаем отправленные данные
+        localStorage.removeItem('offline_registrations');
+        showNotification('Оффлайн данные синхронизированы', 'success');
+        
+    } catch (error) {
+        console.error('Ошибка синхронизации оффлайн данных:', error);
+    }
+}
+
+// Вызывайте при восстановлении соединения
+window.addEventListener('online', () => {
+    showNotification('Соединение восстановлено', 'success');
+    setTimeout(syncOfflineData, 1000); // Синхронизируем через 1 секунду
+});
