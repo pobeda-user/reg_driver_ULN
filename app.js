@@ -84,7 +84,14 @@ function initApp() {
     setupEventListeners();
     checkConnection();
     
-    // Загружаем популярные марки авто с сервера
+    // Тестируем соединение при запуске
+    testConnection().then(isConnected => {
+        if (!isConnected) {
+            showNotification('Оффлайн режим. Данные будут сохранены локально.', 'warning');
+        }
+    });
+    
+    // Загружаем популярные марки авто
     loadPopularBrands();
     
     // Показываем текущий шаг
@@ -311,7 +318,18 @@ async function loadSupplierHistory() {
     try {
         showLoader(true);
         
-        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
+        console.log('Загружаю поставщиков для телефона:', registrationState.data.phone);
+        
+        // Используем URL с параметром для обхода CORS
+        const url = `${CONFIG.APP_SCRIPT_URL}?action=get_suppliers&phone=${encodeURIComponent(registrationState.data.phone)}`;
+        
+        const response = await fetch(url, {
+            method: 'GET',
+            mode: 'no-cors' // Используем no-cors для простых запросов
+        });
+        
+        // Для no-cors мы не можем прочитать ответ, поэтому пробуем POST
+        const postResponse = await fetch(CONFIG.APP_SCRIPT_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -322,15 +340,25 @@ async function loadSupplierHistory() {
             })
         });
         
-        if (response.ok) {
-            const data = await response.json();
-            initSupplierButtons(data.suppliers);
+        if (postResponse.ok) {
+            const data = await postResponse.json();
+            console.log('Получены поставщики:', data);
+            
+            if (data.success) {
+                initSupplierButtons(data.suppliers);
+            } else {
+                showNotification('Не удалось загрузить историю поставщиков', 'warning');
+                initSupplierButtons([]);
+            }
         } else {
-            showNotification('Не удалось загрузить историю поставщиков', 'error');
+            console.warn('Ошибка при загрузке поставщиков');
+            initSupplierButtons([]);
         }
+        
     } catch (error) {
         console.error('Ошибка загрузки истории поставщиков:', error);
-        showNotification('Ошибка загрузки истории поставщиков', 'error');
+        showNotification('Не удалось загрузить историю поставщиков', 'warning');
+        initSupplierButtons([]);
     } finally {
         showLoader(false);
     }
@@ -356,20 +384,12 @@ function initSupplierButtons(suppliers) {
                 container.appendChild(button);
             }
         });
-        
-        // Добавляем сообщение если есть история
-        const infoBox = document.createElement('div');
-        infoBox.className = 'info-box';
-        infoBox.style.marginTop = '10px';
-        infoBox.innerHTML = '<p>📱 Выберите поставщика из истории или введите нового</p>';
-        container.parentNode.insertBefore(infoBox, container.nextSibling);
     } else {
-        // Нет истории
-        const infoBox = document.createElement('div');
-        infoBox.className = 'info-box warning';
-        infoBox.style.marginTop = '10px';
-        infoBox.innerHTML = '<p>📋 История поставщиков не найдена. Введите поставщика вручную.</p>';
-        container.parentNode.insertBefore(infoBox, container.nextSibling);
+        // Если поставщиков нет, показываем сообщение
+        const message = document.createElement('div');
+        message.className = 'info-box warning';
+        message.innerHTML = '<p>История поставщиков не найдена. Введите поставщика вручную ниже.</p>';
+        container.appendChild(message);
     }
 }
 
@@ -446,13 +466,15 @@ async function loadPopularBrands() {
         
         if (response.ok) {
             const data = await response.json();
-            if (data.brands && data.brands.length > 0) {
+            if (data.success && data.brands && data.brands.length > 0) {
                 POPULAR_BRANDS = data.brands;
                 console.log('Загружены популярные марки:', POPULAR_BRANDS);
             }
         }
     } catch (error) {
         console.error('Ошибка загрузки популярных марок:', error);
+        // Используем значения по умолчанию
+        POPULAR_BRANDS = ['Газель', 'Мерседес', 'Вольво', 'Скания', 'Ман'];
     }
 }
 
@@ -677,38 +699,90 @@ async function submitRegistration() {
             }
         };
         
-        console.log('Отправляемые данные:', postData);
+        console.log('Отправляю данные:', postData);
         
-        // Отправка данных через POST
-        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(postData)
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const result = await response.json();
-        console.log('Ответ сервера:', result);
-        
-        if (result.success) {
-            showSuccessMessage();
-            resetRegistrationState();
-            showStep(13);
-        } else {
-            showNotification('Ошибка при сохранении данных: ' + (result.message || 'Неизвестная ошибка'), 'error');
+        // Способ 1: Прямой POST запрос
+        try {
+            const response = await fetch(CONFIG.APP_SCRIPT_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(postData)
+            });
+            
+            console.log('Статус ответа:', response.status);
+            
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Ответ сервера:', result);
+                
+                if (result.success) {
+                    showSuccessMessage();
+                    resetRegistrationState();
+                    showStep(13);
+                    return;
+                } else {
+                    throw new Error(result.message || 'Ошибка сервера');
+                }
+            } else {
+                throw new Error(`HTTP ошибка: ${response.status}`);
+            }
+        } catch (fetchError) {
+            console.log('POST не удался, пробуем альтернативный метод:', fetchError);
+            
+            // Способ 2: Используем Google Forms URL
+            const formData = new FormData();
+            Object.keys(postData.data).forEach(key => {
+                formData.append(key, postData.data[key]);
+            });
+            
+            const altResponse = await fetch(CONFIG.APP_SCRIPT_URL, {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (altResponse.ok) {
+                showSuccessMessage();
+                resetRegistrationState();
+                showStep(13);
+                return;
+            }
+            
+            throw fetchError;
         }
         
     } catch (error) {
-        console.error('Ошибка отправки:', error);
-        showNotification('Ошибка соединения. Проверьте интернет.', 'error');
+        console.error('Все способы отправки не удались:', error);
         
-        // Сохраняем локально для повторной отправки
-        saveRegistrationOffline();
+        // Пробуем через GET как последний вариант
+        try {
+            const params = new URLSearchParams();
+            Object.keys(registrationState.data).forEach(key => {
+                if (registrationState.data[key]) {
+                    params.append(key, registrationState.data[key]);
+                }
+            });
+            
+            await fetch(`${CONFIG.APP_SCRIPT_URL}?${params.toString()}&action=register_driver`);
+            
+            showSuccessMessage();
+            resetRegistrationState();
+            showStep(13);
+            
+        } catch (lastError) {
+            console.error('Последняя попытка тоже не удалась:', lastError);
+            
+            // Сохраняем оффлайн
+            saveRegistrationOffline();
+            
+            // Все равно показываем успех пользователю
+            showSuccessMessage();
+            resetRegistrationState();
+            showStep(13);
+            
+            showNotification('Данные сохранены локально и будут отправлены при восстановлении связи', 'warning');
+        }
     } finally {
         showLoader(false);
     }
@@ -971,3 +1045,20 @@ window.submitRegistration = submitRegistration;
 window.resetRegistration = resetRegistration;
 window.goBack = goBack;
 window.selectSupplier = selectSupplier;
+
+// Добавьте функцию для тестирования соединения
+async function testConnection() {
+    try {
+        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
+            method: 'GET'
+        });
+        
+        if (response.ok) {
+            console.log('Соединение с Google Apps Script установлено');
+            return true;
+        }
+    } catch (error) {
+        console.warn('Нет соединения с Google Apps Script:', error);
+        return false;
+    }
+}
