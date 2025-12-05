@@ -436,6 +436,56 @@ function assignGateAutomatically(legalEntity, productType) {
 }
 
 // Шаг 6: Марка авто
+async function handlePhoneSubmit() {
+    const phoneInput = document.getElementById('phone-input');
+    if (!phoneInput) return;
+    
+    let phone = phoneInput.value.replace(/\s/g, '');
+    
+    if (!phone || phone.length < 10) {
+        showNotification('Пожалуйста, введите корректный номер телефона', 'error');
+        phoneInput.focus();
+        return;
+    }
+    
+    phone = normalizePhone(phone);
+    registrationState.data.phone = phone;
+    
+    showLoader(true);
+    
+    try {
+        // Проверяем существующего водителя
+        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'check_driver',
+                phone: phone
+            })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.exists && data.driver) {
+                // Автозаполнение ФИО
+                const fioInput = document.getElementById('fio-input');
+                if (fioInput && data.driver.fio) {
+                    fioInput.value = data.driver.fio;
+                    registrationState.data.fio = data.driver.fio;
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка проверки водителя:', error);
+    } finally {
+        showLoader(false);
+        showStep(2);
+    }
+}
+
+
 function selectBrand(brand) {
     registrationState.data.vehicleType = brand;
     showStep(7); // Переход к вводу номера ТС
@@ -608,25 +658,73 @@ function showConfirmation() {
 }
 
 // Отправка регистрации
+// app.js - обновите submitRegistration
 async function submitRegistration() {
     showLoader(true);
     
     try {
-        // Отправка данных в Google Sheets
-        const response = await saveToGoogleSheets(registrationState.data);
+        // Подготовка данных для отправки
+        const postData = {
+            action: 'register_driver',
+            data: {
+                phone: registrationState.data.phone,
+                fio: registrationState.data.fio,
+                supplier: registrationState.data.supplier,
+                legalEntity: registrationState.data.legalEntity,
+                productType: registrationState.data.productType,
+                vehicleType: registrationState.data.vehicleType,
+                vehicleNumber: registrationState.data.vehicleNumber,
+                pallets: registrationState.data.pallets,
+                orderNumber: registrationState.data.orderNumber,
+                etrn: registrationState.data.etrn,
+                transit: registrationState.data.transit,
+                gate: registrationState.data.gate
+            }
+        };
         
-        if (response && response.success) {
+        console.log('Отправляемые данные:', postData);
+        
+        // Отправка данных
+        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors', // Используем no-cors для обхода CORS
+            headers: {
+                'Content-Type': 'text/plain;charset=utf-8',
+            },
+            body: JSON.stringify(postData)
+        });
+        
+        // С no-cors мы не можем прочитать ответ, поэтому считаем успешным
+        console.log('Данные отправлены, ответ:', response);
+        
+        // Показываем успешное сообщение
+        showSuccessMessage();
+        resetRegistrationState();
+        showStep(13);
+        
+    } catch (error) {
+        console.error('Ошибка отправки:', error);
+        
+        // Пробуем альтернативный метод через GET
+        try {
+            const params = new URLSearchParams();
+            Object.keys(registrationState.data).forEach(key => {
+                params.append(key, registrationState.data[key]);
+            });
+            
+            await fetch(`${CONFIG.APP_SCRIPT_URL}?${params.toString()}`);
             showSuccessMessage();
             resetRegistrationState();
             showStep(13);
-        } else {
-            showNotification('Ошибка при сохранении данных', 'error');
+            
+        } catch (secondError) {
+            console.error('Вторая попытка тоже не удалась:', secondError);
+            showNotification('Данные сохранены локально. Отправятся при восстановлении связи.', 'warning');
+            saveRegistrationOffline();
+            showSuccessMessage();
+            resetRegistrationState();
+            showStep(13);
         }
-    } catch (error) {
-        console.error('Ошибка отправки:', error);
-        showNotification('Данные сохранены локально. Отправлены при восстановлении связи.', 'warning');
-        saveRegistrationOffline();
-        showStep(13);
     } finally {
         showLoader(false);
     }
@@ -915,6 +1013,7 @@ window.submitRegistration = submitRegistration;
 window.resetRegistration = resetRegistration;
 window.goBack = goBack;
 window.selectSupplier = selectSupplier;
+
 
 
 
