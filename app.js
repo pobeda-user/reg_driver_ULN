@@ -909,20 +909,36 @@ function saveRegistrationOffline() {
 }
 
 // ==================== ОТПРАВКА ОФФЛАЙН ДАННЫХ ====================
-async function sendOfflineData() {
+// ==================== ОТПРАВКА ОФФЛАЙН ДАННЫХ ====================
+async function sendOfflineData(resetAttempts = false) {
     if (!navigator.onLine) {
         logToConsole('WARN', 'Нет соединения, пропускаю отправку оффлайн данных');
         return;
     }
     
     try {
-        logToConsole('INFO', 'Начинаю отправку оффлайн данных');
+        logToConsole('INFO', 'Начинаю отправку оффлайн данных', { resetAttempts });
         
         const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
+        
+        if (resetAttempts) {
+            // Сбрасываем счетчики попыток для всех записей
+            offlineRegistrations.forEach(record => {
+                if (record.status === 'pending') {
+                    record.attempts = 0;
+                    record.lastError = null;
+                    logToConsole('INFO', `Сброшены попытки для записи ${record.id}`);
+                }
+            });
+            localStorage.setItem('offline_registrations', JSON.stringify(offlineRegistrations));
+            showNotification('✅ Счетчики попыток сброшены', 'success');
+        }
+        
         const pendingRecords = offlineRegistrations.filter(r => r.status === 'pending');
         
         if (pendingRecords.length === 0) {
             logToConsole('INFO', 'Нет записей для отправки');
+            showNotification('📭 Нет записей для отправки', 'info');
             return;
         }
         
@@ -932,15 +948,27 @@ async function sendOfflineData() {
         const failed = [];
         
         for (const record of pendingRecords) {
-            if (record.attempts >= 5) {
-                logToConsole('WARN', `Запись ${record.id} превысила лимит попыток`, { attempts: record.attempts });
+            // Если попыток >= 5, пропускаем (но можем сбросить через resetAttempts)
+            if (record.attempts >= 5 && !resetAttempts) {
+                logToConsole('WARN', `Запись ${record.id} превысила лимит попыток`, { 
+                    attempts: record.attempts,
+                    lastError: record.lastError 
+                });
                 continue;
             }
             
             try {
-                logToConsole('INFO', `Отправляю запись ${record.id}`, { attempt: record.attempts + 1 });
+                logToConsole('INFO', `Отправляю запись ${record.id}`, { 
+                    attempt: record.attempts + 1,
+                    data: record.data 
+                });
                 
                 const response = await sendRegistrationToServer(record.data);
+                
+                logToConsole('INFO', `Ответ для записи ${record.id}`, {
+                    success: response.success,
+                    message: response.message
+                });
                 
                 if (response && response.success) {
                     record.status = 'sent';
@@ -950,10 +978,14 @@ async function sendOfflineData() {
                     logToConsole('SUCCESS', `Запись ${record.id} отправлена успешно`);
                 } else {
                     record.attempts = (record.attempts || 0) + 1;
-                    record.lastError = response?.message || 'Неизвестная ошибка';
+                    record.lastError = response?.message || 'Неизвестная ошибка сервера';
                     record.lastAttempt = new Date().toISOString();
                     failed.push(record.id);
-                    logToConsole('ERROR', `Ошибка отправки записи ${record.id}`, record.lastError);
+                    logToConsole('ERROR', `Ошибка отправки записи ${record.id}`, {
+                        error: record.lastError,
+                        attempts: record.attempts,
+                        response: response
+                    });
                 }
                 
             } catch (error) {
@@ -961,15 +993,19 @@ async function sendOfflineData() {
                 record.lastError = error.message;
                 record.lastAttempt = new Date().toISOString();
                 failed.push(record.id);
-                logToConsole('ERROR', `Ошибка отправки записи ${record.id}`, error);
+                logToConsole('ERROR', `Ошибка отправки записи ${record.id}`, {
+                    error: error.message,
+                    stack: error.stack,
+                    attempts: record.attempts
+                });
             }
             
             // Небольшая пауза между запросами
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // Сохраняем прогресс после каждой записи
+            localStorage.setItem('offline_registrations', JSON.stringify(offlineRegistrations));
         }
-        
-        // Сохраняем обновленные данные
-        localStorage.setItem('offline_registrations', JSON.stringify(offlineRegistrations));
         
         // Очищаем старые отправленные записи (старше 7 дней)
         cleanupOldOfflineRecords();
@@ -983,16 +1019,52 @@ async function sendOfflineData() {
         }
         
         if (failed.length > 0) {
-            showNotification(`⚠️ ${failed.length} записей не удалось отправить. Проверьте соединение с интернетом.`, 'warning');
+            showNotification(`⚠️ ${failed.length} записей не удалось отправить. Попыток: ${pendingRecords[0]?.attempts || 0}/5`, 'warning');
+        }
+        
+        if (successful.length === 0 && failed.length === 0) {
+            showNotification('📭 Все записи превысили лимит попыток. Нажмите "Сбросить попытки" для повторной отправки.', 'info');
         }
         
         logToConsole('INFO', 'Итог отправки оффлайн данных', { 
             successful: successful.length, 
-            failed: failed.length 
+            failed: failed.length,
+            total: pendingRecords.length 
         });
         
     } catch (error) {
         logToConsole('ERROR', 'Ошибка отправки оффлайн данных', error);
+        showNotification('❌ Ошибка при отправке оффлайн данных', 'error');
+    }
+}
+// ==================== ФУНКЦИЯ СБРОСА ПОПЫТОК ====================
+function resetOfflineAttempts() {
+    if (confirm('Сбросить счетчики попыток для всех оффлайн записей?\n\nЭто позволит повторно отправить записи, которые превысили лимит попыток.')) {
+        const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
+        let resetCount = 0;
+        
+        offlineRegistrations.forEach(record => {
+            if (record.status === 'pending' && record.attempts >= 5) {
+                record.attempts = 0;
+                record.lastError = null;
+                record.lastAttempt = null;
+                resetCount++;
+            }
+        });
+        
+        localStorage.setItem('offline_registrations', JSON.stringify(offlineRegistrations));
+        
+        showNotification(`✅ Сброшены попытки для ${resetCount} записей`, 'success');
+        logToConsole('INFO', 'Сброшены счетчики попыток', { resetCount });
+        
+        // Закрываем модальное окно если открыто
+        closeModal();
+        
+        // Обновляем счетчик
+        showOfflineDataCount();
+        
+        // Пробуем отправить снова
+        setTimeout(() => sendOfflineData(true), 1000);
     }
 }
 
@@ -1028,6 +1100,9 @@ function showOfflineDataModal() {
         const pendingRecords = offlineRegistrations.filter(r => r.status === 'pending');
         const sentRecords = offlineRegistrations.filter(r => r.status === 'sent');
         
+        // Подсчитываем записи с превышенным лимитом
+        const exceededRecords = pendingRecords.filter(r => r.attempts >= 5);
+        
         let html = `
             <div class="modal-overlay" onclick="closeModal(event)">
                 <div class="modal" onclick="event.stopPropagation()">
@@ -1045,8 +1120,22 @@ function showOfflineDataModal() {
                                 <div class="stat-value">${sentRecords.length}</div>
                                 <div class="stat-label">Уже отправлены</div>
                             </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${exceededRecords.length}</div>
+                                <div class="stat-label">Превышен лимит</div>
+                            </div>
                         </div>
         `;
+        
+        // Предупреждение если есть записи с превышенным лимитом
+        if (exceededRecords.length > 0) {
+            html += `
+                <div class="warning-box" style="margin-bottom: 20px;">
+                    <p>⚠️ <strong>ВНИМАНИЕ!</strong> У ${exceededRecords.length} записей превышен лимит попыток отправки (5).</p>
+                    <p>Нажмите "Сбросить попытки" чтобы попробовать отправить их снова.</p>
+                </div>
+            `;
+        }
         
         if (pendingRecords.length > 0) {
             html += `
@@ -1055,19 +1144,24 @@ function showOfflineDataModal() {
             `;
             
             pendingRecords.forEach((record, index) => {
+                const isExceeded = record.attempts >= 5;
+                const badgeClass = isExceeded ? 'badge-error' : 'badge-warning';
+                const badgeText = isExceeded ? 'Превышен лимит' : 'Ожидает';
+                
                 html += `
-                    <div class="card" style="margin-bottom: 10px;">
+                    <div class="card" style="margin-bottom: 10px; border-left: 4px solid ${isExceeded ? '#f44336' : '#ff9800'};">
                         <div class="card-header">
-                            <div class="card-title">Запись ${index + 1}</div>
-                            <div class="badge badge-warning">Ожидает</div>
+                            <div class="card-title">Запись ${index + 1} - ${record.data.fio || 'Без ФИО'}</div>
+                            <div class="badge ${badgeClass}">${badgeText}</div>
                         </div>
                         <div class="card-body">
                             <p><strong>ФИО:</strong> ${record.data.fio || 'Нет'}</p>
                             <p><strong>Телефон:</strong> ${formatPhoneDisplay(record.data.phone || '')}</p>
                             <p><strong>Поставщик:</strong> ${record.data.supplier || 'Нет'}</p>
-                            <p><strong>Дата:</strong> ${new Date(record.timestamp).toLocaleString('ru-RU')}</p>
-                            <p><strong>Попытки:</strong> ${record.attempts || 0}</p>
-                            ${record.lastError ? `<p style="color: #f44336;"><strong>Ошибка:</strong> ${record.lastError}</p>` : ''}
+                            <p><strong>Дата создания:</strong> ${new Date(record.timestamp).toLocaleString('ru-RU')}</p>
+                            <p><strong>Попыток отправки:</strong> ${record.attempts || 0}/5</p>
+                            ${record.lastAttempt ? `<p><strong>Последняя попытка:</strong> ${new Date(record.lastAttempt).toLocaleString('ru-RU')}</p>` : ''}
+                            ${record.lastError ? `<p style="color: #f44336;"><strong>Последняя ошибка:</strong> ${record.lastError}</p>` : ''}
                         </div>
                     </div>
                 `;
@@ -1079,7 +1173,7 @@ function showOfflineDataModal() {
         if (sentRecords.length > 0) {
             html += `
                 <h4>Успешно отправленные записи:</h4>
-                <div style="max-height: 200px; overflow-y: auto;">
+                <div style="max-height: 200px; overflow-y: auto; margin-bottom: 20px;">
             `;
             
             sentRecords.slice(0, 5).forEach((record, index) => {
@@ -1105,6 +1199,7 @@ function showOfflineDataModal() {
                     <div class="modal-footer">
                         <button class="btn btn-secondary" onclick="closeModal(event)">Закрыть</button>
                         <button class="btn btn-primary" onclick="forceSendOfflineData()">Отправить сейчас</button>
+                        ${exceededRecords.length > 0 ? '<button class="btn btn-warning" onclick="resetOfflineAttempts()">Сбросить попытки</button>' : ''}
                         <button class="btn btn-danger" onclick="clearOfflineData()">Очистить всё</button>
                     </div>
                 </div>
@@ -1767,5 +1862,6 @@ window.showNetworkLogs = showNetworkLogs;
 window.showLoader = showLoader;
 window.clearLogs = clearLogs;
 window.exportLogs = exportLogs;
-
+window.resetOfflineAttempts = resetOfflineAttempts;
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
