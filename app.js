@@ -1,8 +1,9 @@
-// app.js - ИСПРАВЛЕННАЯ ВЕРСИЯ С ПРАВИЛЬНОЙ ОТПРАВКОЙ ДАННЫХ
+// app.js v1.3 - ПОЛНАЯ ВЕРСИЯ С ЛОГИРОВАНИЕМ
 
 // Конфигурация
 let CONFIG = {
-    APP_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbzDATeBrTYOYUnP9JrjcUXuKHXbPWl75X-BTE-OFsREZLFB4I9qX-f4Ctu_MzKaGBko/exec'
+    APP_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbzDATeBrTYOYUnP9JrjcUXuKHXbPWl75X-BTE-OFsREZLFB4I9qX-f4Ctu_MzKaGBko/exec',
+    APP_VERSION: '1.3'
 };
 
 // Глобальные переменные
@@ -27,14 +28,44 @@ let registrationState = {
     }
 };
 
+// Логирование
+function logToConsole(level, message, data = null) {
+    const timestamp = new Date().toISOString();
+    const logEntry = {
+        timestamp,
+        level,
+        message,
+        data,
+        url: window.location.href,
+        userAgent: navigator.userAgent
+    };
+    
+    console.log(`[${level}] ${message}`, data ? data : '');
+    
+    // Сохраняем логи в localStorage
+    try {
+        const logs = JSON.parse(localStorage.getItem('app_logs') || '[]');
+        logs.unshift(logEntry);
+        
+        // Храним только последние 100 записей
+        if (logs.length > 100) {
+            logs.pop();
+        }
+        
+        localStorage.setItem('app_logs', JSON.stringify(logs));
+    } catch (e) {
+        console.error('Ошибка сохранения лога:', e);
+    }
+}
+
 // ==================== ИНИЦИАЛИЗАЦИЯ ====================
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🚀 Приложение загружается...');
+    logToConsole('INFO', 'Приложение загружается', { version: CONFIG.APP_VERSION });
     
     // Загружаем CONFIG из window если есть
     if (window.CONFIG) {
         CONFIG = { ...CONFIG, ...window.CONFIG };
-        console.log('Конфигурация загружена:', CONFIG.APP_SCRIPT_URL);
+        logToConsole('INFO', 'Конфигурация загружена', { url: CONFIG.APP_SCRIPT_URL });
     }
     
     // Загружаем сохраненное состояние
@@ -47,12 +78,18 @@ document.addEventListener('DOMContentLoaded', function() {
     // Показываем текущий шаг
     showStep(registrationState.step);
     
+    // Показываем оффлайн данные
+    showOfflineDataCount();
+    
     // Тестируем соединение
     setTimeout(() => {
         testAPIConnection();
     }, 1000);
     
-    console.log('✅ Приложение инициализировано');
+    // Периодическая проверка соединения
+    setInterval(checkConnectionAndSendOffline, 60000); // Каждую минуту
+    
+    logToConsole('INFO', 'Приложение инициализировано');
 });
 
 // ==================== ОБРАБОТЧИКИ СОБЫТИЙ ====================
@@ -69,403 +106,41 @@ function setupEventListeners() {
     
     // Обновление статуса соединения
     window.addEventListener('online', function() {
-        console.log('🌐 Соединение восстановлено');
+        logToConsole('INFO', 'Соединение восстановлено');
         updateConnectionStatus(true);
-        showNotification('Соединение восстановлено', 'success');
+        showNotification('🌐 Соединение восстановлено', 'success');
         
         // Пробуем отправить оффлайн данные
-        sendOfflineData();
+        setTimeout(() => sendOfflineData(), 2000);
     });
     
     window.addEventListener('offline', function() {
-        console.log('⚠️ Соединение потеряно');
+        logToConsole('WARN', 'Соединение потеряно');
         updateConnectionStatus(false);
-        showNotification('Нет соединения с интернетом', 'warning');
+        showNotification('⚠️ Нет соединения с интернетом', 'warning');
     });
 }
 
-// ==================== ШАГ 13: ОТПРАВКА ====================
-async function submitRegistration() {
-    console.log('📤 Начинаю отправку регистрации...');
-    console.log('Данные для отправки:', registrationState.data);
-    
-    // Проверяем заполненность обязательных полей
-    const requiredFields = ['phone', 'fio', 'supplier', 'legalEntity', 'productType'];
-    const missingFields = requiredFields.filter(field => !registrationState.data[field]);
-    
-    if (missingFields.length > 0) {
-        showNotification(`Заполните обязательные поля: ${missingFields.join(', ')}`, 'error');
-        return;
-    }
-    
-    showLoader(true);
-    
-    try {
-        // Пытаемся отправить данные онлайн
-        const response = await sendRegistrationToServer(registrationState.data);
-        
-        console.log('📨 Ответ от сервера:', response);
-        
-        if (response && response.success) {
-            console.log('✅ Регистрация успешна на сервере!');
-            
-            // Обновляем данные из ответа сервера
-            if (response.data) {
-                Object.assign(registrationState.data, response.data);
-            }
-            
-            // Показываем успешное сообщение
-            showSuccessMessage(response.data);
-            
-            // Сбрасываем состояние
-            resetRegistrationState();
-            
-            // Переходим к шагу успеха
-            showStep(13);
-            
-            showNotification('✅ Регистрация успешно завершена!', 'success');
-            
-        } else {
-            console.error('❌ Ошибка от сервера:', response?.message);
-            throw new Error(response?.message || 'Неизвестная ошибка сервера');
-        }
-        
-    } catch (error) {
-        console.error('❌ Ошибка отправки:', error);
-        
-        // Сохраняем оффлайн
-        const saved = saveRegistrationOffline();
-        
-        if (saved) {
-            console.log('📱 Данные сохранены оффлайн');
-            
-            // Показываем успех даже при оффлайн
-            showSuccessMessage();
-            resetRegistrationState();
-            showStep(13);
-            
-            showNotification('📱 Данные сохранены локально. Отправятся при восстановлении связи.', 'warning');
-        } else {
-            console.error('❌ Ошибка сохранения оффлайн');
-            showNotification('❌ Ошибка сохранения данных. Попробуйте еще раз.', 'error');
-        }
-    } finally {
-        showLoader(false);
-    }
-}
-
-// ==================== ФУНКЦИЯ ОТПРАВКИ НА СЕРВЕР ====================
-async function sendRegistrationToServer(data) {
-    try {
-        console.log('📤 Отправляю данные на сервер:', CONFIG.APP_SCRIPT_URL);
-        
-        const requestData = {
-            action: 'register_driver',
-            data: data
-        };
-        
-        console.log('Данные запроса:', requestData);
-        
-        // Отправляем POST запрос
-        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestData),
-            mode: 'cors'
-        });
-        
-        console.log('📥 Статус ответа:', response.status, response.statusText);
-        
-        if (response.ok) {
-            const text = await response.text();
-            console.log('📥 Ответ текст:', text);
-            
-            try {
-                const result = JSON.parse(text);
-                console.log('📥 Ответ JSON:', result);
-                return result;
-            } catch (parseError) {
-                console.error('❌ Ошибка парсинга JSON:', parseError);
-                return { success: false, message: 'Неверный формат ответа сервера' };
-            }
-        } else {
-            console.error('❌ HTTP ошибка:', response.status);
-            throw new Error(`HTTP ошибка ${response.status}`);
-        }
-        
-    } catch (error) {
-        console.error('❌ Ошибка отправки на сервер:', error);
-        throw error;
-    }
-}
-
-// ==================== ОФФЛАЙН СОХРАНЕНИЕ И ОТПРАВКА ====================
-function saveRegistrationOffline() {
-    try {
-        const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
-        
-        offlineRegistrations.push({
-            id: 'reg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-            data: registrationState.data,
-            timestamp: new Date().toISOString(),
-            attempts: 0,
-            status: 'pending'
-        });
-        
-        localStorage.setItem('offline_registrations', JSON.stringify(offlineRegistrations));
-        
-        console.log('✅ Данные сохранены оффлайн. Всего записей:', offlineRegistrations.length);
-        return true;
-        
-    } catch (error) {
-        console.error('❌ Ошибка сохранения оффлайн:', error);
-        return false;
-    }
-}
-
-async function sendOfflineData() {
-    try {
-        console.log('🔄 Пробую отправить оффлайн данные...');
-        
-        const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
-        
-        if (offlineRegistrations.length === 0) {
-            console.log('ℹ️ Нет оффлайн данных для отправки');
-            return;
-        }
-        
-        console.log(`📋 Найдено ${offlineRegistrations.length} оффлайн записей`);
-        
-        const successful = [];
-        const failed = [];
-        
-        // Отправляем каждую запись
-        for (let i = 0; i < offlineRegistrations.length; i++) {
-            const record = offlineRegistrations[i];
-            
-            try {
-                // Не отправляем уже отправленные или слишком старые записи
-                if (record.status === 'sent' || record.attempts >= 5) {
-                    continue;
-                }
-                
-                console.log(`🔄 Отправляю оффлайн запись ${i + 1}/${offlineRegistrations.length}`);
-                
-                const response = await sendRegistrationToServer(record.data);
-                
-                if (response && response.success) {
-                    record.status = 'sent';
-                    record.sentAt = new Date().toISOString();
-                    record.response = response;
-                    successful.push(record.id);
-                    console.log(`✅ Оффлайн запись ${record.id} отправлена успешно`);
-                } else {
-                    record.attempts = (record.attempts || 0) + 1;
-                    record.lastError = response?.message || 'Неизвестная ошибка';
-                    failed.push(record.id);
-                    console.log(`❌ Ошибка отправки оффлайн записи ${record.id}:`, record.lastError);
-                }
-                
-                // Небольшая пауза между запросами
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
-            } catch (error) {
-                record.attempts = (record.attempts || 0) + 1;
-                record.lastError = error.message;
-                failed.push(record.id);
-                console.error(`❌ Ошибка отправки оффлайн записи ${record.id}:`, error);
-            }
-            
-            // Обновляем запись в массиве
-            offlineRegistrations[i] = record;
-        }
-        
-        // Сохраняем обновленные данные
-        localStorage.setItem('offline_registrations', JSON.stringify(offlineRegistrations));
-        
-        // Удаляем успешно отправленные записи старше 7 дней
-        const now = new Date();
-        const filtered = offlineRegistrations.filter(record => {
-            if (record.status === 'sent') {
-                const sentDate = new Date(record.sentAt || record.timestamp);
-                const diffDays = (now - sentDate) / (1000 * 60 * 60 * 24);
-                return diffDays < 7; // Храним отправленные 7 дней
-            }
-            return true; // Храним все pending
-        });
-        
-        localStorage.setItem('offline_registrations', JSON.stringify(filtered));
-        
-        // Показываем результат
-        if (successful.length > 0) {
-            showNotification(`✅ ${successful.length} оффлайн записей отправлено`, 'success');
-        }
-        
-        if (failed.length > 0) {
-            showNotification(`⚠️ ${failed.length} записей не удалось отправить`, 'warning');
-        }
-        
-        console.log(`📊 Итог отправки: успешно ${successful.length}, не удалось ${failed.length}`);
-        
-    } catch (error) {
-        console.error('❌ Ошибка отправки оффлайн данных:', error);
-    }
-}
-
-// ==================== API ФУНКЦИИ ====================
-async function testAPIConnection() {
-    try {
-        console.log('🔍 Тестирую соединение с API...');
-        
-        // Простой GET запрос для теста
-        const testUrl = CONFIG.APP_SCRIPT_URL + '?action=ping&test=' + Date.now();
-        console.log('🔗 URL теста:', testUrl);
-        
-        const response = await fetch(testUrl, {
-            method: 'GET',
-            mode: 'cors',
-            cache: 'no-cache'
-        });
-        
-        console.log('📊 Статус GET:', response.status, response.statusText);
-        
-        if (response.ok) {
-            try {
-                const data = await response.json();
-                console.log('✅ API тест успешен:', data);
-                updateConnectionStatus(true);
-                return true;
-            } catch (jsonError) {
-                console.log('⚠️ API тест: ответ не JSON, но сервер доступен');
-                updateConnectionStatus(true);
-                return true;
-            }
-        } else {
-            console.log('❌ API тест не прошел, статус:', response.status);
-            
-            // Пробуем POST запрос
-            console.log('🔄 Пробую POST запрос...');
-            try {
-                const postResponse = await fetch(CONFIG.APP_SCRIPT_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'test' }),
-                    mode: 'cors'
-                });
-                
-                console.log('📊 Статус POST:', postResponse.status);
-                
-                if (postResponse.ok) {
-                    updateConnectionStatus(true);
-                    return true;
-                }
-            } catch (postError) {
-                console.log('❌ POST тест не прошел:', postError.message);
-            }
-            
-            updateConnectionStatus(false);
-            return false;
-        }
-        
-    } catch (error) {
-        console.error('❌ Ошибка тестирования API:', error);
-        updateConnectionStatus(false);
-        return false;
-    }
-}
-
-// ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
-function updateConnectionStatus(isConnected) {
-    console.log('📡 Обновление статуса соединения:', isConnected ? 'онлайн' : 'оффлайн');
-    
-    const indicator = document.getElementById('connection-indicator');
-    const statusElement = document.getElementById('connection-status');
-    
-    if (indicator) {
-        indicator.className = isConnected ? 'online' : 'offline';
-        indicator.title = isConnected ? 'Онлайн' : 'Оффлайн';
-    }
-    
-    if (statusElement) {
-        statusElement.style.display = isConnected ? 'none' : 'block';
-    }
-}
-
-// ==================== ПРОВЕРКА И ОБРАБОТКА ОФФЛАЙН ДАННЫХ ====================
-function checkOfflineData() {
-    try {
-        const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
-        
-        if (offlineRegistrations.length > 0) {
-            console.log(`ℹ️ Найдено ${offlineRegistrations.length} оффлайн записей`);
-            
-            // Показываем уведомление
-            showNotification(`У вас ${offlineRegistrations.length} неотправленных записей. Они отправятся автоматически при восстановлении связи.`, 'info');
-            
-            return true;
-        }
-        return false;
-    } catch (error) {
-        console.error('Ошибка проверки оффлайн данных:', error);
-        return false;
-    }
-}
-
-// ==================== ПЕРИОДИЧЕСКАЯ ПРОВЕРКА ====================
-// Проверяем соединение каждые 30 секунд
-setInterval(() => {
-    if (navigator.onLine) {
-        testAPIConnection();
-        sendOfflineData();
-    }
-}, 30000);
-
-// Проверяем оффлайн данные при загрузке
-window.addEventListener('load', () => {
-    setTimeout(() => {
-        checkOfflineData();
-    }, 2000);
-});
-
-// ==================== ЭКСПОРТ ФУНКЦИЙ ДЛЯ HTML ====================
-// Экспортируем все функции, которые вызываются из HTML
-window.handlePhoneSubmit = handlePhoneSubmit;
-window.handleFioSubmit = handleFioSubmit;
-window.handleManualSupplier = handleManualSupplier;
-window.selectLegalEntity = selectLegalEntity;
-window.selectProductType = selectProductType;
-window.selectBrand = selectBrand;
-window.handleManualBrand = handleManualBrand;
-window.handleVehicleNumberSubmit = handleVehicleNumberSubmit;
-window.handlePalletsSubmit = handlePalletsSubmit;
-window.handleOrderSubmit = handleOrderSubmit;
-window.handleEtrnSubmit = handleEtrnSubmit;
-window.selectTransit = selectTransit;
-window.submitRegistration = submitRegistration;
-window.resetRegistration = resetRegistration;
-window.goBack = goBack;
-window.selectSupplier = selectSupplier;
-
-console.log('✅ app.js загружен, функции экспортированы');
-
-// ==================== ОСТАЛЬНЫЕ ФУНКЦИИ (без изменений) ====================
+// ==================== НАВИГАЦИЯ ====================
 function showStep(stepNumber) {
-    console.log(`📱 Переход к шагу: ${stepNumber}`);
+    logToConsole('INFO', `Переход к шагу: ${stepNumber}`);
     
+    // Скрыть все шаги
     document.querySelectorAll('.step').forEach(step => {
         step.style.display = 'none';
     });
     
+    // Показать нужный шаг
     const stepElement = document.querySelector(`[data-step="${stepNumber}"]`);
     if (stepElement) {
         stepElement.style.display = 'block';
         registrationState.step = stepNumber;
         saveRegistrationState();
         
+        // Прокрутка вверх
         window.scrollTo(0, 0);
         
+        // Фокус на первом поле ввода
         setTimeout(() => {
             const input = stepElement.querySelector('input');
             if (input) {
@@ -481,6 +156,7 @@ function goBack() {
     }
 }
 
+// ==================== ШАГ 1: ТЕЛЕФОН ====================
 function setupPhoneInput() {
     const phoneInput = document.getElementById('phone-input');
     if (!phoneInput) return;
@@ -489,6 +165,7 @@ function setupPhoneInput() {
         let value = e.target.value.replace(/\D/g, '');
         if (value.length > 10) value = value.substring(0, 10);
         
+        // Форматирование: XXX XXX XX XX
         let formatted = '';
         for (let i = 0; i < value.length; i++) {
             if (i === 3 || i === 6 || i === 8) formatted += ' ';
@@ -498,6 +175,7 @@ function setupPhoneInput() {
         e.target.value = formatted;
     });
     
+    // Фокус при загрузке
     setTimeout(() => phoneInput.focus(), 500);
 }
 
@@ -513,13 +191,15 @@ async function handlePhoneSubmit() {
         return;
     }
     
+    // Нормализуем телефон
     const normalizedPhone = normalizePhone(phone);
     registrationState.data.phone = normalizedPhone;
-    console.log('📞 Телефон сохранен:', normalizedPhone);
+    logToConsole('INFO', 'Телефон сохранен', { phone: normalizedPhone });
     
     showStep(2);
 }
 
+// ==================== ШАГ 2: ФИО ====================
 function handleFioSubmit() {
     const fioInput = document.getElementById('fio-input');
     if (!fioInput) return;
@@ -533,14 +213,16 @@ function handleFioSubmit() {
     }
     
     registrationState.data.fio = fio;
-    console.log('👤 ФИО сохранено:', fio);
+    logToConsole('INFO', 'ФИО сохранено', { fio });
     
+    // Загружаем историю поставщиков
     loadSupplierHistory();
     showStep(3);
 }
 
+// ==================== ШАГ 3: ПОСТАВЩИКИ ====================
 async function loadSupplierHistory() {
-    console.log('🔍 Загружаю историю поставщиков...');
+    logToConsole('INFO', 'Загрузка истории поставщиков');
     
     const container = document.getElementById('supplier-buttons');
     const infoBox = document.getElementById('supplier-history-info');
@@ -556,60 +238,48 @@ async function loadSupplierHistory() {
     container.innerHTML = '<div class="info-box">Загрузка...</div>';
     
     try {
-        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'get_suppliers',
-                phone: registrationState.data.phone
-            }),
-            mode: 'cors'
+        const response = await sendAPIRequest({
+            action: 'get_suppliers',
+            phone: registrationState.data.phone
         });
         
-        if (response.ok) {
-            const data = await response.json();
-            console.log('📦 Ответ поставщиков:', data);
+        logToConsole('INFO', 'Ответ поставщиков', response);
+        
+        if (response && response.success && response.suppliers && response.suppliers.length > 0) {
+            infoBox.innerHTML = `<p>✅ Найдено поставщиков: ${response.suppliers.length}</p>`;
+            container.innerHTML = '';
             
-            if (data && data.success && data.suppliers && data.suppliers.length > 0) {
-                infoBox.innerHTML = `<p>✅ Найдено поставщиков: ${data.suppliers.length}</p>`;
-                container.innerHTML = '';
+            response.suppliers.forEach((supplier, index) => {
+                if (!supplier || supplier.trim() === '') return;
                 
-                data.suppliers.forEach((supplier, index) => {
-                    if (!supplier || supplier.trim() === '') return;
-                    
-                    const button = document.createElement('button');
-                    button.type = 'button';
-                    button.className = 'option-btn';
-                    button.innerHTML = `
-                        <span class="option-number">${index + 1}</span>
-                        <span class="option-text">${supplier}</span>
-                    `;
-                    button.onclick = () => {
-                        console.log('✅ Выбран поставщик:', supplier);
-                        selectSupplier(supplier);
-                    };
-                    container.appendChild(button);
-                });
-                
-                console.log(`✅ Создано ${data.suppliers.length} кнопок поставщиков`);
-                
-            } else {
-                infoBox.innerHTML = '<p>📭 История поставщиков не найдена</p>';
-                container.innerHTML = '<div class="info-box">История не найдена. Введите поставщика вручную.</div>';
-            }
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'option-btn';
+                button.innerHTML = `
+                    <span class="option-number">${index + 1}</span>
+                    <span class="option-text">${supplier}</span>
+                `;
+                button.onclick = () => {
+                    logToConsole('INFO', 'Выбран поставщик', { supplier });
+                    selectSupplier(supplier);
+                };
+                container.appendChild(button);
+            });
+            
         } else {
-            throw new Error(`HTTP ошибка ${response.status}`);
+            infoBox.innerHTML = '<p>📭 История поставщиков не найдена</p>';
+            container.innerHTML = '<div class="info-box">История не найдена. Введите поставщика вручную.</div>';
         }
         
     } catch (error) {
-        console.error('❌ Ошибка загрузки поставщиков:', error);
+        logToConsole('ERROR', 'Ошибка загрузки поставщиков', error);
         infoBox.innerHTML = '<p>⚠️ Ошибка загрузки истории</p>';
         container.innerHTML = '<div class="info-box warning">Ошибка загрузки. Введите поставщика вручную.</div>';
     }
 }
 
 function selectSupplier(supplier) {
-    console.log('✅ Выбран поставщик:', supplier);
+    logToConsole('INFO', 'Выбран поставщик', { supplier });
     registrationState.data.supplier = supplier;
     showStep(4);
 }
@@ -627,29 +297,33 @@ function handleManualSupplier() {
     }
     
     registrationState.data.supplier = supplier;
-    console.log('✅ Поставщик сохранен:', supplier);
+    logToConsole('INFO', 'Поставщик сохранен', { supplier });
     showStep(4);
 }
 
+// ==================== ШАГ 4: ЮРЛИЦО ====================
 function selectLegalEntity(entity) {
-    console.log('🏢 Выбрано юрлицо:', entity);
+    logToConsole('INFO', 'Выбрано юрлицо', { entity });
     registrationState.data.legalEntity = entity;
     showStep(5);
 }
 
+// ==================== ШАГ 5: ТИП ТОВАРА ====================
 function selectProductType(type) {
-    console.log('📦 Выбран тип товара:', type);
+    logToConsole('INFO', 'Выбран тип товара', { type });
     registrationState.data.productType = type;
     
+    // Автоматическое назначение ворот
     const gate = assignGateAutomatically(registrationState.data.legalEntity, type);
     registrationState.data.gate = gate;
-    console.log('🚪 Назначены ворота:', gate);
+    logToConsole('INFO', 'Назначены ворота', { gate });
     
     showStep(6);
 }
 
+// ==================== ШАГ 6: МАРКА АВТО ====================
 function selectBrand(brand) {
-    console.log('🚗 Выбрана марка авто:', brand);
+    logToConsole('INFO', 'Выбрана марка авто', { brand });
     registrationState.data.vehicleType = brand;
     showStep(7);
 }
@@ -667,10 +341,11 @@ function handleManualBrand() {
     }
     
     registrationState.data.vehicleType = brand;
-    console.log('✅ Марка авто сохранена:', brand);
+    logToConsole('INFO', 'Марка авто сохранена', { brand });
     showStep(7);
 }
 
+// ==================== ШАГ 7: НОМЕР ТС ====================
 function handleVehicleNumberSubmit() {
     const input = document.getElementById('vehicle-number-input');
     if (!input) return;
@@ -684,10 +359,11 @@ function handleVehicleNumberSubmit() {
     }
     
     registrationState.data.vehicleNumber = vehicleNumber;
-    console.log('✅ Номер ТС сохранен:', vehicleNumber);
+    logToConsole('INFO', 'Номер ТС сохранен', { vehicleNumber });
     showStep(8);
 }
 
+// ==================== ШАГ 8: ПОДДОНЫ ====================
 function handlePalletsSubmit() {
     const input = document.getElementById('pallets-input');
     if (!input) return;
@@ -701,10 +377,11 @@ function handlePalletsSubmit() {
     }
     
     registrationState.data.pallets = pallets;
-    console.log('✅ Поддоны сохранены:', pallets);
+    logToConsole('INFO', 'Поддоны сохранены', { pallets });
     showStep(9);
 }
 
+// ==================== ШАГ 9: НОМЕР ЗАКАЗА ====================
 function handleOrderSubmit() {
     const input = document.getElementById('order-input');
     if (!input) return;
@@ -718,10 +395,11 @@ function handleOrderSubmit() {
     }
     
     registrationState.data.orderNumber = orderNumber;
-    console.log('✅ Номер заказа сохранен:', orderNumber);
+    logToConsole('INFO', 'Номер заказа сохранен', { orderNumber });
     showStep(10);
 }
 
+// ==================== ШАГ 10: ЭТРН ====================
 function handleEtrnSubmit() {
     const input = document.getElementById('etrn-input');
     if (!input) return;
@@ -735,27 +413,32 @@ function handleEtrnSubmit() {
     }
     
     registrationState.data.etrn = etrn;
-    console.log('✅ ЭТрН сохранен:', etrn);
+    logToConsole('INFO', 'ЭТрН сохранен', { etrn });
     showStep(11);
 }
 
+// ==================== ШАГ 11: ТРАНЗИТ ====================
 function selectTransit(type) {
-    console.log('📦 Выбран тип доставки:', type);
+    logToConsole('INFO', 'Выбран тип доставки', { type });
     registrationState.data.transit = type;
     
+    // Обновляем дату и время
     const now = new Date();
     registrationState.data.date = formatDate(now);
     registrationState.data.time = formatTime(now);
     
+    // Проверяем нарушение графика
     registrationState.data.scheduleViolation = checkScheduleViolation() ? 'Да' : 'Нет';
-    console.log('⏰ Нарушение графика:', registrationState.data.scheduleViolation);
+    logToConsole('INFO', 'Нарушение графика', { violation: registrationState.data.scheduleViolation });
     
+    // Показываем подтверждение
     showConfirmation();
     showStep(12);
 }
 
+// ==================== ШАГ 12: ПОДТВЕРЖДЕНИЕ ====================
 function showConfirmation() {
-    console.log('📋 Показываю подтверждение...');
+    logToConsole('INFO', 'Показываю подтверждение');
     
     const container = document.getElementById('data-review');
     if (!container) return;
@@ -822,60 +505,572 @@ function showConfirmation() {
         `;
     }
     
-    container.innerHTML = html;
-    console.log('✅ Подтверждение отображено');
-}
-
-function showSuccessMessage(serverData = null) {
-    console.log('🎉 Показываю сообщение об успехе...');
-    
-    const container = document.getElementById('success-message');
-    if (!container) return;
-    
-    const data = registrationState.data;
-    const gate = serverData?.gate || data.gate || 'Не назначены';
-    const date = serverData?.date || data.date || '';
-    const time = serverData?.time || data.time || '';
-    
-    let html = `
-        <div class="success-icon-large">✅</div>
-        <div class="success-message">
-            <h3>Добро пожаловать, ${data.fio}!</h3>
-            <p>Ваша регистрация прошла успешно!</p>
-        </div>
-        
-        <div class="success-details">
-            <p><strong>Ваши ворота:</strong> ${gate}</p>
-            <p><strong>Статус:</strong> Зарегистрирован</p>
-    `;
-    
-    if (date && time) {
-        html += `<p><strong>Время регистрации:</strong> ${date} ${time}</p>`;
-    }
-    
-    html += `
-        </div>
-        
-        <div class="info-box">
-            <p>📍 Придерживайтесь схемы движения</p>
-            <p>🚛 Соблюдайте скоростной режим 5 км/ч</p>
-            <p>📋 Следуйте указаниям персонала</p>
-        </div>
-    `;
-    
-    if (data.scheduleViolation === 'Да') {
+    // Добавляем кнопку просмотра оффлайн данных
+    const offlineCount = getOfflineDataCount();
+    if (offlineCount > 0) {
         html += `
-            <div class="warning-box">
-                <p>⚠️ <strong>ВНИМАНИЕ!</strong> Вы нарушили график заезда!</p>
-                <p>Рекомендуем связаться с вашим поставщиком.</p>
+            <div class="data-item info" style="background: #e3f2fd; border-radius: 8px; padding: 10px; margin-top: 10px;">
+                <span class="data-label">📱 Оффлайн записей:</span>
+                <span class="data-value">${offlineCount} <button onclick="showOfflineDataModal()" style="margin-left: 10px; padding: 5px 10px; background: #4285f4; color: white; border: none; border-radius: 4px; cursor: pointer;">Просмотр</button></span>
             </div>
         `;
     }
     
     container.innerHTML = html;
-    console.log('✅ Сообщение об успехе отображено');
 }
 
+// ==================== ШАГ 13: ОТПРАВКА ====================
+async function submitRegistration() {
+    logToConsole('INFO', 'Начинаю отправку регистрации', registrationState.data);
+    
+    // Проверяем заполненность обязательных полей
+    const requiredFields = ['phone', 'fio', 'supplier', 'legalEntity', 'productType'];
+    const missingFields = requiredFields.filter(field => !registrationState.data[field]);
+    
+    if (missingFields.length > 0) {
+        showNotification(`Заполните обязательные поля: ${missingFields.join(', ')}`, 'error');
+        return;
+    }
+    
+    showLoader(true);
+    
+    try {
+        // Пытаемся отправить онлайн
+        const response = await sendRegistrationToServer(registrationState.data);
+        
+        logToConsole('INFO', 'Ответ от сервера', response);
+        
+        if (response && response.success) {
+            logToConsole('SUCCESS', 'Регистрация успешна на сервере!');
+            
+            // Обновляем данные из ответа сервера
+            if (response.data) {
+                Object.assign(registrationState.data, response.data);
+            }
+            
+            // Показываем успешное сообщение
+            showSuccessMessage(response.data);
+            
+            // Сбрасываем состояние
+            resetRegistrationState();
+            
+            // Переходим к шагу успеха
+            showStep(13);
+            
+            showNotification('✅ Регистрация успешно завершена!', 'success');
+            
+        } else {
+            logToConsole('ERROR', 'Ошибка от сервера', response?.message);
+            throw new Error(response?.message || 'Неизвестная ошибка сервера');
+        }
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка отправки', error);
+        
+        // Сохраняем оффлайн
+        const saved = saveRegistrationOffline();
+        
+        if (saved) {
+            logToConsole('INFO', 'Данные сохранены оффлайн');
+            
+            // Показываем успех даже при оффлайн
+            showSuccessMessage();
+            resetRegistrationState();
+            showStep(13);
+            
+            showNotification('📱 Данные сохранены локально. Отправятся при восстановлении связи.', 'warning');
+        } else {
+            logToConsole('ERROR', 'Ошибка сохранения оффлайн');
+            showNotification('❌ Ошибка сохранения данных. Попробуйте еще раз.', 'error');
+        }
+    } finally {
+        showLoader(false);
+    }
+}
+
+// ==================== ФУНКЦИЯ ОТПРАВКИ НА СЕРВЕР ====================
+async function sendRegistrationToServer(data) {
+    try {
+        logToConsole('INFO', 'Отправляю данные на сервер', { url: CONFIG.APP_SCRIPT_URL, data });
+        
+        const requestData = {
+            action: 'register_driver',
+            data: data
+        };
+        
+        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData),
+            mode: 'cors'
+        });
+        
+        logToConsole('INFO', 'Статус ответа', { status: response.status, statusText: response.statusText });
+        
+        if (response.ok) {
+            const text = await response.text();
+            
+            try {
+                const result = JSON.parse(text);
+                logToConsole('INFO', 'Ответ JSON', result);
+                return result;
+            } catch (parseError) {
+                logToConsole('ERROR', 'Ошибка парсинга JSON', parseError);
+                return { 
+                    success: false, 
+                    message: 'Неверный формат ответа сервера',
+                    rawResponse: text
+                };
+            }
+        } else {
+            const errorText = await response.text();
+            logToConsole('ERROR', 'HTTP ошибка', { status: response.status, errorText });
+            throw new Error(`HTTP ошибка ${response.status}: ${errorText}`);
+        }
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка отправки на сервер', error);
+        throw error;
+    }
+}
+
+// ==================== ОФФЛАЙН СОХРАНЕНИЕ ====================
+function saveRegistrationOffline() {
+    try {
+        const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
+        const offlineId = 'offline_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        
+        const offlineRecord = {
+            id: offlineId,
+            data: registrationState.data,
+            timestamp: new Date().toISOString(),
+            attempts: 0,
+            status: 'pending',
+            lastError: null
+        };
+        
+        offlineRegistrations.push(offlineRecord);
+        localStorage.setItem('offline_registrations', JSON.stringify(offlineRegistrations));
+        
+        logToConsole('INFO', 'Данные сохранены оффлайн', { 
+            id: offlineId, 
+            total: offlineRegistrations.length 
+        });
+        
+        // Обновляем счетчик
+        showOfflineDataCount();
+        
+        return true;
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка сохранения оффлайн', error);
+        return false;
+    }
+}
+
+// ==================== ОТПРАВКА ОФФЛАЙН ДАННЫХ ====================
+async function sendOfflineData() {
+    if (!navigator.onLine) {
+        logToConsole('WARN', 'Нет соединения, пропускаю отправку оффлайн данных');
+        return;
+    }
+    
+    try {
+        logToConsole('INFO', 'Начинаю отправку оффлайн данных');
+        
+        const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
+        const pendingRecords = offlineRegistrations.filter(r => r.status === 'pending');
+        
+        if (pendingRecords.length === 0) {
+            logToConsole('INFO', 'Нет записей для отправки');
+            return;
+        }
+        
+        logToConsole('INFO', `Найдено ${pendingRecords.length} записей для отправки`);
+        
+        const successful = [];
+        const failed = [];
+        
+        for (const record of pendingRecords) {
+            if (record.attempts >= 5) {
+                logToConsole('WARN', `Запись ${record.id} превысила лимит попыток`, { attempts: record.attempts });
+                continue;
+            }
+            
+            try {
+                logToConsole('INFO', `Отправляю запись ${record.id}`, { attempt: record.attempts + 1 });
+                
+                const response = await sendRegistrationToServer(record.data);
+                
+                if (response && response.success) {
+                    record.status = 'sent';
+                    record.sentAt = new Date().toISOString();
+                    record.response = response;
+                    successful.push(record.id);
+                    logToConsole('SUCCESS', `Запись ${record.id} отправлена успешно`);
+                } else {
+                    record.attempts = (record.attempts || 0) + 1;
+                    record.lastError = response?.message || 'Неизвестная ошибка';
+                    record.lastAttempt = new Date().toISOString();
+                    failed.push(record.id);
+                    logToConsole('ERROR', `Ошибка отправки записи ${record.id}`, record.lastError);
+                }
+                
+            } catch (error) {
+                record.attempts = (record.attempts || 0) + 1;
+                record.lastError = error.message;
+                record.lastAttempt = new Date().toISOString();
+                failed.push(record.id);
+                logToConsole('ERROR', `Ошибка отправки записи ${record.id}`, error);
+            }
+            
+            // Небольшая пауза между запросами
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        // Сохраняем обновленные данные
+        localStorage.setItem('offline_registrations', JSON.stringify(offlineRegistrations));
+        
+        // Очищаем старые отправленные записи (старше 7 дней)
+        cleanupOldOfflineRecords();
+        
+        // Обновляем счетчик
+        showOfflineDataCount();
+        
+        // Показываем результат
+        if (successful.length > 0) {
+            showNotification(`✅ ${successful.length} оффлайн записей отправлено`, 'success');
+        }
+        
+        if (failed.length > 0) {
+            showNotification(`⚠️ ${failed.length} записей не удалось отправить. Проверьте соединение с интернетом.`, 'warning');
+        }
+        
+        logToConsole('INFO', 'Итог отправки оффлайн данных', { 
+            successful: successful.length, 
+            failed: failed.length 
+        });
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка отправки оффлайн данных', error);
+    }
+}
+
+// ==================== ПОКАЗ ОФФЛАЙН ДАННЫХ ====================
+function getOfflineDataCount() {
+    try {
+        const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
+        const pendingRecords = offlineRegistrations.filter(r => r.status === 'pending');
+        return pendingRecords.length;
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка получения количества оффлайн данных', error);
+        return 0;
+    }
+}
+
+function showOfflineDataCount() {
+    const count = getOfflineDataCount();
+    const indicator = document.getElementById('offline-data-indicator');
+    
+    if (indicator) {
+        if (count > 0) {
+            indicator.innerHTML = `<span style="color: #ff9800; font-weight: bold;">📱 ${count} оффлайн записей</span>`;
+            indicator.style.display = 'block';
+        } else {
+            indicator.style.display = 'none';
+        }
+    }
+}
+
+function showOfflineDataModal() {
+    try {
+        const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
+        const pendingRecords = offlineRegistrations.filter(r => r.status === 'pending');
+        const sentRecords = offlineRegistrations.filter(r => r.status === 'sent');
+        
+        let html = `
+            <div class="modal-overlay" onclick="closeModal(event)">
+                <div class="modal" onclick="event.stopPropagation()">
+                    <div class="modal-header">
+                        <h3 class="modal-title">📱 Оффлайн данные</h3>
+                        <button class="modal-close" onclick="closeModal(event)">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="stats-grid" style="margin-bottom: 20px;">
+                            <div class="stat-card">
+                                <div class="stat-value">${pendingRecords.length}</div>
+                                <div class="stat-label">Ожидают отправки</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${sentRecords.length}</div>
+                                <div class="stat-label">Уже отправлены</div>
+                            </div>
+                        </div>
+        `;
+        
+        if (pendingRecords.length > 0) {
+            html += `
+                <h4>Записи ожидающие отправки:</h4>
+                <div style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
+            `;
+            
+            pendingRecords.forEach((record, index) => {
+                html += `
+                    <div class="card" style="margin-bottom: 10px;">
+                        <div class="card-header">
+                            <div class="card-title">Запись ${index + 1}</div>
+                            <div class="badge badge-warning">Ожидает</div>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>ФИО:</strong> ${record.data.fio || 'Нет'}</p>
+                            <p><strong>Телефон:</strong> ${formatPhoneDisplay(record.data.phone || '')}</p>
+                            <p><strong>Поставщик:</strong> ${record.data.supplier || 'Нет'}</p>
+                            <p><strong>Дата:</strong> ${new Date(record.timestamp).toLocaleString('ru-RU')}</p>
+                            <p><strong>Попытки:</strong> ${record.attempts || 0}</p>
+                            ${record.lastError ? `<p style="color: #f44336;"><strong>Ошибка:</strong> ${record.lastError}</p>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `</div>`;
+        }
+        
+        if (sentRecords.length > 0) {
+            html += `
+                <h4>Успешно отправленные записи:</h4>
+                <div style="max-height: 200px; overflow-y: auto;">
+            `;
+            
+            sentRecords.slice(0, 5).forEach((record, index) => {
+                html += `
+                    <div class="card" style="margin-bottom: 10px;">
+                        <div class="card-header">
+                            <div class="card-title">Запись ${index + 1}</div>
+                            <div class="badge badge-success">Отправлено</div>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>ФИО:</strong> ${record.data.fio || 'Нет'}</p>
+                            <p><strong>Дата отправки:</strong> ${new Date(record.sentAt || record.timestamp).toLocaleString('ru-RU')}</p>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `</div>`;
+        }
+        
+        html += `
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" onclick="closeModal(event)">Закрыть</button>
+                        <button class="btn btn-primary" onclick="forceSendOfflineData()">Отправить сейчас</button>
+                        <button class="btn btn-danger" onclick="clearOfflineData()">Очистить всё</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Создаем модальное окно
+        const modalContainer = document.createElement('div');
+        modalContainer.innerHTML = html;
+        document.body.appendChild(modalContainer);
+        
+        // Добавляем стили для модального окна
+        if (!document.querySelector('#modal-styles')) {
+            const style = document.createElement('style');
+            style.id = 'modal-styles';
+            style.textContent = `
+                .modal-overlay {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0,0,0,0.5);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10000;
+                }
+                .modal {
+                    background: white;
+                    border-radius: 12px;
+                    padding: 20px;
+                    max-width: 600px;
+                    width: 90%;
+                    max-height: 90vh;
+                    overflow-y: auto;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                }
+                .modal-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 20px;
+                }
+                .modal-title {
+                    margin: 0;
+                    font-size: 20px;
+                }
+                .modal-close {
+                    background: none;
+                    border: none;
+                    font-size: 24px;
+                    cursor: pointer;
+                    color: #666;
+                }
+                .modal-footer {
+                    display: flex;
+                    gap: 10px;
+                    justify-content: flex-end;
+                    margin-top: 20px;
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка показа оффлайн данных', error);
+        alert('Ошибка загрузки оффлайн данных: ' + error.message);
+    }
+}
+
+function closeModal(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    
+    const modal = document.querySelector('.modal-overlay');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+async function forceSendOfflineData() {
+    showLoader(true);
+    await sendOfflineData();
+    showLoader(false);
+    closeModal();
+}
+
+function clearOfflineData() {
+    if (confirm('Удалить все оффлайн данные? Это действие нельзя отменить.')) {
+        localStorage.removeItem('offline_registrations');
+        showOfflineDataCount();
+        closeModal();
+        showNotification('Оффлайн данные очищены', 'info');
+    }
+}
+
+function cleanupOldOfflineRecords() {
+    try {
+        const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
+        const now = new Date();
+        const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+        
+        const filtered = offlineRegistrations.filter(record => {
+            if (record.status === 'sent') {
+                const sentDate = new Date(record.sentAt || record.timestamp);
+                return sentDate > sevenDaysAgo;
+            }
+            return true; // Храним все pending записи
+        });
+        
+        if (filtered.length !== offlineRegistrations.length) {
+            localStorage.setItem('offline_registrations', JSON.stringify(filtered));
+            logToConsole('INFO', 'Очищены старые оффлайн записи', {
+                before: offlineRegistrations.length,
+                after: filtered.length
+            });
+        }
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка очистки старых записей', error);
+    }
+}
+
+// ==================== API ФУНКЦИИ ====================
+async function sendAPIRequest(requestData) {
+    try {
+        logToConsole('INFO', 'Отправляю API запрос', requestData);
+        
+        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData),
+            mode: 'cors'
+        });
+        
+        logToConsole('INFO', 'Статус ответа API', { status: response.status });
+        
+        if (response.ok) {
+            const text = await response.text();
+            try {
+                const result = JSON.parse(text);
+                logToConsole('INFO', 'Ответ API', result);
+                return result;
+            } catch (parseError) {
+                logToConsole('ERROR', 'Ошибка парсинга JSON API', parseError);
+                return { success: false, message: 'Неверный формат ответа API' };
+            }
+        } else {
+            const errorText = await response.text();
+            logToConsole('ERROR', 'HTTP ошибка API', { status: response.status, errorText });
+            throw new Error(`HTTP ошибка ${response.status}`);
+        }
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка отправки API запроса', error);
+        throw error;
+    }
+}
+
+async function testAPIConnection() {
+    try {
+        logToConsole('INFO', 'Тестирую соединение с API');
+        
+        // Тест GET запросом
+        const testUrl = CONFIG.APP_SCRIPT_URL + '?action=ping&test=' + Date.now();
+        
+        const response = await fetch(testUrl, {
+            method: 'GET',
+            mode: 'cors',
+            cache: 'no-cache'
+        });
+        
+        logToConsole('INFO', 'Статус теста API', { 
+            status: response.status, 
+            online: response.ok 
+        });
+        
+        updateConnectionStatus(response.ok);
+        
+        if (response.ok) {
+            try {
+                const data = await response.json();
+                logToConsole('INFO', 'API тест успешен', data);
+                return true;
+            } catch (jsonError) {
+                logToConsole('WARN', 'API тест: ответ не JSON', jsonError);
+                return true;
+            }
+        }
+        
+        return false;
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка тестирования API', error);
+        updateConnectionStatus(false);
+        return false;
+    }
+}
+
+// ==================== СБРОС РЕГИСТРАЦИИ ====================
 function resetRegistration() {
     if (confirm('Начать новую регистрацию? Все введенные данные будут потеряны.')) {
         resetRegistrationState();
@@ -922,11 +1117,12 @@ function clearFormFields() {
     });
 }
 
+// ==================== СОХРАНЕНИЕ СОСТОЯНИЯ ====================
 function saveRegistrationState() {
     try {
         localStorage.setItem('driver_registration_state', JSON.stringify(registrationState));
     } catch (error) {
-        console.error('Ошибка сохранения состояния:', error);
+        logToConsole('ERROR', 'Ошибка сохранения состояния', error);
     }
 }
 
@@ -949,10 +1145,111 @@ function loadRegistrationState() {
             }
         }
     } catch (error) {
-        console.error('Ошибка загрузки состояния:', error);
+        logToConsole('ERROR', 'Ошибка загрузки состояния', error);
     }
 }
 
+// ==================== ПОКАЗ ЛОГОВ ====================
+function showLogsModal() {
+    try {
+        const logs = JSON.parse(localStorage.getItem('app_logs') || '[]');
+        
+        let html = `
+            <div class="modal-overlay" onclick="closeModal(event)">
+                <div class="modal" onclick="event.stopPropagation()" style="max-width: 800px;">
+                    <div class="modal-header">
+                        <h3 class="modal-title">📊 Логи приложения</h3>
+                        <button class="modal-close" onclick="closeModal(event)">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <div style="margin-bottom: 20px;">
+                            <button class="btn btn-secondary" onclick="exportLogs()">Экспорт логов</button>
+                            <button class="btn btn-danger" onclick="clearLogs()">Очистить логи</button>
+                        </div>
+                        <div style="max-height: 400px; overflow-y: auto;">
+        `;
+        
+        if (logs.length === 0) {
+            html += '<p>Логи отсутствуют</p>';
+        } else {
+            logs.forEach((log, index) => {
+                const time = new Date(log.timestamp).toLocaleString('ru-RU');
+                const levelClass = {
+                    'INFO': 'badge-info',
+                    'WARN': 'badge-warning',
+                    'ERROR': 'badge-danger',
+                    'SUCCESS': 'badge-success'
+                }[log.level] || 'badge-info';
+                
+                html += `
+                    <div class="card" style="margin-bottom: 10px; font-size: 12px;">
+                        <div class="card-header">
+                            <div class="badge ${levelClass}">${log.level}</div>
+                            <div style="color: #666; font-size: 11px;">${time}</div>
+                        </div>
+                        <div class="card-body">
+                            <p style="margin: 0 0 5px 0;"><strong>${log.message}</strong></p>
+                            ${log.data ? `<pre style="background: #f5f5f5; padding: 5px; border-radius: 4px; margin: 0; font-size: 11px; overflow-x: auto;">${JSON.stringify(log.data, null, 2)}</pre>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+        
+        html += `
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" onclick="closeModal(event)">Закрыть</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        const modalContainer = document.createElement('div');
+        modalContainer.innerHTML = html;
+        document.body.appendChild(modalContainer);
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка показа логов', error);
+        alert('Ошибка загрузки логов: ' + error.message);
+    }
+}
+
+function exportLogs() {
+    try {
+        const logs = JSON.parse(localStorage.getItem('app_logs') || '[]');
+        const logsText = logs.map(log => 
+            `[${log.level}] ${new Date(log.timestamp).toLocaleString('ru-RU')} - ${log.message}` + 
+            (log.data ? `\n${JSON.stringify(log.data, null, 2)}` : '')
+        ).join('\n\n');
+        
+        const blob = new Blob([logsText], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `logs_${new Date().toISOString().slice(0, 10)}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showNotification('Логи экспортированы', 'success');
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка экспорта логов', error);
+        showNotification('Ошибка экспорта логов', 'error');
+    }
+}
+
+function clearLogs() {
+    if (confirm('Очистить все логи?')) {
+        localStorage.removeItem('app_logs');
+        closeModal();
+        showNotification('Логи очищены', 'info');
+    }
+}
+
+// ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 function normalizePhone(phone) {
     let cleaned = phone.replace(/\D/g, '');
     
@@ -1066,8 +1363,9 @@ function handleEnterKey(input) {
     }
 }
 
+// ==================== UI ФУНКЦИИ ====================
 function showNotification(message, type = 'info') {
-    console.log(`💬 Уведомление [${type}]: ${message}`);
+    logToConsole('INFO', `Уведомление: ${message}`, { type });
     
     const notification = document.getElementById('notification');
     if (!notification) return;
@@ -1087,3 +1385,52 @@ function showLoader(show) {
         loader.style.display = show ? 'flex' : 'none';
     }
 }
+
+function updateConnectionStatus(isConnected) {
+    logToConsole('INFO', `Статус соединения: ${isConnected ? 'онлайн' : 'оффлайн'}`);
+    
+    const indicator = document.getElementById('connection-indicator');
+    const statusElement = document.getElementById('connection-status');
+    
+    if (indicator) {
+        indicator.className = isConnected ? 'online' : 'offline';
+        indicator.title = isConnected ? 'Онлайн' : 'Оффлайн';
+    }
+    
+    if (statusElement) {
+        statusElement.style.display = isConnected ? 'none' : 'block';
+    }
+}
+
+function checkConnectionAndSendOffline() {
+    if (navigator.onLine) {
+        logToConsole('INFO', 'Периодическая проверка: онлайн, отправляю оффлайн данные');
+        sendOfflineData();
+    } else {
+        logToConsole('INFO', 'Периодическая проверка: оффлайн');
+    }
+}
+
+// ==================== ЭКСПОРТ ФУНКЦИЙ ====================
+window.handlePhoneSubmit = handlePhoneSubmit;
+window.handleFioSubmit = handleFioSubmit;
+window.handleManualSupplier = handleManualSupplier;
+window.selectLegalEntity = selectLegalEntity;
+window.selectProductType = selectProductType;
+window.selectBrand = selectBrand;
+window.handleManualBrand = handleManualBrand;
+window.handleVehicleNumberSubmit = handleVehicleNumberSubmit;
+window.handlePalletsSubmit = handlePalletsSubmit;
+window.handleOrderSubmit = handleOrderSubmit;
+window.handleEtrnSubmit = handleEtrnSubmit;
+window.selectTransit = selectTransit;
+window.submitRegistration = submitRegistration;
+window.resetRegistration = resetRegistration;
+window.goBack = goBack;
+window.selectSupplier = selectSupplier;
+window.showLogsModal = showLogsModal;
+window.showOfflineDataModal = showOfflineDataModal;
+window.forceSendOfflineData = forceSendOfflineData;
+window.closeModal = closeModal;
+
+logToConsole('INFO', 'app.js загружен и готов к работе');
