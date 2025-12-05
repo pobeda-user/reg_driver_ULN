@@ -610,36 +610,42 @@
 
         <!-- Шаг 3: Выбор поставщика -->
         <div class="step" data-step="3">
-            <div class="step-header">
-                <div class="step-number">3</div>
-                <h2>Выберите поставщика</h2>
-            </div>
-            <div class="step-content">
-                <div class="option-buttons" id="supplier-buttons">
-                    <!-- История поставщиков будет загружена сюда -->
-                </div>
-                
-                <div class="separator">или</div>
-                
-                <div class="manual-input">
-                    <input 
-                        type="text" 
-                        id="supplier-input" 
-                        class="form-input" 
-                        placeholder="Введите название поставщика"
-                    >
-                    <button type="button" class="btn btn-primary" onclick="handleManualSupplier()">
-                        ОК
-                    </button>
-                </div>
-                
-                <div class="button-group">
-                    <button type="button" class="btn btn-secondary" onclick="goBack()">
-                        Назад
-                    </button>
-                </div>
-            </div>
+    <div class="step-header">
+        <div class="step-number">3</div>
+        <h2>Выберите поставщика</h2>
+    </div>
+    <div class="step-content">
+        <p style="margin-bottom: 15px; color: #666; font-size: 14px;">
+            Исторические поставщики:
+        </p>
+        <div class="option-buttons" id="supplier-buttons">
+            <!-- История поставщиков будет загружена сюда -->
         </div>
+        
+        <div class="separator">или</div>
+        
+        <p style="margin-bottom: 15px; color: #666; font-size: 14px;">
+            Введите название поставщика вручную:
+        </p>
+        <div class="manual-input">
+            <input 
+                type="text" 
+                id="supplier-input" 
+                class="form-input" 
+                placeholder="Например: ООО Ромашка, ИП Иванов"
+            >
+            <button type="button" class="btn btn-primary" onclick="handleManualSupplier()">
+                ОК
+            </button>
+        </div>
+        
+        <div class="button-group">
+            <button type="button" class="btn btn-secondary" onclick="goBack()">
+                Назад
+            </button>
+        </div>
+    </div>
+</div>
 
         <!-- Шаг 4: Выбор юрлица -->
         <div class="step" data-step="4">
@@ -967,3 +973,4 @@
     </script>
 </body>
 </html>
+
