@@ -1,6 +1,6 @@
-// app.js - Упрощенная и исправленная версия с правильным экспортом функций
+// app.js - ПОЛНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ
 
-// Конфигурация (будет переопределена из HTML)
+// Конфигурация
 let CONFIG = {
     APP_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbzDATeBrTYOYUnP9JrjcUXuKHXbPWl75X-BTE-OFsREZLFB4I9qX-f4Ctu_MzKaGBko/exec'
 };
@@ -31,14 +31,13 @@ let POPULAR_BRANDS = ['Газель', 'Мерседес', 'Вольво', 'Ск�
 
 // ==================== ИНИЦИАЛИЗАЦИЯ ====================
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM загружен, инициализирую приложение...');
+    console.log('🚀 Приложение загружается...');
     
     // Загружаем CONFIG из window если есть
     if (window.CONFIG) {
         CONFIG = { ...CONFIG, ...window.CONFIG };
+        console.log('Конфигурация загружена:', CONFIG.APP_SCRIPT_URL);
     }
-    
-    console.log('Конфигурация:', CONFIG);
     
     // Загружаем сохраненное состояние
     loadRegistrationState();
@@ -47,20 +46,15 @@ document.addEventListener('DOMContentLoaded', function() {
     setupPhoneInput();
     setupEventListeners();
     
-    // Тестируем соединение с API
-    setTimeout(() => {
-        testAPIConnection().then(isConnected => {
-            console.log('Соединение с API:', isConnected ? '✓' : '✗');
-            if (!isConnected) {
-                showNotification('Режим оффлайн. Данные будут сохранены локально.', 'warning');
-            }
-        });
-    }, 1000);
-    
     // Показываем текущий шаг
     showStep(registrationState.step);
     
-    console.log('Приложение инициализировано');
+    // Тестируем соединение через 1 секунду
+    setTimeout(() => {
+        testAPIConnection();
+    }, 1000);
+    
+    console.log('✅ Приложение инициализировано');
 });
 
 // ==================== ОБРАБОТЧИКИ СОБЫТИЙ ====================
@@ -70,24 +64,31 @@ function setupEventListeners() {
         if (e.key === 'Enter') {
             const input = e.target;
             if (input.tagName === 'INPUT') {
-                console.log('Нажат Enter в поле:', input.id);
                 handleEnterKey(input);
             }
         }
     });
     
     // Обновление статуса соединения
-    window.addEventListener('online', updateConnectionStatus);
-    window.addEventListener('offline', updateConnectionStatus);
+    window.addEventListener('online', function() {
+        console.log('🌐 Соединение восстановлено');
+        updateConnectionStatus(true);
+        showNotification('Соединение восстановлено', 'success');
+    });
+    
+    window.addEventListener('offline', function() {
+        console.log('⚠️ Соединение потеряно');
+        updateConnectionStatus(false);
+        showNotification('Нет соединения с интернетом', 'warning');
+    });
 }
 
 // ==================== НАВИГАЦИЯ ====================
 function showStep(stepNumber) {
-    console.log(`Переход к шагу: ${stepNumber}`);
+    console.log(`📱 Переход к шагу: ${stepNumber}`);
     
     // Скрыть все шаги
-    const steps = document.querySelectorAll('.step');
-    steps.forEach(step => {
+    document.querySelectorAll('.step').forEach(step => {
         step.style.display = 'none';
     });
     
@@ -95,7 +96,6 @@ function showStep(stepNumber) {
     const stepElement = document.querySelector(`[data-step="${stepNumber}"]`);
     if (stepElement) {
         stepElement.style.display = 'block';
-        stepElement.classList.add('active');
         registrationState.step = stepNumber;
         saveRegistrationState();
         
@@ -121,23 +121,16 @@ function goBack() {
 // ==================== ШАГ 1: ТЕЛЕФОН ====================
 function setupPhoneInput() {
     const phoneInput = document.getElementById('phone-input');
-    if (!phoneInput) {
-        console.error('Поле phone-input не найдено!');
-        return;
-    }
+    if (!phoneInput) return;
     
     phoneInput.addEventListener('input', function(e) {
         let value = e.target.value.replace(/\D/g, '');
-        if (value.length > 10) {
-            value = value.substring(0, 10);
-        }
+        if (value.length > 10) value = value.substring(0, 10);
         
         // Форматирование: XXX XXX XX XX
         let formatted = '';
         for (let i = 0; i < value.length; i++) {
-            if (i === 3 || i === 6 || i === 8) {
-                formatted += ' ';
-            }
+            if (i === 3 || i === 6 || i === 8) formatted += ' ';
             formatted += value[i];
         }
         
@@ -145,14 +138,10 @@ function setupPhoneInput() {
     });
     
     // Фокус при загрузке
-    setTimeout(() => {
-        phoneInput.focus();
-    }, 500);
+    setTimeout(() => phoneInput.focus(), 500);
 }
 
 async function handlePhoneSubmit() {
-    console.log('Обработка телефона...');
-    
     const phoneInput = document.getElementById('phone-input');
     if (!phoneInput) return;
     
@@ -167,39 +156,13 @@ async function handlePhoneSubmit() {
     // Нормализуем телефон
     const normalizedPhone = normalizePhone(phone);
     registrationState.data.phone = normalizedPhone;
+    console.log('📞 Телефон сохранен:', normalizedPhone);
     
-    console.log('Телефон сохранен:', normalizedPhone);
-    
-    // Показываем загрузку
-    showLoader(true);
-    
-    try {
-        // Проверяем существующего водителя
-        const response = await sendRequest('check_driver', { phone: normalizedPhone });
-        console.log('Результат проверки водителя:', response);
-        
-        if (response && response.exists && response.driver) {
-            // Автозаполнение ФИО
-            const fioInput = document.getElementById('fio-input');
-            if (fioInput && response.driver.fio) {
-                fioInput.value = response.driver.fio;
-                registrationState.data.fio = response.driver.fio;
-                console.log('Автозаполнено ФИО:', response.driver.fio);
-            }
-        }
-    } catch (error) {
-        console.warn('Не удалось проверить водителя:', error);
-        // Не показываем ошибку пользователю, просто продолжаем
-    } finally {
-        showLoader(false);
-        showStep(2);
-    }
+    showStep(2);
 }
 
 // ==================== ШАГ 2: ФИО ====================
-async function handleFioSubmit() {
-    console.log('Обработка ФИО...');
-    
+function handleFioSubmit() {
     const fioInput = document.getElementById('fio-input');
     if (!fioInput) return;
     
@@ -212,52 +175,43 @@ async function handleFioSubmit() {
     }
     
     registrationState.data.fio = fio;
-    console.log('ФИО сохранено:', fio);
+    console.log('👤 ФИО сохранено:', fio);
     
-    // Показываем загрузку
-    showLoader(true);
-    
-    try {
-        // Загружаем историю поставщиков
-        await loadSupplierHistory();
-    } catch (error) {
-        console.error('Ошибка загрузки поставщиков:', error);
-        // Продолжаем даже при ошибке
-    } finally {
-        showLoader(false);
-        showStep(3);
-    }
+    // Загружаем историю поставщиков
+    loadSupplierHistory();
+    showStep(3);
 }
 
 // ==================== ШАГ 3: ПОСТАВЩИКИ ====================
 async function loadSupplierHistory() {
-    console.log('Загрузка истории поставщиков...');
+    console.log('🔍 Загружаю историю поставщиков...');
     
     const container = document.getElementById('supplier-buttons');
     const infoBox = document.getElementById('supplier-history-info');
     
-    if (!container || !infoBox) {
-        console.error('Элементы поставщиков не найдены!');
+    if (!container || !infoBox) return;
+    
+    if (!registrationState.data.phone) {
+        infoBox.innerHTML = '<p>❌ Нет номера телефона для поиска</p>';
         return;
     }
     
-    // Показываем загрузку
-    infoBox.innerHTML = '<p>🔍 Ищу поставщиков по вашему номеру...</p>';
+    infoBox.innerHTML = '<p>🔍 Ищу поставщиков...</p>';
     container.innerHTML = '<div class="info-box">Загрузка...</div>';
     
     try {
-        const response = await sendRequest('get_suppliers', { 
-            phone: registrationState.data.phone 
+        // Используем новый подход - пробуем разные форматы запросов
+        const response = await sendPostRequest({
+            action: 'get_suppliers',
+            phone: registrationState.data.phone
         });
         
-        console.log('Ответ от get_suppliers:', response);
+        console.log('📦 Ответ поставщиков:', response);
         
-        if (response.success && response.suppliers && response.suppliers.length > 0) {
-            // Успешно найдены поставщики
+        if (response && response.success && response.suppliers && response.suppliers.length > 0) {
             infoBox.innerHTML = `<p>✅ Найдено поставщиков: ${response.suppliers.length}</p>`;
             container.innerHTML = '';
             
-            // Создаем кнопки для каждого поставщика
             response.suppliers.forEach((supplier, index) => {
                 if (!supplier || supplier.trim() === '') return;
                 
@@ -268,47 +222,34 @@ async function loadSupplierHistory() {
                     <span class="option-number">${index + 1}</span>
                     <span class="option-text">${supplier}</span>
                 `;
-                button.onclick = function() {
-                    console.log('Выбран поставщик из истории:', supplier);
+                button.onclick = () => {
+                    console.log('✅ Выбран поставщик:', supplier);
                     selectSupplier(supplier);
                 };
                 container.appendChild(button);
             });
             
-            console.log(`Создано ${response.suppliers.length} кнопок поставщиков`);
+            console.log(`✅ Создано ${response.suppliers.length} кнопок поставщиков`);
             
         } else {
-            // Поставщиков не найдено
             infoBox.innerHTML = '<p>📭 История поставщиков не найдена</p>';
-            container.innerHTML = `
-                <div class="info-box warning">
-                    <p>История поставщиков не найдена для вашего номера телефона.</p>
-                    <p>Введите поставщика вручную ниже.</p>
-                </div>
-            `;
+            container.innerHTML = '<div class="info-box">История не найдена. Введите поставщика вручную.</div>';
         }
         
     } catch (error) {
-        console.error('Ошибка при загрузке поставщиков:', error);
-        infoBox.innerHTML = '<p>❌ Ошибка загрузки истории</p>';
-        container.innerHTML = `
-            <div class="info-box warning">
-                <p>Не удалось загрузить историю поставщиков.</p>
-                <p>Проверьте соединение или введите поставщика вручную.</p>
-            </div>
-        `;
+        console.error('❌ Ошибка загрузки поставщиков:', error);
+        infoBox.innerHTML = '<p>⚠️ Ошибка загрузки истории</p>';
+        container.innerHTML = '<div class="info-box warning">Ошибка загрузки. Введите поставщика вручную.</div>';
     }
 }
 
 function selectSupplier(supplier) {
-    console.log('Выбран поставщик:', supplier);
+    console.log('✅ Выбран поставщик:', supplier);
     registrationState.data.supplier = supplier;
     showStep(4);
 }
 
 function handleManualSupplier() {
-    console.log('Ручной ввод поставщика...');
-    
     const supplierInput = document.getElementById('supplier-input');
     if (!supplierInput) return;
     
@@ -321,120 +262,38 @@ function handleManualSupplier() {
     }
     
     registrationState.data.supplier = supplier;
-    console.log('Поставщик сохранен:', supplier);
+    console.log('✅ Поставщик сохранен:', supplier);
     showStep(4);
 }
 
 // ==================== ШАГ 4: ЮРЛИЦО ====================
 function selectLegalEntity(entity) {
-    console.log('Выбрано юрлицо:', entity);
+    console.log('🏢 Выбрано юрлицо:', entity);
     registrationState.data.legalEntity = entity;
     showStep(5);
 }
 
 // ==================== ШАГ 5: ТИП ТОВАРА ====================
-async function selectProductType(type) {
-    console.log('Выбран тип товара:', type);
+function selectProductType(type) {
+    console.log('📦 Выбран тип товара:', type);
     registrationState.data.productType = type;
     
     // Автоматическое назначение ворот
     const gate = assignGateAutomatically(registrationState.data.legalEntity, type);
     registrationState.data.gate = gate;
-    console.log('Назначены ворота:', gate);
-    
-    // Загружаем популярные марки авто
-    await loadPopularBrands();
+    console.log('🚪 Назначены ворота:', gate);
     
     showStep(6);
 }
 
 // ==================== ШАГ 6: МАРКА АВТО ====================
-async function loadPopularBrands() {
-    console.log('Загрузка популярных марок авто...');
-    
-    const container = document.getElementById('brand-buttons');
-    if (!container) {
-        console.error('Контейнер brand-buttons не найден!');
-        return;
-    }
-    
-    container.innerHTML = '<div class="info-box">Загрузка популярных марок...</div>';
-    
-    try {
-        const response = await sendRequest('get_popular_brands');
-        console.log('Ответ популярных марок:', response);
-        
-        if (response.success && response.brands && response.brands.length > 0) {
-            POPULAR_BRANDS = response.brands;
-            container.innerHTML = '';
-            
-            // Создаем кнопки для каждой марки
-            response.brands.forEach((brand, index) => {
-                if (!brand || brand.trim() === '') return;
-                
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'option-btn';
-                button.innerHTML = `
-                    <span class="option-number">${index + 1}</span>
-                    <span class="option-text">${brand}</span>
-                `;
-                button.onclick = function() {
-                    console.log('Выбрана марка:', brand);
-                    selectBrand(brand);
-                };
-                container.appendChild(button);
-            });
-            
-            console.log(`Создано ${response.brands.length} кнопок марок авто`);
-            
-        } else {
-            // Используем марки по умолчанию
-            container.innerHTML = '';
-            POPULAR_BRANDS.forEach((brand, index) => {
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'option-btn';
-                button.innerHTML = `
-                    <span class="option-number">${index + 1}</span>
-                    <span class="option-text">${brand}</span>
-                `;
-                button.onclick = function() {
-                    selectBrand(brand);
-                };
-                container.appendChild(button);
-            });
-        }
-        
-    } catch (error) {
-        console.error('Ошибка загрузки марок:', error);
-        // Используем марки по умолчанию при ошибке
-        container.innerHTML = '';
-        POPULAR_BRANDS.forEach((brand, index) => {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'option-btn';
-            button.innerHTML = `
-                <span class="option-number">${index + 1}</span>
-                <span class="option-text">${brand}</span>
-            `;
-            button.onclick = function() {
-                selectBrand(brand);
-            };
-            container.appendChild(button);
-        });
-    }
-}
-
 function selectBrand(brand) {
-    console.log('Выбрана марка авто:', brand);
+    console.log('🚗 Выбрана марка авто:', brand);
     registrationState.data.vehicleType = brand;
     showStep(7);
 }
 
 function handleManualBrand() {
-    console.log('Ручной ввод марки авто...');
-    
     const brandInput = document.getElementById('brand-input');
     if (!brandInput) return;
     
@@ -447,14 +306,12 @@ function handleManualBrand() {
     }
     
     registrationState.data.vehicleType = brand;
-    console.log('Марка авто сохранена:', brand);
+    console.log('✅ Марка авто сохранена:', brand);
     showStep(7);
 }
 
 // ==================== ШАГ 7: НОМЕР ТС ====================
 function handleVehicleNumberSubmit() {
-    console.log('Обработка номера ТС...');
-    
     const input = document.getElementById('vehicle-number-input');
     if (!input) return;
     
@@ -467,14 +324,12 @@ function handleVehicleNumberSubmit() {
     }
     
     registrationState.data.vehicleNumber = vehicleNumber;
-    console.log('Номер ТС сохранен:', vehicleNumber);
+    console.log('✅ Номер ТС сохранен:', vehicleNumber);
     showStep(8);
 }
 
 // ==================== ШАГ 8: ПОДДОНЫ ====================
 function handlePalletsSubmit() {
-    console.log('Обработка поддонов...');
-    
     const input = document.getElementById('pallets-input');
     if (!input) return;
     
@@ -487,14 +342,12 @@ function handlePalletsSubmit() {
     }
     
     registrationState.data.pallets = pallets;
-    console.log('Поддоны сохранены:', pallets);
+    console.log('✅ Поддоны сохранены:', pallets);
     showStep(9);
 }
 
 // ==================== ШАГ 9: НОМЕР ЗАКАЗА ====================
 function handleOrderSubmit() {
-    console.log('Обработка номера заказа...');
-    
     const input = document.getElementById('order-input');
     if (!input) return;
     
@@ -507,14 +360,12 @@ function handleOrderSubmit() {
     }
     
     registrationState.data.orderNumber = orderNumber;
-    console.log('Номер заказа сохранен:', orderNumber);
+    console.log('✅ Номер заказа сохранен:', orderNumber);
     showStep(10);
 }
 
 // ==================== ШАГ 10: ЭТРН ====================
 function handleEtrnSubmit() {
-    console.log('Обработка ЭТрН...');
-    
     const input = document.getElementById('etrn-input');
     if (!input) return;
     
@@ -527,13 +378,13 @@ function handleEtrnSubmit() {
     }
     
     registrationState.data.etrn = etrn;
-    console.log('ЭТрН сохранен:', etrn);
+    console.log('✅ ЭТрН сохранен:', etrn);
     showStep(11);
 }
 
 // ==================== ШАГ 11: ТРАНЗИТ ====================
 function selectTransit(type) {
-    console.log('Выбран тип доставки:', type);
+    console.log('📦 Выбран тип доставки:', type);
     registrationState.data.transit = type;
     
     // Обновляем дату и время
@@ -543,7 +394,7 @@ function selectTransit(type) {
     
     // Проверяем нарушение графика
     registrationState.data.scheduleViolation = checkScheduleViolation() ? 'Да' : 'Нет';
-    console.log('Нарушение графика:', registrationState.data.scheduleViolation);
+    console.log('⏰ Нарушение графика:', registrationState.data.scheduleViolation);
     
     // Показываем подтверждение
     showConfirmation();
@@ -552,50 +403,64 @@ function selectTransit(type) {
 
 // ==================== ШАГ 12: ПОДТВЕРЖДЕНИЕ ====================
 function showConfirmation() {
-    console.log('Показ подтверждения...');
+    console.log('📋 Показываю подтверждение...');
     
     const container = document.getElementById('data-review');
     if (!container) return;
     
     const data = registrationState.data;
     
-    let html = '';
-    
-    // Добавляем все поля данных
-    const fields = [
-        { label: '📱 Телефон', value: formatPhoneDisplay(data.phone), key: 'phone' },
-        { label: '👤 ФИО', value: data.fio, key: 'fio' },
-        { label: '🏢 Поставщик', value: data.supplier, key: 'supplier' },
-        { label: '🏛️ Юрлицо', value: data.legalEntity, key: 'legalEntity' },
-        { label: '📦 Тип товара', value: data.productType, key: 'productType' },
-        { label: '🚗 Марка авто', value: data.vehicleType, key: 'vehicleType' },
-        { label: '🔢 Номер ТС', value: data.vehicleNumber, key: 'vehicleNumber' },
-        { label: '📦 Поддоны', value: data.pallets, key: 'pallets' },
-        { label: '📋 Номер заказа', value: data.orderNumber, key: 'orderNumber' },
-        { label: '📱 ЭТрН', value: data.etrn, key: 'etrn' },
-        { label: '📦 Транзит', value: data.transit, key: 'transit' }
-    ];
-    
-    fields.forEach(field => {
-        if (field.value) {
-            html += `
-                <div class="data-item">
-                    <span class="data-label">${field.label}:</span>
-                    <span class="data-value">${field.value}</span>
-                </div>
-            `;
-        }
-    });
-    
-    // Ворота (особый стиль)
-    html += `
+    let html = `
+        <div class="data-item">
+            <span class="data-label">📱 Телефон:</span>
+            <span class="data-value">${formatPhoneDisplay(data.phone)}</span>
+        </div>
+        <div class="data-item">
+            <span class="data-label">👤 ФИО:</span>
+            <span class="data-value">${data.fio || ''}</span>
+        </div>
+        <div class="data-item">
+            <span class="data-label">🏢 Поставщик:</span>
+            <span class="data-value">${data.supplier || ''}</span>
+        </div>
+        <div class="data-item">
+            <span class="data-label">🏛️ Юрлицо:</span>
+            <span class="data-value">${data.legalEntity || ''}</span>
+        </div>
+        <div class="data-item">
+            <span class="data-label">📦 Тип товара:</span>
+            <span class="data-value">${data.productType || ''}</span>
+        </div>
+        <div class="data-item">
+            <span class="data-label">🚗 Марка авто:</span>
+            <span class="data-value">${data.vehicleType || ''}</span>
+        </div>
+        <div class="data-item">
+            <span class="data-label">🔢 Номер ТС:</span>
+            <span class="data-value">${data.vehicleNumber || ''}</span>
+        </div>
+        <div class="data-item">
+            <span class="data-label">📦 Поддоны:</span>
+            <span class="data-value">${data.pallets || 0}</span>
+        </div>
+        <div class="data-item">
+            <span class="data-label">📋 Номер заказа:</span>
+            <span class="data-value">${data.orderNumber || ''}</span>
+        </div>
+        <div class="data-item">
+            <span class="data-label">📱 ЭТрН:</span>
+            <span class="data-value">${data.etrn || ''}</span>
+        </div>
+        <div class="data-item">
+            <span class="data-label">📦 Транзит:</span>
+            <span class="data-value">${data.transit || ''}</span>
+        </div>
         <div class="data-item highlight">
             <span class="data-label">🚪 Ворота:</span>
             <span class="data-value">${data.gate || 'Не назначены'}</span>
         </div>
     `;
     
-    // Нарушение графика (если есть)
     if (data.scheduleViolation === 'Да') {
         html += `
             <div class="data-item warning">
@@ -606,25 +471,34 @@ function showConfirmation() {
     }
     
     container.innerHTML = html;
-    console.log('Подтверждение отображено');
+    console.log('✅ Подтверждение отображено');
 }
 
 // ==================== ШАГ 13: ОТПРАВКА ====================
 async function submitRegistration() {
-    console.log('Отправка регистрации...');
+    console.log('📤 Начинаю отправку регистрации...');
     console.log('Данные для отправки:', registrationState.data);
     
-    // Показываем загрузку
+    // Проверяем заполненность обязательных полей
+    const requiredFields = ['phone', 'fio', 'supplier', 'legalEntity', 'productType'];
+    const missingFields = requiredFields.filter(field => !registrationState.data[field]);
+    
+    if (missingFields.length > 0) {
+        showNotification(`Заполните обязательные поля: ${missingFields.join(', ')}`, 'error');
+        return;
+    }
+    
     showLoader(true);
     
     try {
-        const response = await sendRequest('register_driver', {
+        const response = await sendPostRequest({
+            action: 'register_driver',
             data: registrationState.data
         });
         
-        console.log('Ответ от сервера:', response);
+        console.log('📨 Ответ от сервера:', response);
         
-        if (response.success) {
+        if (response && response.success) {
             console.log('✅ Регистрация успешна!');
             
             // Обновляем данные из ответа сервера
@@ -641,9 +515,11 @@ async function submitRegistration() {
             // Переходим к шагу успеха
             showStep(13);
             
+            showNotification('✅ Регистрация успешно завершена!', 'success');
+            
         } else {
-            console.error('❌ Ошибка от сервера:', response.message);
-            throw new Error(response.message || 'Неизвестная ошибка сервера');
+            console.error('❌ Ошибка от сервера:', response?.message);
+            throw new Error(response?.message || 'Неизвестная ошибка сервера');
         }
         
     } catch (error) {
@@ -660,10 +536,10 @@ async function submitRegistration() {
             resetRegistrationState();
             showStep(13);
             
-            showNotification('Данные сохранены локально и будут отправлены при восстановлении связи', 'warning');
+            showNotification('📱 Данные сохранены локально. Отправятся при восстановлении связи.', 'warning');
         } else {
             console.error('❌ Ошибка сохранения оффлайн');
-            showNotification('Ошибка сохранения данных. Попробуйте еще раз.', 'error');
+            showNotification('❌ Ошибка сохранения данных. Попробуйте еще раз.', 'error');
         }
     } finally {
         showLoader(false);
@@ -671,7 +547,7 @@ async function submitRegistration() {
 }
 
 function showSuccessMessage(serverData = null) {
-    console.log('Показ успешного сообщения...');
+    console.log('🎉 Показываю сообщение об успехе...');
     
     const container = document.getElementById('success-message');
     if (!container) return;
@@ -701,9 +577,9 @@ function showSuccessMessage(serverData = null) {
         </div>
         
         <div class="info-box">
-            <p>📍 <strong>Пожалуйста, придерживайтесь схемы движения на распределительном центре.</strong></p>
-            <p>🚛 <strong>Соблюдайте скоростной режим 5 км/ч</strong></p>
-            <p>📋 <strong>Следуйте указаниям персонала</strong></p>
+            <p>📍 Придерживайтесь схемы движения</p>
+            <p>🚛 Соблюдайте скоростной режим 5 км/ч</p>
+            <p>📋 Следуйте указаниям персонала</p>
         </div>
     `;
     
@@ -717,14 +593,12 @@ function showSuccessMessage(serverData = null) {
     }
     
     container.innerHTML = html;
-    console.log('Сообщение об успехе отображено');
+    console.log('✅ Сообщение об успехе отображено');
 }
 
 // ==================== СБРОС РЕГИСТРАЦИИ ====================
 function resetRegistration() {
-    console.log('Сброс регистрации...');
-    
-    if (confirm('Вы уверены, что хотите начать регистрацию заново? Все введенные данные будут потеряны.')) {
+    if (confirm('Начать новую регистрацию? Все введенные данные будут потеряны.')) {
         resetRegistrationState();
         clearFormFields();
         showStep(1);
@@ -733,8 +607,6 @@ function resetRegistration() {
 }
 
 function resetRegistrationState() {
-    console.log('Сброс состояния регистрации...');
-    
     registrationState = {
         step: 1,
         data: {
@@ -760,24 +632,14 @@ function resetRegistrationState() {
 }
 
 function clearFormFields() {
-    console.log('Очистка полей формы...');
-    
     const fields = [
-        'phone-input',
-        'fio-input', 
-        'supplier-input',
-        'brand-input',
-        'vehicle-number-input',
-        'pallets-input',
-        'order-input',
-        'etrn-input'
+        'phone-input', 'fio-input', 'supplier-input', 'brand-input',
+        'vehicle-number-input', 'pallets-input', 'order-input', 'etrn-input'
     ];
     
     fields.forEach(id => {
         const element = document.getElementById(id);
-        if (element) {
-            element.value = '';
-        }
+        if (element) element.value = '';
     });
 }
 
@@ -785,7 +647,6 @@ function clearFormFields() {
 function saveRegistrationState() {
     try {
         localStorage.setItem('driver_registration_state', JSON.stringify(registrationState));
-        console.log('Состояние сохранено в localStorage');
     } catch (error) {
         console.error('Ошибка сохранения состояния:', error);
     }
@@ -796,8 +657,6 @@ function loadRegistrationState() {
         const saved = localStorage.getItem('driver_registration_state');
         if (saved) {
             const parsed = JSON.parse(saved);
-            
-            // Обновляем состояние
             registrationState = parsed;
             
             // Восстанавливаем поля ввода
@@ -811,8 +670,6 @@ function loadRegistrationState() {
             if (fioInput && registrationState.data.fio) {
                 fioInput.value = registrationState.data.fio;
             }
-            
-            console.log('Состояние восстановлено из localStorage');
         }
     } catch (error) {
         console.error('Ошибка загрузки состояния:', error);
@@ -831,80 +688,119 @@ function saveRegistrationOffline() {
         
         localStorage.setItem('offline_registrations', JSON.stringify(offlineRegistrations));
         
-        console.log('Данные сохранены оффлайн. Всего записей:', offlineRegistrations.length);
+        console.log('✅ Данные сохранены оффлайн. Всего записей:', offlineRegistrations.length);
         return true;
         
     } catch (error) {
-        console.error('Ошибка сохранения оффлайн:', error);
+        console.error('❌ Ошибка сохранения оффлайн:', error);
         return false;
     }
 }
 
 // ==================== API ФУНКЦИИ ====================
-async function sendRequest(action, data = {}) {
+async function sendPostRequest(requestData) {
     try {
-        console.log(`Отправка ${action} на ${CONFIG.APP_SCRIPT_URL}`);
+        const url = CONFIG.APP_SCRIPT_URL;
+        console.log(`📤 Отправляю POST на ${url}`);
+        console.log('Данные запроса:', requestData);
         
-        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                action: action,
-                ...data
-            })
-        });
-        
-        console.log('Статус ответа:', response.status);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ошибка ${response.status}`);
+        // Способ 1: Стандартный fetch
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData)
+            });
+            
+            console.log('📥 Статус ответа:', response.status, response.statusText);
+            
+            if (response.ok) {
+                const text = await response.text();
+                console.log('📥 Ответ текст:', text);
+                
+                try {
+                    const result = JSON.parse(text);
+                    console.log('📥 Ответ JSON:', result);
+                    return result;
+                } catch (parseError) {
+                    console.error('❌ Ошибка парсинга JSON:', parseError);
+                    return { success: false, message: 'Неверный формат ответа' };
+                }
+            } else {
+                console.error('❌ HTTP ошибка:', response.status);
+                throw new Error(`HTTP ошибка ${response.status}`);
+            }
+            
+        } catch (fetchError) {
+            console.error('❌ Ошибка fetch:', fetchError);
+            throw fetchError;
         }
         
-        const result = await response.json();
-        console.log('Ответ сервера:', result);
-        
-        return result;
-        
     } catch (error) {
-        console.error('Ошибка отправки запроса:', error);
+        console.error('❌ Ошибка отправки запроса:', error);
         throw error;
     }
 }
 
 async function testAPIConnection() {
     try {
-        console.log('Тестирую базовое соединение...');
+        console.log('🔍 Тестирую соединение с API...');
         
-        // Пробуем простой GET
-        const testUrl = CONFIG.APP_SCRIPT_URL + '?ping=' + Date.now();
-        const response = await fetch(testUrl, {
-            method: 'GET',
-            cache: 'no-store'
-        });
+        // Тест 1: GET запрос
+        const testUrl = CONFIG.APP_SCRIPT_URL + '?action=ping&test=' + Date.now();
+        console.log('🔗 URL теста:', testUrl);
         
-        console.log('Базовый тест - статус:', response.status);
+        const response = await fetch(testUrl);
+        console.log('📊 Статус GET:', response.status, response.statusText);
         
         if (response.ok) {
-            const text = await response.text();
-            console.log('Базовый тест - ответ:', text);
-            updateConnectionStatus(true);
-            return true;
+            try {
+                const data = await response.json();
+                console.log('✅ GET тест успешен:', data);
+                updateConnectionStatus(true);
+                return true;
+            } catch (jsonError) {
+                console.log('⚠️ GET тест: ответ не JSON');
+                updateConnectionStatus(true); // Все равно считаем доступным
+                return true;
+            }
+        }
+        
+        console.log('❌ GET тест не прошел, статус:', response.status);
+        
+        // Тест 2: Пробуем POST запрос
+        console.log('🔄 Пробую POST запрос...');
+        try {
+            const postResponse = await fetch(CONFIG.APP_SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'test' })
+            });
+            
+            console.log('📊 Статус POST:', postResponse.status);
+            
+            if (postResponse.ok) {
+                updateConnectionStatus(true);
+                return true;
+            }
+        } catch (postError) {
+            console.log('❌ POST тест не прошел:', postError.message);
         }
         
         updateConnectionStatus(false);
         return false;
         
     } catch (error) {
-        console.log('Базовый тест - ошибка сети:', error.message);
+        console.error('❌ Ошибка тестирования API:', error);
         updateConnectionStatus(false);
         return false;
     }
 }
 
 function updateConnectionStatus(isConnected) {
-    console.log('Обновление статуса соединения:', isConnected ? 'онлайн' : 'оффлайн');
+    console.log('📡 Обновление статуса соединения:', isConnected ? 'онлайн' : 'оффлайн');
     
     const indicator = document.getElementById('connection-indicator');
     const statusElement = document.getElementById('connection-status');
@@ -916,6 +812,11 @@ function updateConnectionStatus(isConnected) {
     
     if (statusElement) {
         statusElement.style.display = isConnected ? 'none' : 'block';
+    }
+    
+    // Показываем уведомление только при переходе в оффлайн
+    if (!isConnected) {
+        showNotification('Режим оффлайн. Данные будут сохранены локально.', 'warning');
     }
 }
 
@@ -985,15 +886,10 @@ function checkScheduleViolation() {
     const hours = now.getHours();
     const minutes = now.getMinutes();
     
-    const isViolation = hours > schedule.end || (hours === schedule.end && minutes > schedule.endMinutes);
-    console.log(`Проверка графика для ${productType}: ${hours}:${minutes}, нарушение: ${isViolation}`);
-    
-    return isViolation;
+    return hours > schedule.end || (hours === schedule.end && minutes > schedule.endMinutes);
 }
 
 function assignGateAutomatically(legalEntity, productType) {
-    console.log(`Автоназначение ворот для ${legalEntity}/${productType}`);
-    
     if (productType === 'Сухой') {
         if (legalEntity === 'Гулливер') {
             return 'с 31 по 36 (бакалея соль,мука и т.п,вода,консервы) и с 38 по 39 (кондитерка, уголь, пакеты, батарейки, жвачки и т.п)';
@@ -1025,123 +921,22 @@ function assignGateAutomatically(legalEntity, productType) {
 
 function handleEnterKey(input) {
     const step = registrationState.step;
-    console.log(`Enter на шаге ${step}, поле: ${input.id}`);
     
     switch(step) {
-        case 1: 
-            handlePhoneSubmit(); 
-            break;
-        case 2: 
-            handleFioSubmit(); 
-            break;
-        case 3: 
-            handleManualSupplier(); 
-            break;
-        case 6: 
-            handleManualBrand(); 
-            break;
-        case 7: 
-            handleVehicleNumberSubmit(); 
-            break;
-        case 8: 
-            handlePalletsSubmit(); 
-            break;
-        case 9: 
-            handleOrderSubmit(); 
-            break;
-        case 10: 
-            handleEtrnSubmit(); 
-            break;
-        default:
-            console.log('Enter не обрабатывается на этом шаге');
+        case 1: handlePhoneSubmit(); break;
+        case 2: handleFioSubmit(); break;
+        case 3: handleManualSupplier(); break;
+        case 6: handleManualBrand(); break;
+        case 7: handleVehicleNumberSubmit(); break;
+        case 8: handlePalletsSubmit(); break;
+        case 9: handleOrderSubmit(); break;
+        case 10: handleEtrnSubmit(); break;
     }
 }
-
-async function detailedAPITest() {
-    console.log('=== ДЕТАЛЬНОЕ ТЕСТИРОВАНИЕ API ===');
-    
-    showLoader(true);
-    
-    try {
-        // Тест 1: Простой GET
-        console.log('1. Тестирую GET запрос...');
-        const testUrl = CONFIG.APP_SCRIPT_URL + '?test=' + Date.now();
-        console.log('URL:', testUrl);
-        
-        try {
-            const response = await fetch(testUrl);
-            console.log('Статус:', response.status);
-            console.log('Статус текст:', response.statusText);
-            
-            if (response.ok) {
-                const text = await response.text();
-                console.log('Ответ текст:', text);
-                try {
-                    const json = JSON.parse(text);
-                    console.log('Ответ JSON:', json);
-                } catch (e) {
-                    console.log('Не JSON ответ');
-                }
-            } else {
-                console.log('Ошибка HTTP:', response.status);
-            }
-        } catch (fetchError) {
-            console.log('Ошибка fetch:', fetchError.message);
-        }
-        
-        // Тест 2: POST запрос
-        console.log('\n2. Тестирую POST запрос...');
-        try {
-            const postResponse = await fetch(CONFIG.APP_SCRIPT_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    action: 'register_driver',
-                    data: {
-                        phone: '+79991234567',
-                        fio: 'Тестовый Водитель',
-                        supplier: 'ООО Тест'
-                    }
-                })
-            });
-            
-            console.log('POST статус:', postResponse.status);
-            const postText = await postResponse.text();
-            console.log('POST ответ:', postText);
-            
-        } catch (postError) {
-            console.log('POST ошибка:', postError.message);
-        }
-        
-        // Тест 3: Проверка CORS
-        console.log('\n3. Проверяю CORS...');
-        try {
-            const optionsResponse = await fetch(CONFIG.APP_SCRIPT_URL, {
-                method: 'OPTIONS'
-            });
-            console.log('OPTIONS статус:', optionsResponse.status);
-            console.log('OPTIONS заголовки:', JSON.stringify([...optionsResponse.headers.entries()]));
-        } catch (optionsError) {
-            console.log('OPTIONS ошибка:', optionsError.message);
-        }
-        
-        console.log('\n=== ТЕСТИРОВАНИЕ ЗАВЕРШЕНО ===');
-        alert('Тестирование завершено. Проверьте консоль браузера (F12 -> Console) для деталей.');
-        
-    } catch (error) {
-        console.error('Ошибка тестирования:', error);
-        alert('Ошибка тестирования: ' + error.message);
-    } finally {
-        showLoader(false);
-    }
-}
-
 
 // ==================== UI ФУНКЦИИ ====================
 function showNotification(message, type = 'info') {
-    console.log(`Показ уведомления [${type}]: ${message}`);
+    console.log(`💬 Уведомление [${type}]: ${message}`);
     
     const notification = document.getElementById('notification');
     if (!notification) return;
@@ -1159,62 +954,6 @@ function showLoader(show) {
     const loader = document.getElementById('loader');
     if (loader) {
         loader.style.display = show ? 'flex' : 'none';
-        console.log('Лоадер:', show ? 'показан' : 'скрыт');
-    }
-}
-async function debugTestConnection() {
-    console.log('=== ДЕТАЛЬНОЕ ТЕСТИРОВАНИЕ API ===');
-    
-    showLoader(true);
-    
-    try {
-        // Тест 1: Простой GET запрос
-        console.log('Тест 1: Простой GET запрос...');
-        const url1 = CONFIG.APP_SCRIPT_URL + '?test=' + Date.now();
-        console.log('URL:', url1);
-        
-        const response1 = await fetch(url1);
-        console.log('Статус:', response1.status, response1.statusText);
-        
-        if (response1.ok) {
-            const data1 = await response1.json();
-            console.log('Ответ 1:', data1);
-        } else {
-            console.log('Текст ошибки:', await response1.text());
-        }
-        
-        // Тест 2: GET с параметром action
-        console.log('\nТест 2: GET с action=ping...');
-        const url2 = CONFIG.APP_SCRIPT_URL + '?action=ping&timestamp=' + Date.now();
-        const response2 = await fetch(url2);
-        console.log('Статус:', response2.status);
-        
-        if (response2.ok) {
-            const data2 = await response2.json();
-            console.log('Ответ 2:', data2);
-        }
-        
-        // Тест 3: POST запрос
-        console.log('\nТест 3: POST запрос...');
-        const response3 = await fetch(CONFIG.APP_SCRIPT_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'test', data: { test: true } })
-        });
-        console.log('Статус POST:', response3.status);
-        
-        if (response3.ok) {
-            const data3 = await response3.json();
-            console.log('Ответ POST:', data3);
-        }
-        
-        alert('Тестирование завершено. Проверьте консоль браузера (F12) для деталей.');
-        
-    } catch (error) {
-        console.error('Ошибка тестирования:', error);
-        alert('Ошибка: ' + error.message + '\n\nПроверьте консоль браузера (F12)');
-    } finally {
-        showLoader(false);
     }
 }
 
@@ -1237,8 +976,4 @@ window.resetRegistration = resetRegistration;
 window.goBack = goBack;
 window.selectSupplier = selectSupplier;
 
-console.log('app.js загружен, функции экспортированы');
-
-
-
-
+console.log('✅ app.js загружен, функции экспортированы');
