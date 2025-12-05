@@ -727,37 +727,50 @@
         </div>
 
         <!-- Шаг 6: Марка авто -->
-        <div class="step" data-step="6">
-            <div class="step-header">
-                <div class="step-number">6</div>
-                <h2>Выберите марку авто</h2>
-            </div>
-            <div class="step-content">
-                <div class="option-buttons" id="brand-buttons">
-                    <!-- Популярные марки будут загружены сюда -->
-                </div>
-                
-                <div class="separator">или</div>
-                
-                <div class="manual-input">
-                    <input 
-                        type="text" 
-                        id="brand-input" 
-                        class="form-input" 
-                        placeholder="Введите марку авто"
-                    >
-                    <button type="button" class="btn btn-primary" onclick="handleManualBrand()">
-                        ОК
-                    </button>
-                </div>
-                
-                <div class="button-group">
-                    <button type="button" class="btn btn-secondary" onclick="goBack()">
-                        Назад
-                    </button>
-                </div>
-            </div>
+<div class="step" data-step="6">
+    <div class="step-header">
+        <div class="step-number">6</div>
+        <h2>Выберите марку авто</h2>
+    </div>
+    <div class="step-content">
+        <div class="info-box">
+            <p>🚗 Популярные марки авто (из истории регистраций):</p>
         </div>
+        
+        <div id="brand-buttons" class="option-buttons">
+            <!-- Популярные марки будут загружены сюда -->
+        </div>
+        
+        <div class="separator">или введите другую марку</div>
+        
+        <p style="margin-bottom: 10px; color: #666; font-size: 14px;">
+            Введите марку транспортного средства:
+        </p>
+        
+        <div class="manual-input">
+            <input 
+                type="text" 
+                id="brand-input" 
+                class="form-input" 
+                placeholder="Например: Газель Next, Mercedes Actros, Volvo FH"
+                autocomplete="off"
+            >
+            <button type="button" class="btn btn-primary" onclick="handleManualBrand()">
+                Подтвердить
+            </button>
+        </div>
+        
+        <div class="info-box" style="margin-top: 15px;">
+            <p>📊 Марки определяются на основе популярности в столбце H таблицы</p>
+        </div>
+        
+        <div class="button-group">
+            <button type="button" class="btn btn-secondary" onclick="goBack()">
+                ← Назад
+            </button>
+        </div>
+    </div>
+</div>
 
         <!-- Шаг 7: Номер ТС -->
         <div class="step" data-step="7">
@@ -978,5 +991,6 @@
     </script>
 </body>
 </html>
+
 
 
