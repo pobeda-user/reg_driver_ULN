@@ -53,6 +53,237 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 100);
 });
 
+// app.js - добавьте тестовые функции
+async function testConnection() {
+    showLoader(true);
+    
+    try {
+        console.log('Тестирую соединение с Google Apps Script...');
+        
+        // Способ 1: GET запрос
+        const testUrl = `${CONFIG.APP_SCRIPT_URL}?action=test`;
+        console.log('URL теста:', testUrl);
+        
+        const response = await fetch(testUrl);
+        console.log('Статус ответа:', response.status);
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log('Ответ теста:', data);
+            
+            if (data.success) {
+                alert('✅ API работает!\n\n' + 
+                      'Сообщение: ' + data.message + '\n' +
+                      'Версия: ' + (data.scriptVersion || 'не указана') + '\n' +
+                      'Время: ' + (data.timestamp || 'не указано'));
+                return true;
+            }
+        }
+        
+        // Способ 2: POST запрос
+        console.log('Пробую POST запрос...');
+        const postResponse = await fetch(CONFIG.APP_SCRIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'test',
+                timestamp: new Date().toISOString()
+            })
+        });
+        
+        if (postResponse.ok) {
+            const postData = await postResponse.json();
+            console.log('POST ответ:', postData);
+            alert('✅ API работает через POST!\n\n' + JSON.stringify(postData, null, 2));
+            return true;
+        }
+        
+        throw new Error('Оба метода не сработали');
+        
+    } catch (error) {
+        console.error('Ошибка тестирования:', error);
+        alert('❌ Ошибка соединения с API:\n\n' + error.message + '\n\n' +
+              'URL: ' + CONFIG.APP_SCRIPT_URL + '\n' +
+              'Проверьте:\n' +
+              '1. Правильность URL\n' +
+              '2. Развертывание веб-приложения\n' +
+              '3. Доступ "Все, даже анонимные"');
+        return false;
+    } finally {
+        showLoader(false);
+    }
+}
+
+// Обновите submitRegistration для лучшей диагностики
+async function submitRegistration() {
+    showLoader(true);
+    
+    try {
+        console.log('=== ОТПРАВКА РЕГИСТРАЦИИ ===');
+        
+        // Проверяем заполненность обязательных полей
+        const requiredFields = ['phone', 'fio', 'supplier', 'legalEntity', 'productType'];
+        const missingFields = requiredFields.filter(field => !registrationState.data[field]);
+        
+        if (missingFields.length > 0) {
+            throw new Error('Не заполнены обязательные поля: ' + missingFields.join(', '));
+        }
+        
+        // Подготовка данных
+        const postData = {
+            action: 'register_driver',
+            data: {
+                phone: registrationState.data.phone,
+                fio: registrationState.data.fio,
+                supplier: registrationState.data.supplier,
+                legalEntity: registrationState.data.legalEntity,
+                productType: registrationState.data.productType,
+                vehicleType: registrationState.data.vehicleType,
+                vehicleNumber: registrationState.data.vehicleNumber,
+                pallets: registrationState.data.pallets,
+                orderNumber: registrationState.data.orderNumber,
+                etrn: registrationState.data.etrn,
+                transit: registrationState.data.transit,
+                gate: registrationState.data.gate
+            }
+        };
+        
+        console.log('Отправляемые данные:', postData);
+        
+        // Отправка через XMLHttpRequest
+        const response = await sendXHRRequest(CONFIG.APP_SCRIPT_URL, postData);
+        console.log('Ответ сервера:', response);
+        
+        if (response && response.success) {
+            console.log('✅ Успешная регистрация!');
+            
+            // Обновляем данные из ответа сервера
+            if (response.data) {
+                Object.assign(registrationState.data, response.data);
+            }
+            
+            showSuccessMessage();
+            resetRegistrationState();
+            showStep(13);
+            
+        } else {
+            console.error('❌ Ошибка от сервера:', response);
+            
+            // Пробуем альтернативный метод
+            const altResponse = await sendAlternativeRegistration(postData.data);
+            
+            if (altResponse && altResponse.success) {
+                console.log('✅ Успех через альтернативный метод');
+                showSuccessMessage();
+                resetRegistrationState();
+                showStep(13);
+            } else {
+                throw new Error(response ? response.message : 'Неизвестная ошибка сервера');
+            }
+        }
+        
+    } catch (error) {
+        console.error('❌ Все способы отправки не удались:', error);
+        
+        // Сохраняем оффлайн
+        const saved = saveRegistrationOffline();
+        
+        if (saved) {
+            console.log('📱 Данные сохранены оффлайн');
+            showSuccessMessage();
+            resetRegistrationState();
+            showStep(13);
+            showNotification('Данные сохранены локально и будут отправлены при восстановлении связи', 'warning');
+        } else {
+            console.error('❌ Ошибка сохранения оффлайн');
+            showNotification('Ошибка сохранения данных. Попробуйте еще раз.', 'error');
+        }
+    } finally {
+        showLoader(false);
+    }
+}
+
+// Улучшенная функция отправки XHR
+function sendXHRRequest(url, data) {
+    return new Promise((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        
+        xhr.onload = function() {
+            console.log('XHR статус:', xhr.status, xhr.statusText);
+            console.log('XHR ответ:', xhr.responseText);
+            
+            if (xhr.status >= 200 && xhr.status < 300) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    resolve(response);
+                } catch (error) {
+                    console.error('Ошибка парсинга JSON:', error);
+                    console.error('Сырой ответ:', xhr.responseText);
+                    resolve({
+                        success: false,
+                        message: 'Неверный формат ответа сервера',
+                        rawResponse: xhr.responseText
+                    });
+                }
+            } else {
+                resolve({
+                    success: false,
+                    message: `HTTP ошибка ${xhr.status}: ${xhr.statusText}`,
+                    status: xhr.status
+                });
+            }
+        };
+        
+        xhr.onerror = function() {
+            console.error('XHR ошибка сети');
+            resolve({
+                success: false,
+                message: 'Ошибка сети'
+            });
+        };
+        
+        xhr.ontimeout = function() {
+            console.error('XHR таймаут');
+            resolve({
+                success: false,
+                message: 'Таймаут соединения'
+            });
+        };
+        
+        xhr.timeout = 30000;
+        console.log('Отправка XHR запроса...');
+        xhr.send(JSON.stringify(data));
+    });
+}
+
+// Добавьте в initApp тестирование при загрузке
+function initApp() {
+    console.log('Инициализация приложения v2.0');
+    
+    loadRegistrationState();
+    setupPhoneInput();
+    setupEventListeners();
+    
+    // Тестируем соединение при загрузке
+    setTimeout(() => {
+        testConnection().then(isConnected => {
+            if (!isConnected) {
+                showNotification('Режим оффлайн. Данные будут сохранены локально.', 'warning');
+            }
+        });
+    }, 1000);
+    
+    // Загружаем популярные марки авто
+    loadPopularBrands();
+    
+    // Показываем текущий шаг
+    showStep(registrationState.step);
+}
+
 // Проверка существования основных элементов
 function checkElementsExist() {
     const requiredElements = [
@@ -1105,3 +1336,4 @@ window.addEventListener('online', () => {
     showNotification('Соединение восстановлено', 'success');
     setTimeout(syncOfflineData, 1000); // Синхронизируем через 1 секунду
 });
+
