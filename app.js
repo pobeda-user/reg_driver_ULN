@@ -875,32 +875,29 @@ async function sendRequest(action, data = {}) {
 
 async function testAPIConnection() {
     try {
-        console.log('Тестирование соединения с API...');
+        console.log('Тестирую базовое соединение...');
         
-        // Используем параметр action=ping для GET запроса
-        const url = CONFIG.APP_SCRIPT_URL + '?action=ping&test=' + Date.now();
-        console.log('Тестирую URL:', url);
-        
-        const response = await fetch(url, {
+        // Пробуем простой GET
+        const testUrl = CONFIG.APP_SCRIPT_URL + '?ping=' + Date.now();
+        const response = await fetch(testUrl, {
             method: 'GET',
-            cache: 'no-cache' // Отключаем кеширование
+            cache: 'no-store'
         });
         
-        console.log('Статус ответа теста:', response.status);
+        console.log('Базовый тест - статус:', response.status);
         
         if (response.ok) {
-            const data = await response.json();
-            console.log('API доступен:', data);
+            const text = await response.text();
+            console.log('Базовый тест - ответ:', text);
             updateConnectionStatus(true);
             return true;
-        } else {
-            console.warn('API недоступен, статус:', response.status);
-            updateConnectionStatus(false);
-            return false;
         }
         
+        updateConnectionStatus(false);
+        return false;
+        
     } catch (error) {
-        console.warn('API недоступен, ошибка:', error);
+        console.log('Базовый тест - ошибка сети:', error.message);
         updateConnectionStatus(false);
         return false;
     }
@@ -1060,6 +1057,88 @@ function handleEnterKey(input) {
     }
 }
 
+async function detailedAPITest() {
+    console.log('=== ДЕТАЛЬНОЕ ТЕСТИРОВАНИЕ API ===');
+    
+    showLoader(true);
+    
+    try {
+        // Тест 1: Простой GET
+        console.log('1. Тестирую GET запрос...');
+        const testUrl = CONFIG.APP_SCRIPT_URL + '?test=' + Date.now();
+        console.log('URL:', testUrl);
+        
+        try {
+            const response = await fetch(testUrl);
+            console.log('Статус:', response.status);
+            console.log('Статус текст:', response.statusText);
+            
+            if (response.ok) {
+                const text = await response.text();
+                console.log('Ответ текст:', text);
+                try {
+                    const json = JSON.parse(text);
+                    console.log('Ответ JSON:', json);
+                } catch (e) {
+                    console.log('Не JSON ответ');
+                }
+            } else {
+                console.log('Ошибка HTTP:', response.status);
+            }
+        } catch (fetchError) {
+            console.log('Ошибка fetch:', fetchError.message);
+        }
+        
+        // Тест 2: POST запрос
+        console.log('\n2. Тестирую POST запрос...');
+        try {
+            const postResponse = await fetch(CONFIG.APP_SCRIPT_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'register_driver',
+                    data: {
+                        phone: '+79991234567',
+                        fio: 'Тестовый Водитель',
+                        supplier: 'ООО Тест'
+                    }
+                })
+            });
+            
+            console.log('POST статус:', postResponse.status);
+            const postText = await postResponse.text();
+            console.log('POST ответ:', postText);
+            
+        } catch (postError) {
+            console.log('POST ошибка:', postError.message);
+        }
+        
+        // Тест 3: Проверка CORS
+        console.log('\n3. Проверяю CORS...');
+        try {
+            const optionsResponse = await fetch(CONFIG.APP_SCRIPT_URL, {
+                method: 'OPTIONS'
+            });
+            console.log('OPTIONS статус:', optionsResponse.status);
+            console.log('OPTIONS заголовки:', JSON.stringify([...optionsResponse.headers.entries()]));
+        } catch (optionsError) {
+            console.log('OPTIONS ошибка:', optionsError.message);
+        }
+        
+        console.log('\n=== ТЕСТИРОВАНИЕ ЗАВЕРШЕНО ===');
+        alert('Тестирование завершено. Проверьте консоль браузера (F12 -> Console) для деталей.');
+        
+    } catch (error) {
+        console.error('Ошибка тестирования:', error);
+        alert('Ошибка тестирования: ' + error.message);
+    } finally {
+        showLoader(false);
+    }
+}
+
+
 // ==================== UI ФУНКЦИИ ====================
 function showNotification(message, type = 'info') {
     console.log(`Показ уведомления [${type}]: ${message}`);
@@ -1159,6 +1238,7 @@ window.goBack = goBack;
 window.selectSupplier = selectSupplier;
 
 console.log('app.js загружен, функции экспортированы');
+
 
 
 
