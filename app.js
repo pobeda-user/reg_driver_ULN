@@ -28,8 +28,8 @@ let registrationState = {
     }
 };
 
-// Популярные марки авто
-const POPULAR_BRANDS = ['Газель', 'Мерседес', 'Вольво', 'Скания', 'Ман'];
+// Популярные марки авто (будут загружены с сервера)
+let POPULAR_BRANDS = ['Газель', 'Мерседес', 'Вольво', 'Скания', 'Ман'];
 
 // График заезда
 const ENTRY_SCHEDULE = {
@@ -43,7 +43,6 @@ const ENTRY_SCHEDULE = {
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM загружен, инициализируем приложение');
     
-    // Проверяем что все элементы существуют
     setTimeout(() => {
         if (checkElementsExist()) {
             initApp();
@@ -85,6 +84,9 @@ function initApp() {
     setupEventListeners();
     checkConnection();
     
+    // Загружаем популярные марки авто с сервера
+    loadPopularBrands();
+    
     // Показываем текущий шаг
     showStep(registrationState.step);
 }
@@ -111,37 +113,6 @@ function setupEventListeners() {
             }
         });
     });
-}
-
-// app.js - добавьте этот код в initApp()
-function initPopularBrands() {
-    const container = document.getElementById('brand-buttons');
-    if (!container) return;
-    
-    container.innerHTML = '';
-    
-    POPULAR_BRANDS.forEach((brand, index) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'option-btn';
-        button.innerHTML = `
-            <span class="option-number">${index + 1}</span>
-            <span class="option-text">${brand}</span>
-        `;
-        button.onclick = () => selectBrand(brand);
-        container.appendChild(button);
-    });
-}
-
-// Вызовите эту функцию перед showStep(6) в selectProductType
-function selectProductType(type) {
-    registrationState.data.productType = type;
-    const gate = assignGateAutomatically(registrationState.data.legalEntity, type);
-    registrationState.data.gate = gate;
-    
-    // Инициализируем популярные марки перед переходом
-    initPopularBrands();
-    showStep(6);
 }
 
 // Сохранение состояния в localStorage
@@ -175,78 +146,6 @@ function loadRegistrationState() {
     } catch (error) {
         console.error('Ошибка загрузки состояния:', error);
     }
-}
-
-// app.js - добавьте эти функции
-async function loadSupplierHistory() {
-    try {
-        showLoader(true);
-        
-        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                action: 'get_suppliers',
-                phone: registrationState.data.phone
-            })
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            initSupplierButtons(data.suppliers);
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки истории поставщиков:', error);
-    } finally {
-        showLoader(false);
-    }
-}
-
-function initSupplierButtons(suppliers) {
-    const container = document.getElementById('supplier-buttons');
-    if (!container) return;
-    
-    container.innerHTML = '';
-    
-    if (suppliers && suppliers.length > 0) {
-        suppliers.forEach((supplier, index) => {
-            if (supplier && supplier.trim()) {
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'option-btn';
-                button.innerHTML = `
-                    <span class="option-number">${index + 1}</span>
-                    <span class="option-text">${supplier}</span>
-                `;
-                button.onclick = () => selectSupplier(supplier);
-                container.appendChild(button);
-            }
-        });
-    } else {
-        container.innerHTML = '<div class="info-box">История поставщиков не найдена</div>';
-    }
-}
-
-// Измените handleFioSubmit для загрузки истории
-function handleFioSubmit() {
-    const fioInput = document.getElementById('fio-input');
-    if (!fioInput) return;
-    
-    const fio = fioInput.value.trim();
-    
-    if (!fio || fio.length < 5) {
-        showNotification('Пожалуйста, введите полные ФИО', 'error');
-        fioInput.focus();
-        return;
-    }
-    
-    registrationState.data.fio = fio;
-    
-    // Загружаем историю поставщиков
-    loadSupplierHistory();
-    showStep(3);
 }
 
 // Навигация по шагам
@@ -337,105 +236,6 @@ function setupPhoneInput() {
     setTimeout(() => phoneInput.focus(), 100);
 }
 
-function handlePhoneSubmit() {
-    const phoneInput = document.getElementById('phone-input');
-    if (!phoneInput) return;
-    
-    let phone = phoneInput.value.replace(/\s/g, '');
-    
-    if (!phone || phone.length < 10) {
-        showNotification('Пожалуйста, введите корректный номер телефона', 'error');
-        phoneInput.focus();
-        return;
-    }
-    
-    // Нормализация номера
-    phone = normalizePhone(phone);
-    registrationState.data.phone = phone;
-    
-    showLoader(true);
-    
-    // Проверка существующего водителя
-    setTimeout(() => {
-        showLoader(false);
-        showStep(2); // Переход к вводу ФИО
-    }, 1000);
-}
-
-// Шаг 2: Ввод ФИО
-function handleFioSubmit() {
-    const fioInput = document.getElementById('fio-input');
-    if (!fioInput) return;
-    
-    const fio = fioInput.value.trim();
-    
-    if (!fio || fio.length < 5) {
-        showNotification('Пожалуйста, введите полные ФИО', 'error');
-        fioInput.focus();
-        return;
-    }
-    
-    registrationState.data.fio = fio;
-    showStep(3); // Переход к выбору поставщика
-}
-
-// Шаг 3: Выбор поставщика
-function selectSupplier(supplier) {
-    registrationState.data.supplier = supplier;
-    showStep(4); // Переход к выбору юрлица
-}
-
-function handleManualSupplier() {
-    const supplierInput = document.getElementById('supplier-input');
-    if (!supplierInput) return;
-    
-    const supplier = supplierInput.value.trim();
-    
-    if (!supplier) {
-        showNotification('Пожалуйста, введите название поставщика', 'error');
-        supplierInput.focus();
-        return;
-    }
-    
-    registrationState.data.supplier = supplier;
-    showStep(4); // Переход к выбору юрлица
-}
-
-// Шаг 4: Выбор юрлица
-function selectLegalEntity(entity) {
-    registrationState.data.legalEntity = entity;
-    showStep(5); // Переход к выбору типа товара
-}
-
-// Шаг 5: Выбор типа товара
-function selectProductType(type) {
-    registrationState.data.productType = type;
-    
-    // Автоматическое назначение ворот
-    const gate = assignGateAutomatically(registrationState.data.legalEntity, type);
-    registrationState.data.gate = gate;
-    
-    showStep(6); // Переход к выбору марки авто
-}
-
-function assignGateAutomatically(legalEntity, productType) {
-    if (productType === 'Сухой') {
-        if (legalEntity === 'Гулливер') return 'с 31 по 36 (бакалея соль,мука и т.п,вода,консервы) и с 38 по 39 (кондитерка, уголь, пакеты, батарейки, жвачки и т.п)';
-        if (legalEntity === 'ТК Лето') return 'с 26 по 30, с 20 по 22 (для кондитерки)';
-    }
-    
-    if (productType === 'ФРЕШ') {
-        if (legalEntity === 'Гулливер') return 'с 45 по 51, с 5 по 8';
-        if (legalEntity === 'ТК Лето') return 'с 45 по 51';
-    }
-    
-    if (productType === 'ФРОВ') return 'с 9 по 11';
-    if (productType === 'Акциз') return 'с 40 по 41';
-    
-    return 'Не назначены';
-}
-
-// Шаг 6: Марка авто
 async function handlePhoneSubmit() {
     const phoneInput = document.getElementById('phone-input');
     if (!phoneInput) return;
@@ -448,6 +248,7 @@ async function handlePhoneSubmit() {
         return;
     }
     
+    // Нормализация номера
     phone = normalizePhone(phone);
     registrationState.data.phone = phone;
     
@@ -485,10 +286,205 @@ async function handlePhoneSubmit() {
     }
 }
 
+// Шаг 2: Ввод ФИО
+async function handleFioSubmit() {
+    const fioInput = document.getElementById('fio-input');
+    if (!fioInput) return;
+    
+    const fio = fioInput.value.trim();
+    
+    if (!fio || fio.length < 5) {
+        showNotification('Пожалуйста, введите полные ФИО', 'error');
+        fioInput.focus();
+        return;
+    }
+    
+    registrationState.data.fio = fio;
+    
+    // Загружаем историю поставщиков
+    await loadSupplierHistory();
+    showStep(3);
+}
+
+// Шаг 3: Выбор поставщика
+async function loadSupplierHistory() {
+    try {
+        showLoader(true);
+        
+        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'get_suppliers',
+                phone: registrationState.data.phone
+            })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            initSupplierButtons(data.suppliers);
+        } else {
+            showNotification('Не удалось загрузить историю поставщиков', 'error');
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки истории поставщиков:', error);
+        showNotification('Ошибка загрузки истории поставщиков', 'error');
+    } finally {
+        showLoader(false);
+    }
+}
+
+function initSupplierButtons(suppliers) {
+    const container = document.getElementById('supplier-buttons');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (suppliers && suppliers.length > 0) {
+        suppliers.forEach((supplier, index) => {
+            if (supplier && supplier.trim()) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'option-btn';
+                button.innerHTML = `
+                    <span class="option-number">${index + 1}</span>
+                    <span class="option-text">${supplier}</span>
+                `;
+                button.onclick = () => selectSupplier(supplier);
+                container.appendChild(button);
+            }
+        });
+        
+        // Добавляем сообщение если есть история
+        const infoBox = document.createElement('div');
+        infoBox.className = 'info-box';
+        infoBox.style.marginTop = '10px';
+        infoBox.innerHTML = '<p>📱 Выберите поставщика из истории или введите нового</p>';
+        container.parentNode.insertBefore(infoBox, container.nextSibling);
+    } else {
+        // Нет истории
+        const infoBox = document.createElement('div');
+        infoBox.className = 'info-box warning';
+        infoBox.style.marginTop = '10px';
+        infoBox.innerHTML = '<p>📋 История поставщиков не найдена. Введите поставщика вручную.</p>';
+        container.parentNode.insertBefore(infoBox, container.nextSibling);
+    }
+}
+
+function selectSupplier(supplier) {
+    console.log('Выбран поставщик:', supplier);
+    registrationState.data.supplier = supplier;
+    showStep(4);
+}
+
+function handleManualSupplier() {
+    const supplierInput = document.getElementById('supplier-input');
+    if (!supplierInput) return;
+    
+    const supplier = supplierInput.value.trim();
+    
+    if (!supplier) {
+        showNotification('Пожалуйста, введите название поставщика', 'error');
+        supplierInput.focus();
+        return;
+    }
+    
+    registrationState.data.supplier = supplier;
+    showStep(4);
+}
+
+// Шаг 4: Выбор юрлица
+function selectLegalEntity(entity) {
+    registrationState.data.legalEntity = entity;
+    showStep(5);
+}
+
+// Шаг 5: Выбор типа товара
+async function selectProductType(type) {
+    registrationState.data.productType = type;
+    
+    // Автоматическое назначение ворот
+    const gate = assignGateAutomatically(registrationState.data.legalEntity, type);
+    registrationState.data.gate = gate;
+    
+    // Показываем популярные марки
+    await initPopularBrands();
+    showStep(6);
+}
+
+function assignGateAutomatically(legalEntity, productType) {
+    if (productType === 'Сухой') {
+        if (legalEntity === 'Гулливер') return 'с 31 по 36 (бакалея соль,мука и т.п,вода,консервы) и с 38 по 39 (кондитерка, уголь, пакеты, батарейки, жвачки и т.п)';
+        if (legalEntity === 'ТК Лето') return 'с 26 по 30, с 20 по 22 (для кондитерки)';
+    }
+    
+    if (productType === 'ФРЕШ') {
+        if (legalEntity === 'Гулливер') return 'с 45 по 51, с 5 по 8';
+        if (legalEntity === 'ТК Лето') return 'с 45 по 51';
+    }
+    
+    if (productType === 'ФРОВ') return 'с 9 по 11';
+    if (productType === 'Акциз') return 'с 40 по 41';
+    
+    return 'Не назначены';
+}
+
+// Шаг 6: Марка авто
+async function loadPopularBrands() {
+    try {
+        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'get_popular_brands'
+            })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            if (data.brands && data.brands.length > 0) {
+                POPULAR_BRANDS = data.brands;
+                console.log('Загружены популярные марки:', POPULAR_BRANDS);
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки популярных марок:', error);
+    }
+}
+
+async function initPopularBrands() {
+    const container = document.getElementById('brand-buttons');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    // Ждем загрузки популярных марок
+    if (POPULAR_BRANDS.length === 0) {
+        await loadPopularBrands();
+    }
+    
+    POPULAR_BRANDS.forEach((brand, index) => {
+        if (brand && brand.trim()) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'option-btn';
+            button.innerHTML = `
+                <span class="option-number">${index + 1}</span>
+                <span class="option-text">${brand}</span>
+            `;
+            button.onclick = () => selectBrand(brand);
+            container.appendChild(button);
+        }
+    });
+}
 
 function selectBrand(brand) {
     registrationState.data.vehicleType = brand;
-    showStep(7); // Переход к вводу номера ТС
+    showStep(7);
 }
 
 function handleManualBrand() {
@@ -504,7 +500,7 @@ function handleManualBrand() {
     }
     
     registrationState.data.vehicleType = brand;
-    showStep(7); // Переход к вводу номера ТС
+    showStep(7);
 }
 
 // Шаг 7: Номер ТС
@@ -521,7 +517,7 @@ function handleVehicleNumberSubmit() {
     }
     
     registrationState.data.vehicleNumber = vehicleNumber;
-    showStep(8); // Переход к вводу поддонов
+    showStep(8);
 }
 
 // Шаг 8: Количество поддонов
@@ -538,7 +534,7 @@ function handlePalletsSubmit() {
     }
     
     registrationState.data.pallets = pallets;
-    showStep(9); // Переход к вводу номера заказа
+    showStep(9);
 }
 
 // Шаг 9: Номер заказа
@@ -555,7 +551,7 @@ function handleOrderSubmit() {
     }
     
     registrationState.data.orderNumber = orderNumber;
-    showStep(10); // Переход к вводу ЭТрН
+    showStep(10);
 }
 
 // Шаг 10: ЭТрН
@@ -572,7 +568,7 @@ function handleEtrnSubmit() {
     }
     
     registrationState.data.etrn = etrn;
-    showStep(11); // Переход к выбору транзита
+    showStep(11);
 }
 
 // Шаг 11: Транзит
@@ -658,7 +654,6 @@ function showConfirmation() {
 }
 
 // Отправка регистрации
-// app.js - обновите submitRegistration
 async function submitRegistration() {
     showLoader(true);
     
@@ -684,75 +679,38 @@ async function submitRegistration() {
         
         console.log('Отправляемые данные:', postData);
         
-        // Отправка данных
-        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
-            method: 'POST',
-            mode: 'no-cors', // Используем no-cors для обхода CORS
-            headers: {
-                'Content-Type': 'text/plain;charset=utf-8',
-            },
-            body: JSON.stringify(postData)
-        });
-        
-        // С no-cors мы не можем прочитать ответ, поэтому считаем успешным
-        console.log('Данные отправлены, ответ:', response);
-        
-        // Показываем успешное сообщение
-        showSuccessMessage();
-        resetRegistrationState();
-        showStep(13);
-        
-    } catch (error) {
-        console.error('Ошибка отправки:', error);
-        
-        // Пробуем альтернативный метод через GET
-        try {
-            const params = new URLSearchParams();
-            Object.keys(registrationState.data).forEach(key => {
-                params.append(key, registrationState.data[key]);
-            });
-            
-            await fetch(`${CONFIG.APP_SCRIPT_URL}?${params.toString()}`);
-            showSuccessMessage();
-            resetRegistrationState();
-            showStep(13);
-            
-        } catch (secondError) {
-            console.error('Вторая попытка тоже не удалась:', secondError);
-            showNotification('Данные сохранены локально. Отправятся при восстановлении связи.', 'warning');
-            saveRegistrationOffline();
-            showSuccessMessage();
-            resetRegistrationState();
-            showStep(13);
-        }
-    } finally {
-        showLoader(false);
-    }
-}
-
-// Сохранение в Google Sheets
-async function saveToGoogleSheets(data) {
-    try {
+        // Отправка данных через POST
         const response = await fetch(CONFIG.APP_SCRIPT_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-                action: 'register_driver',
-                data: data
-            })
+            body: JSON.stringify(postData)
         });
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        return await response.json();
+        const result = await response.json();
+        console.log('Ответ сервера:', result);
+        
+        if (result.success) {
+            showSuccessMessage();
+            resetRegistrationState();
+            showStep(13);
+        } else {
+            showNotification('Ошибка при сохранении данных: ' + (result.message || 'Неизвестная ошибка'), 'error');
+        }
         
     } catch (error) {
-        console.error('Ошибка сохранения:', error);
-        throw error;
+        console.error('Ошибка отправки:', error);
+        showNotification('Ошибка соединения. Проверьте интернет.', 'error');
+        
+        // Сохраняем локально для повторной отправки
+        saveRegistrationOffline();
+    } finally {
+        showLoader(false);
     }
 }
 
@@ -767,6 +725,7 @@ function saveRegistrationOffline() {
         
         localStorage.setItem('offline_registrations', JSON.stringify(offlineRegistrations));
         console.log('Данные сохранены оффлайн');
+        showNotification('Данные сохранены локально. Отправятся при восстановлении связи.', 'warning');
         return true;
     } catch (error) {
         console.error('Ошибка оффлайн сохранения:', error);
@@ -992,7 +951,6 @@ window.addEventListener('offline', () => {
 
 // Убрать автоматический показ установки PWA
 window.addEventListener('beforeinstallprompt', (e) => {
-    // Просто предотвращаем автоматический показ
     e.preventDefault();
 });
 
@@ -1013,7 +971,3 @@ window.submitRegistration = submitRegistration;
 window.resetRegistration = resetRegistration;
 window.goBack = goBack;
 window.selectSupplier = selectSupplier;
-
-
-
-
