@@ -1,63 +1,48 @@
-const CACHE_NAME = 'driver-registration-v1.0';
-
-// Только основные файлы для кэширования
+const CACHE_NAME = 'driver-registration-v1.1';
 const urlsToCache = [
-    './',
-    './index.html',
-    './app.js',
-    './styles.css',
-    './manifest.json'
+  '/reg_driver_ULN/',
+  '/reg_driver_ULN/index.html',
+  '/reg_driver_ULN/app.js',
+  '/reg_driver_ULN/styles.css',
+  '/reg_driver_ULN/manifest.json',
+  '/reg_driver_ULN/icons/icon-72x72.png',
+  '/reg_driver_ULN/icons/icon-192x192.png',
+  '/reg_driver_ULN/icons/icon-512x512.png'
 ];
 
 // Установка Service Worker
 self.addEventListener('install', event => {
-    console.log('[Service Worker] Установка');
-    
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => {
-                console.log('[Service Worker] Кэширование основных файлов');
-                // Кэшируем по одному чтобы не было ошибок
-                return Promise.all(
-                    urlsToCache.map(url => {
-                        return cache.add(url).catch(err => {
-                            console.warn(`[Service Worker] Не удалось кэшировать ${url}:`, err);
-                        });
-                    })
-                );
+                console.log('Opened cache:', CACHE_NAME);
+                return cache.addAll(urlsToCache);
             })
-            .then(() => {
-                console.log('[Service Worker] Установка завершена');
-                return self.skipWaiting();
-            })
+            .then(() => self.skipWaiting())
     );
 });
 
-// Активация
+// Активация и очистка старых кэшей
 self.addEventListener('activate', event => {
-    console.log('[Service Worker] Активация');
-    
     event.waitUntil(
         caches.keys().then(cacheNames => {
             return Promise.all(
                 cacheNames.map(cacheName => {
                     if (cacheName !== CACHE_NAME) {
-                        console.log('[Service Worker] Удаление старого кэша:', cacheName);
+                        console.log('Deleting old cache:', cacheName);
                         return caches.delete(cacheName);
                     }
                 })
             );
-        }).then(() => {
-            return self.clients.claim();
-        })
+        }).then(() => self.clients.claim())
     );
 });
 
-// Обработка запросов
+// Стратегия кэширования: Cache First, fallback to Network
 self.addEventListener('fetch', event => {
     // Пропускаем запросы к Google Apps Script
     if (event.request.url.includes('script.google.com')) {
-        return;
+        return fetch(event.request);
     }
     
     event.respondWith(
@@ -71,25 +56,123 @@ self.addEventListener('fetch', event => {
                 // Иначе загружаем из сети
                 return fetch(event.request)
                     .then(response => {
-                        // Кэшируем только успешные ответы
-                        if (response && response.status === 200 && response.type === 'basic') {
-                            const responseToCache = response.clone();
-                            caches.open(CACHE_NAME)
-                                .then(cache => {
-                                    cache.put(event.request, responseToCache);
-                                });
+                        // Проверяем валидность ответа
+                        if (!response || response.status !== 200 || response.type !== 'basic') {
+                            return response;
                         }
+                        
+                        // Клонируем ответ
+                        const responseToCache = response.clone();
+                        
+                        // Добавляем в кэш
+                        caches.open(CACHE_NAME)
+                            .then(cache => {
+                                cache.put(event.request, responseToCache);
+                            });
+                        
                         return response;
                     })
-                    .catch(() => {
-                        // Fallback для главной страницы
+                    .catch(error => {
+                        console.log('Fetch failed; returning offline page instead.', error);
+                        // Fallback для offline
                         if (event.request.mode === 'navigate') {
-                            return caches.match('./index.html');
+                            return caches.match('/reg_driver_ULN/');
                         }
-                        return new Response('Оффлайн', {
-                            headers: { 'Content-Type': 'text/plain' }
-                        });
                     });
             })
     );
+});
+
+// Синхронизация при восстановлении соединения
+self.addEventListener('sync', event => {
+    if (event.tag === 'sync-data') {
+        console.log('Background sync: sync-data');
+        event.waitUntil(syncOfflineData());
+    }
+});
+
+async function syncOfflineData() {
+    try {
+        const clients = await self.clients.matchAll();
+        clients.forEach(client => {
+            client.postMessage({
+                type: 'SYNC_OFFLINE_DATA',
+                message: 'Синхронизация оффлайн данных'
+            });
+        });
+        return Promise.resolve();
+    } catch (error) {
+        console.error('Sync error:', error);
+        return Promise.reject(error);
+    }
+}
+
+// Получение push-уведомлений
+self.addEventListener('push', event => {
+    let data = {};
+    if (event.data) {
+        data = event.data.json();
+    }
+    
+    const options = {
+        body: data.body || 'Новое уведомление от системы регистрации',
+        icon: '/reg_driver_ULN/icons/icon-192x192.png',
+        badge: '/reg_driver_ULN/icons/icon-72x72.png',
+        vibrate: [100, 50, 100],
+        data: {
+            url: data.url || '/reg_driver_ULN/',
+            timestamp: Date.now()
+        },
+        actions: [
+            {
+                action: 'open',
+                title: 'Открыть',
+                icon: '/reg_driver_ULN/icons/icon-72x72.png'
+            },
+            {
+                action: 'close',
+                title: 'Закрыть',
+                icon: '/reg_driver_ULN/icons/icon-72x72.png'
+            }
+        ]
+    };
+    
+    event.waitUntil(
+        self.registration.showNotification('Регистрация водителей', options)
+    );
+});
+
+// Обработка кликов по уведомлениям
+self.addEventListener('notificationclick', event => {
+    event.notification.close();
+    
+    if (event.action === 'open' || event.action === '') {
+        event.waitUntil(
+            clients.matchAll({
+                type: 'window',
+                includeUncontrolled: true
+            }).then(clientList => {
+                // Если открыто окно приложения - фокусируем его
+                for (const client of clientList) {
+                    if (client.url.includes('/reg_driver_ULN/') && 'focus' in client) {
+                        return client.focus();
+                    }
+                }
+                // Иначе открываем новое окно
+                if (clients.openWindow) {
+                    return clients.openWindow('/reg_driver_ULN/');
+                }
+            })
+        );
+    }
+});
+
+// Обработка сообщений от клиентов
+self.addEventListener('message', event => {
+    if (event.data && event.data.type === 'CACHE_URLS') {
+        event.waitUntil(
+            caches.open(CACHE_NAME)
+                .then(cache => cache.addAll(event.data.urls))
+        );
+    }
 });
