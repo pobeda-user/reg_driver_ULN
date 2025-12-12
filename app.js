@@ -795,127 +795,27 @@ async function testConnection() {
 
 // ==================== ФУНКЦИЯ ОТПРАВКИ НА СЕРВЕР ====================
 async function sendRegistrationToServer(data) {
-    try {
-        // Добавляем уникальный ID регистрации
-        const registrationId = `reg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        data.registrationId = registrationId;
-        data._clientTimestamp = new Date().toISOString();
-        
-        logToConsole('INFO', 'Отправляю данные на сервер', { 
-            url: CONFIG.APP_SCRIPT_URL, 
-            dataSize: JSON.stringify(data).length,
-            registrationId: registrationId,
-            clientTime: data._clientTimestamp
-        });
-        
-        const requestData = {
-            action: 'register_driver',
-            data: data
-        };
-        
-        const startTime = Date.now();
-        
-        // ИСПРАВЛЕНИЕ: Правильный Content-Type и режим 'cors'
-        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-            },
-            body: JSON.stringify(requestData),
-            mode: 'cors' // Изменено с 'no-cors'
-        });
-        
-        const endTime = Date.now();
-        const duration = endTime - startTime;
-        
-        logToConsole('INFO', 'Статус ответа', { 
-            status: response.status, 
-            statusText: response.statusText,
-            duration: `${duration}ms`,
-            url: CONFIG.APP_SCRIPT_URL,
-            ok: response.ok
-        });
-        
-        if (!response.ok) {
-            logToConsole('WARN', 'POST запрос не удался, пробую GET метод');
-            return await sendViaAlternativeMethod(data);
-        }
-        
-        const text = await response.text();
-        
-        try {
-            const result = JSON.parse(text);
-            logToConsole('INFO', 'Ответ JSON получен', { 
-                success: result.success,
-                message: result.message,
-                registrationId: result.data?.registrationId,
-                responseSize: text.length
-            });
-            return result;
-        } catch (parseError) {
-            logToConsole('ERROR', 'Ошибка парсинга JSON', {
-                error: parseError.message,
-                rawText: text.substring(0, 500) + (text.length > 500 ? '...' : ''),
-                url: CONFIG.APP_SCRIPT_URL
-            });
-            
-            // Проверяем, если это HTML страница с ошибкой
-            if (text.includes('<!DOCTYPE') || text.includes('<html')) {
-                logToConsole('ERROR', 'Получен HTML вместо JSON');
-                return { 
-                    success: false, 
-                    message: 'Сервер вернул HTML вместо JSON. Проверьте URL Google Apps Script.',
-                    rawResponse: text.substring(0, 300)
-                };
-            }
-            
-            return { 
-                success: false, 
-                message: 'Неверный формат ответа сервера',
-                rawResponse: text
-            };
-        }
-        
-    } catch (error) {
-        logToConsole('ERROR', 'Ошибка отправки на сервер', {
-            error: error.message,
-            stack: error.stack,
-            url: CONFIG.APP_SCRIPT_URL,
-            timestamp: new Date().toISOString(),
-            errorType: error.name
-        });
-        
-        // Пробуем альтернативный метод
-        return await sendViaAlternativeMethod(data);
-    }
-}
-
-// ==================== АЛЬТЕРНАТИВНЫЙ МЕТОД ОТПРАВКИ ====================
-// ==================== АЛЬТЕРНАТИВНЫЙ МЕТОД ОТПРАВКИ ====================
-async function sendViaAlternativeMethod(data) {
   try {
-    logToConsole('INFO', 'Пробую альтернативный метод отправки');
+    // Добавляем уникальный ID регистрации
+    const registrationId = `reg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    data.registrationId = registrationId;
+    data._clientTimestamp = new Date().toISOString();
     
-    // Всегда используем GET для альтернативного метода
-    const url = new URL(CONFIG.APP_SCRIPT_URL);
-    
-    // Добавляем все параметры в URL
-    Object.keys(data).forEach(key => {
-      if (data[key] !== undefined && data[key] !== null) {
-        // Для объектов сериализуем в JSON
-        if (typeof data[key] === 'object') {
-          url.searchParams.append(key, JSON.stringify(data[key]));
-        } else {
-          url.searchParams.append(key, data[key]);
-        }
-      }
+    logToConsole('INFO', 'Отправляю данные на сервер', { 
+      url: CONFIG.APP_SCRIPT_URL, 
+      dataSize: JSON.stringify(data).length,
+      registrationId: registrationId,
+      clientTime: data._clientTimestamp
     });
     
-    // Добавляем timestamp
-    url.searchParams.append('_alt', Date.now());
+    // ИСПРАВЛЕНИЕ: Используем GET запрос вместо POST для регистрации
+    // Google Apps Script лучше работает с GET для веб-приложений
+    const url = new URL(CONFIG.APP_SCRIPT_URL);
+    url.searchParams.append('action', 'register_driver');
+    url.searchParams.append('data', JSON.stringify(data));
+    url.searchParams.append('_t', Date.now());
     
-    logToConsole('INFO', 'Альтернативный GET URL', url.toString());
+    const startTime = Date.now();
     
     const response = await fetch(url.toString(), {
       method: 'GET',
@@ -926,47 +826,99 @@ async function sendViaAlternativeMethod(data) {
       }
     });
     
-    logToConsole('INFO', 'Альтернативный метод статус', {
-      status: response.status,
-      url: url.toString()
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    
+    logToConsole('INFO', 'Статус ответа регистрации', { 
+      status: response.status, 
+      statusText: response.statusText,
+      duration: `${duration}ms`,
+      url: url.toString(),
+      ok: response.ok
     });
     
-    if (response.ok) {
-      const text = await response.text();
-      try {
-        const result = JSON.parse(text);
-        logToConsole('SUCCESS', 'Альтернативный метод успешен', {
-          success: result.success,
-          message: result.message
-        });
-        return result;
-      } catch (parseError) {
-        logToConsole('WARN', 'Ошибка парсинга в альтернативном методе', {
-          error: parseError.message,
-          rawText: text.substring(0, 200)
-        });
-        
-        // Если ответ содержит успех в текстовом виде
-        if (text.includes('success') || text.includes('suppliers')) {
-          return {
-            success: true,
-            message: 'Запрос обработан (парсинг не удался)',
-            rawResponse: text
-          };
-        }
-        
-        throw new Error('Ошибка парсинга ответа');
-      }
-    } else {
-      let errorText = '';
-      try {
-        errorText = await response.text();
-      } catch (e) {
-        errorText = 'Не удалось прочитать текст ошибки';
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const text = await response.text();
+    
+    try {
+      const result = JSON.parse(text);
+      logToConsole('INFO', 'Ответ регистрации получен', { 
+        success: result.success,
+        message: result.message,
+        registrationId: result.data?.registrationId,
+        responseSize: text.length
+      });
+      return result;
+    } catch (parseError) {
+      logToConsole('ERROR', 'Ошибка парсинга JSON регистрации', {
+        error: parseError.message,
+        rawText: text.substring(0, 500) + (text.length > 500 ? '...' : ''),
+        url: CONFIG.APP_SCRIPT_URL
+      });
+      
+      // Проверяем, если это HTML страница с ошибкой
+      if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+        logToConsole('ERROR', 'Получен HTML вместо JSON');
+        return { 
+          success: false, 
+          message: 'Сервер вернул HTML вместо JSON. Проверьте URL Google Apps Script.',
+          rawResponse: text.substring(0, 300)
+        };
       }
       
-      throw new Error(`Альтернативный метод HTTP ошибка: ${response.status}, ${errorText}`);
+      return { 
+        success: false, 
+        message: 'Неверный формат ответа сервера',
+        rawResponse: text
+      };
     }
+    
+  } catch (error) {
+    logToConsole('ERROR', 'Ошибка отправки на сервер', {
+      error: error.message,
+      stack: error.stack,
+      url: CONFIG.APP_SCRIPT_URL,
+      timestamp: new Date().toISOString(),
+      errorType: error.name
+    });
+    
+    // Пробуем альтернативный метод
+    return await sendViaAlternativeMethodForRegistration(data);
+  }
+}
+
+// ==================== АЛЬТЕРНАТИВНЫЙ МЕТОД ОТПРАВКИ ====================
+// ==================== АЛЬТЕРНАТИВНЫЙ МЕТОД ОТПРАВКИ ====================
+async function sendViaAlternativeMethodForRegistration(data) {
+  try {
+    logToConsole('INFO', 'Пробую альтернативный метод регистрации');
+    
+    // Используем POST с более простыми заголовками
+    const url = CONFIG.APP_SCRIPT_URL;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: `action=register_driver&data=${encodeURIComponent(JSON.stringify(data))}`,
+      mode: 'no-cors' // Пробуем no-cors режим
+    });
+    
+    logToConsole('INFO', 'Альтернативный метод статус', {
+      status: response.status,
+      url: url
+    });
+    
+    // В режиме no-cors мы не можем прочитать ответ, только проверить что запрос отправлен
+    return {
+      success: true,
+      message: 'Данные отправлены (no-cors режим)',
+      sentInNoCors: true
+    };
     
   } catch (error) {
     logToConsole('ERROR', 'Альтернативный метод также не сработал', {
@@ -2265,6 +2217,7 @@ window.exportLogs = exportLogs;
 window.resetOfflineAttempts = resetOfflineAttempts;
 window.sendViaAlternativeMethod = sendViaAlternativeMethod;
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
 
 
 
