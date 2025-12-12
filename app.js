@@ -614,25 +614,17 @@ function selectTransit(answer) {
     registrationState.data.date = formatDate(now);
     registrationState.data.time = formatTime(now);
     
-    // Проверяем нарушение графика
+    // Проверяем нарушение графика (для столбца S)
     registrationState.data.scheduleViolation = checkScheduleViolation() ? 'Да' : 'Нет';
     
-    // Проверяем наличие проблем (с отладкой)
-    const problemTypes = checkForProblems();
-    registrationState.data.problemTypes = problemTypes;
+    // НЕ добавляем поле problemTypes - столбец Q должен быть пустым
+    // Удаляем поле если оно было создано ранее
+    delete registrationState.data.problemTypes;
     
-    // Отладочная информация
-    console.log('=== ОТЛАДКА ПРОБЛЕМ ===');
-    console.log('Тип товара:', registrationState.data.productType);
-    console.log('Номер заказа:', registrationState.data.orderNumber);
-    console.log('ЭТрН:', registrationState.data.etrn);
-    console.log('Опоздание:', registrationState.data.scheduleViolation);
-    console.log('Найденные проблемы:', problemTypes);
-    console.log('========================');
-    
-    logToConsole('INFO', 'Проблемы определены', { 
-        problemTypes: problemTypes,
-        hasProblems: problemTypes !== 'Нет'
+    logToConsole('INFO', 'Нарушение графика', { 
+        violation: registrationState.data.scheduleViolation,
+        time: now.toLocaleTimeString(),
+        productType: registrationState.data.productType
     });
     
     // Показываем подтверждение
@@ -640,6 +632,7 @@ function selectTransit(answer) {
     showStep(12);
 }
 
+// ==================== ШАГ 12: ПОДТВЕРЖДЕНИЕ ====================
 // ==================== ШАГ 12: ПОДТВЕРЖДЕНИЕ ====================
 function showConfirmation() {
     logToConsole('INFO', 'Показываю подтверждение с исправленными данными');
@@ -704,16 +697,6 @@ function showConfirmation() {
         </div>
     `;
     
-    // Блок проблем (если есть)
-    if (data.problemTypes && data.problemTypes !== 'Нет') {
-        html += `
-            <div class="data-item warning">
-                <span class="data-label">🚨 Проблемы:</span>
-                <span class="data-value">${data.problemTypes}</span>
-            </div>
-        `;
-    }
-    
     // Блок оффлайн данных (если есть)
     const offlineCount = getOfflineDataCount();
     if (offlineCount > 0) {
@@ -736,7 +719,7 @@ async function submitRegistration() {
     });
     
     // Проверяем заполненность обязательных полей
-    const requiredFields = ['phone', 'fio', 'supplier', 'legalEntity', 'productType'];
+    const requiredFields = ['phone', 'fio', 'supplier', 'legalEntity', 'productType', 'vehicleNumber'];
     const missingFields = requiredFields.filter(field => !registrationState.data[field]);
     
     if (missingFields.length > 0) {
@@ -744,10 +727,17 @@ async function submitRegistration() {
         return;
     }
     
+    // УДАЛЯЕМ поле problemTypes из данных перед отправкой
+    const dataToSend = {...registrationState.data};
+    delete dataToSend.problemTypes; // Убедимся что поле не отправляется
+    
     // Проверяем соединение
     if (!navigator.onLine) {
         logToConsole('WARN', 'Нет соединения с интернетом');
         showNotification('⚠️ Нет соединения с интернетом. Данные будут сохранены локально.', 'warning');
+        
+        // Удаляем problemTypes из данных для оффлайн сохранения
+        delete registrationState.data.problemTypes;
         
         const saved = saveRegistrationOffline();
         if (saved) {
@@ -762,43 +752,30 @@ async function submitRegistration() {
     
     try {
         // Добавляем временную метку и уникальный ID для отслеживания
-        registrationState.data._timestamp = Date.now();
-        registrationState.data._localId = `local_${registrationState.data._timestamp}_${Math.random().toString(36).substr(2, 6)}`;
-        registrationState.data._attempt = 1;
-        registrationState.data._sentFrom = 'online_submit';
+        dataToSend._timestamp = Date.now();
+        dataToSend._localId = `local_${dataToSend._timestamp}_${Math.random().toString(36).substr(2, 6)}`;
+        dataToSend._attempt = 1;
+        dataToSend._sentFrom = 'online_submit';
         
         logToConsole('INFO', 'Подготовка данных для отправки', {
-            localId: registrationState.data._localId,
-            timestamp: registrationState.data._timestamp,
-            phone: registrationState.data.phone
+            localId: dataToSend._localId,
+            timestamp: dataToSend._timestamp,
+            phone: dataToSend.phone
         });
         
-        const response = await sendRegistrationToServer(registrationState.data);
+        const response = await sendRegistrationToServer(dataToSend);
         
         logToConsole('INFO', 'Ответ от сервера получен', {
             success: response.success,
             message: response.message,
-            hasData: !!response.data,
-            serverRegistrationId: response.data?.registrationId,
-            rowNumber: response.data?.rowNumber
+            hasData: !!response.data
         });
         
         if (response && response.success) {
-            logToConsole('SUCCESS', 'Регистрация успешна на сервере!', {
-                serverData: response.data,
-                localId: registrationState.data._localId,
-                serverTime: response.data?.date + ' ' + response.data?.time
-            });
+            logToConsole('SUCCESS', 'Регистрация успешна на сервере!');
             
-            // Обновляем данные из ответа сервера
-            if (response.data) {
-                Object.assign(registrationState.data, response.data);
-            }
-            
-            // Помечаем как отправленное на сервере
-            registrationState.data._sentToServer = true;
-            registrationState.data._serverConfirmed = true;
-            registrationState.data._serverResponse = response;
+            // Удаляем problemTypes из локального состояния
+            delete registrationState.data.problemTypes;
             
             // Показываем успешное сообщение
             showSuccessMessage(response.data);
@@ -814,30 +791,11 @@ async function submitRegistration() {
         } else {
             logToConsole('ERROR', 'Ошибка от сервера', {
                 response: response,
-                errorMessage: response?.message,
-                localId: registrationState.data._localId
+                errorMessage: response?.message
             });
             
-            // Показываем более информативное сообщение
-            const errorMsg = response?.message || 'Неизвестная ошибка сервера';
-            const fullErrorMsg = errorMsg.length > 100 ? errorMsg.substring(0, 100) + '...' : errorMsg;
-            
-            // Проверяем, если это ошибка дублирования
-            if (errorMsg.includes('уже зарегистрирован') || errorMsg.includes('дубликат')) {
-                showNotification('⚠️ Вы уже зарегистрированы сегодня!', 'warning');
-                
-                // Показываем успех, но с предупреждением
-                showSuccessMessage(registrationState.data);
-                resetRegistrationState();
-                showStep(13);
-                return;
-            }
-            
-            showNotification(`❌ Ошибка: ${fullErrorMsg}`, 'error');
-            
-            // Сохраняем оффлайн для повторной отправки
-            registrationState.data._lastError = errorMsg;
-            registrationState.data._serverError = true;
+            // Удаляем problemTypes при сохранении оффлайн
+            delete registrationState.data.problemTypes;
             
             const saved = saveRegistrationOffline();
             if (saved) {
@@ -849,26 +807,15 @@ async function submitRegistration() {
         }
         
     } catch (error) {
-        logToConsole('ERROR', 'Критическая ошибка отправки', {
-            error: error,
-            message: error.message,
-            stack: error.stack,
-            localId: registrationState.data._localId
-        });
+        logToConsole('ERROR', 'Критическая ошибка отправки', error);
         
-        // Сохраняем оффлайн
-        registrationState.data._isRetry = true;
-        registrationState.data._lastError = error.message;
-        registrationState.data._networkError = true;
+        // Удаляем problemTypes при сохранении оффлайн
+        delete registrationState.data.problemTypes;
         
         const saved = saveRegistrationOffline();
         
         if (saved) {
-            logToConsole('INFO', 'Данные сохранены оффлайн', { 
-                id: 'saved_offline',
-                timestamp: new Date().toISOString(),
-                localId: registrationState.data._localId
-            });
+            logToConsole('INFO', 'Данные сохранены оффлайн');
             
             // Показываем успех даже при оффлайн
             showSuccessMessage();
@@ -876,9 +823,6 @@ async function submitRegistration() {
             showStep(13);
             
             showNotification('📱 Данные сохранены локально. Отправятся при восстановлении связи.', 'warning');
-        } else {
-            logToConsole('ERROR', 'Ошибка сохранения оффлайн');
-            showNotification('❌ Ошибка сохранения данных. Попробуйте еще раз.', 'error');
         }
     } finally {
         showLoader(false);
@@ -2426,6 +2370,7 @@ window.exportLogs = exportLogs;
 window.resetOfflineAttempts = resetOfflineAttempts;
 window.sendViaAlternativeMethod = sendViaAlternativeMethod;
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
 
 
 
