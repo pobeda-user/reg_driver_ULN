@@ -618,7 +618,8 @@ function selectTransit(answer) {
     registrationState.data.scheduleViolation = checkScheduleViolation() ? 'Да' : 'Нет';
     logToConsole('INFO', 'Нарушение графика', { 
         violation: registrationState.data.scheduleViolation,
-        time: now.toLocaleTimeString()
+        time: now.toLocaleTimeString(),
+        productType: registrationState.data.productType
     });
     
     // Проверяем наличие проблем
@@ -683,19 +684,20 @@ function showConfirmation() {
             <span class="data-value">${data.etrn || ''}</span>
         </div>
         <div class="data-item">
-            <span class="data-label">📦 Транзит:</span>
+            <span class="data-label">🔄 Транзит:</span>
             <span class="data-value">${data.transit || ''}</span>
         </div>
-        <div class="data-item">
-            <span class="data-label">🚪 Ворота:</span>
+        <div class="data-item highlight">
+            <span class="data-label">🚪 Ворота назначенные:</span>
             <span class="data-value">${data.gate || 'Не назначены'}</span>
         </div>
         <div class="data-item">
-            <span class="data-label">⚠️ Опоздание:</span>
+            <span class="data-label">⏰ Опоздание по графику:</span>
             <span class="data-value">${data.scheduleViolation || 'Нет'}</span>
         </div>
     `;
     
+    // Блок проблем (если есть)
     if (data.problemTypes && data.problemTypes !== 'Нет') {
         html += `
             <div class="data-item warning">
@@ -705,15 +707,7 @@ function showConfirmation() {
         `;
     }
     
-    if (data.scheduleViolation === 'Да') {
-        html += `
-            <div class="data-item warning">
-                <span class="data-label">⏰ Нарушение графика:</span>
-                <span class="data-value">ДА</span>
-            </div>
-        `;
-    }    
-    // Добавляем кнопку просмотра оффлайн данных
+    // Блок оффлайн данных (если есть)
     const offlineCount = getOfflineDataCount();
     if (offlineCount > 0) {
         html += `
@@ -2168,7 +2162,10 @@ function formatTime(date) {
 
 function checkScheduleViolation() {
     const productType = registrationState.data.productType;
-    if (!productType) return false;
+    if (!productType) {
+        logToConsole('WARN', 'Не указан тип товара для проверки графика');
+        return false;
+    }
     
     const schedules = {
         'Сухой': { end: 16, endMinutes: 30 },
@@ -2178,48 +2175,62 @@ function checkScheduleViolation() {
     };
     
     const schedule = schedules[productType];
-    if (!schedule) return false;
+    if (!schedule) {
+        logToConsole('WARN', `Неизвестный тип товара для проверки графика: ${productType}`);
+        return false;
+    }
     
     const now = new Date();
     const hours = now.getHours();
     const minutes = now.getMinutes();
     
-    return hours > schedule.end || (hours === schedule.end && minutes > schedule.endMinutes);
+    const isViolation = hours > schedule.end || (hours === schedule.end && minutes > schedule.endMinutes);
+    
+    logToConsole('INFO', 'Проверка графика', {
+        productType: productType,
+        currentTime: `${hours}:${minutes}`,
+        endTime: `${schedule.end}:${schedule.endMinutes}`,
+        isViolation: isViolation
+    });
+    
+    return isViolation;
 }
 
 function assignGateAutomatically(legalEntity, productType) {
-    if (!productType || !legalEntity) {
-        return 'Не назначены (проверьте тип товара и юрлицо)';
-    }
-    
-    if (productType === 'Сухой') {
-        if (legalEntity === 'Гулливер') {
-            return 'с 31 по 36 (бакалея соль,мука и т.п,вода,консервы) и с 38 по 39 (кондитерка, уголь, пакеты, батарейки, жвачки и т.п)';
-        }
-        if (legalEntity === 'ТК Лето') {
-            return 'с 26 по 30, с 20 по 22 (для кондитерки)';
-        }
-    }
-    
-    if (productType === 'ФРЕШ') {
-        if (legalEntity === 'Гулливер') {
-            return 'с 45 по 51, с 5 по 8';
-        }
-        if (legalEntity === 'ТК Лето') {
-            return 'с 45 по 51';
-        }
-    }
-    
-    if (productType === 'ФРОВ') {
-        return 'с 9 по 11';
-    }
-    
-    if (productType === 'Акциз') {
-        return 'с 40 по 41';
-    }
-    
+  if (!productType || !legalEntity) {
     return 'Не назначены (проверьте тип товара и юрлицо)';
+  }
+  
+  // Ворота назначенные (более подробное описание для водителя)
+  if (productType === 'Сухой') {
+    if (legalEntity === 'Гулливер') {
+      return 'с 31 по 36 (бакалея соль, мука, вода, консервы) и с 38 по 39 (кондитерка, уголь, пакеты)';
+    }
+    if (legalEntity === 'ТК Лето') {
+      return 'с 26 по 30, с 20 по 22 (для кондитерки)';
+    }
+  }
+  
+  if (productType === 'ФРЕШ') {
+    if (legalEntity === 'Гулливер') {
+      return 'с 45 по 51, с 5 по 8 (мясо, куры, колбасы, сыры)';
+    }
+    if (legalEntity === 'ТК Лето') {
+      return 'с 45 по 51 (мясная продукция)';
+    }
+  }
+  
+  if (productType === 'ФРОВ') {
+    return 'с 9 по 11 (фрукты, овощи)';
+  }
+  
+  if (productType === 'Акциз') {
+    return 'с 40 по 41 (крепкий алкоголь)';
+  }
+  
+  return 'Не назначены (проверьте тип товара и юрлицо)';
 }
+
 function handleEnterKey(input) {
     const step = registrationState.step;
     
@@ -2388,6 +2399,7 @@ window.exportLogs = exportLogs;
 window.resetOfflineAttempts = resetOfflineAttempts;
 window.sendViaAlternativeMethod = sendViaAlternativeMethod;
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
 
 
 
