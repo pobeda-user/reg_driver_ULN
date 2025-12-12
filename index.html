@@ -1471,9 +1471,73 @@
         
         // Экспортируем CONFIG для использования в app.js
         window.CONFIG = CONFIG;
+        // Автоматическое обновление Service Worker
+if ('serviceWorker' in navigator) {
+    // Регистрируем Service Worker
+    navigator.serviceWorker.register('/reg_driver_ULN/service-worker.js', {
+        scope: '/reg_driver_ULN/'
+    }).then(registration => {
+        console.log('Service Worker зарегистрирован:', registration.scope);
+        
+        // Слушаем обновления
+        registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            console.log('Найден новый Service Worker:', newWorker);
+            
+            newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    // Новый SW установлен, но старый еще активен
+                    console.log('Новая версия доступна. Перезагрузите страницу.');
+                    
+                    // Показываем пользователю уведомление
+                    if (confirm('Доступна новая версия приложения. Обновить сейчас?')) {
+                        window.location.reload();
+                    }
+                }
+            });
+        });
+        
+        // Проверяем обновления при фокусе на странице
+        window.addEventListener('focus', () => {
+            registration.update().catch(err => 
+                console.log('Ошибка проверки обновлений:', err)
+            );
+        });
+        
+    }).catch(err => {
+        console.log('ServiceWorker не зарегистрирован:', err);
+    });
+    
+    // Принудительное обновление SW при загрузке
+    window.addEventListener('load', () => {
+        if (navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
+        }
+    });
+}
+
+// Принудительно обновляем Service Worker при необходимости
+function updateServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistration().then(registration => {
+            if (registration) {
+                registration.update().then(() => {
+                    console.log('Service Worker обновлен');
+                });
+            }
+        });
+    }
+}
+
+// Вызываем обновление каждые 30 минут
+setInterval(updateServiceWorker, 30 * 60 * 1000);
+
+// Также обновляем при каждом открытии приложения
+updateServiceWorker();
     </script>
 </body>
 </html>
+
 
 
 
