@@ -634,7 +634,7 @@ function selectTransit(answer) {
 
 // ==================== ШАГ 12: ПОДТВЕРЖДЕНИЕ ====================
 function showConfirmation() {
-    logToConsole('INFO', 'Показываю подтверждение');
+    logToConsole('INFO', 'Показываю подтверждение с исправленными данными');
     
     const container = document.getElementById('data-review');
     if (!container) return;
@@ -686,21 +686,33 @@ function showConfirmation() {
             <span class="data-label">📦 Транзит:</span>
             <span class="data-value">${data.transit || ''}</span>
         </div>
-        <div class="data-item highlight">
+        <div class="data-item">
             <span class="data-label">🚪 Ворота:</span>
             <span class="data-value">${data.gate || 'Не назначены'}</span>
         </div>
+        <div class="data-item">
+            <span class="data-label">⚠️ Опоздание:</span>
+            <span class="data-value">${data.scheduleViolation || 'Нет'}</span>
+        </div>
     `;
     
-    if (data.scheduleViolation === 'Да') {
+    if (data.problemTypes && data.problemTypes !== 'Нет') {
         html += `
             <div class="data-item warning">
-                <span class="data-label">⚠️ Нарушение графика:</span>
-                <span class="data-value">ДА</span>
+                <span class="data-label">🚨 Проблемы:</span>
+                <span class="data-value">${data.problemTypes}</span>
             </div>
         `;
     }
     
+    if (data.scheduleViolation === 'Да') {
+        html += `
+            <div class="data-item warning">
+                <span class="data-label">⏰ Нарушение графика:</span>
+                <span class="data-value">ДА</span>
+            </div>
+        `;
+    }    
     // Добавляем кнопку просмотра оффлайн данных
     const offlineCount = getOfflineDataCount();
     if (offlineCount > 0) {
@@ -1055,6 +1067,37 @@ async function sendViaAlternativeMethodForRegistration(data) {
       message: 'Не удалось отправить данные: ' + error.message
     };
   }
+}
+
+// ==================== ПРОВЕРКА ПРОБЛЕМ ====================
+function checkForProblems() {
+    const problems = [];
+    const data = registrationState.data;
+    
+    // Проверяем отсутствующие обязательные поля
+    const requiredFields = ['phone', 'fio', 'supplier', 'legalEntity', 'productType', 'vehicleNumber'];
+    const missingFields = requiredFields.filter(field => !data[field]);
+    
+    if (missingFields.length > 0) {
+        problems.push('Не заполнены обязательные поля');
+    }
+    
+    // Проверяем нарушение графика
+    if (data.scheduleViolation === 'Да') {
+        problems.push('Нарушение графика заезда');
+    }
+    
+    // Проверяем отсутствие номера заказа
+    if (!data.orderNumber || data.orderNumber === '0') {
+        problems.push('Нет номера заказа');
+    }
+    
+    // Проверяем отсутствие ЭТрН
+    if (!data.etrn || data.etrn === '0') {
+        problems.push('Нет ЭТрН');
+    }
+    
+    return problems.length > 0 ? problems.join(', ') : 'Нет';
 }
 
 // ==================== API ФУНКЦИИ ====================
@@ -2145,6 +2188,10 @@ function checkScheduleViolation() {
 }
 
 function assignGateAutomatically(legalEntity, productType) {
+    if (!productType || !legalEntity) {
+        return 'Не назначены (проверьте тип товара и юрлицо)';
+    }
+    
     if (productType === 'Сухой') {
         if (legalEntity === 'Гулливер') {
             return 'с 31 по 36 (бакалея соль,мука и т.п,вода,консервы) и с 38 по 39 (кондитерка, уголь, пакеты, батарейки, жвачки и т.п)';
@@ -2171,9 +2218,8 @@ function assignGateAutomatically(legalEntity, productType) {
         return 'с 40 по 41';
     }
     
-    return 'Не назначены';
+    return 'Не назначены (проверьте тип товара и юрлицо)';
 }
-
 function handleEnterKey(input) {
     const step = registrationState.step;
     
@@ -2342,6 +2388,7 @@ window.exportLogs = exportLogs;
 window.resetOfflineAttempts = resetOfflineAttempts;
 window.sendViaAlternativeMethod = sendViaAlternativeMethod;
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
 
 
 
