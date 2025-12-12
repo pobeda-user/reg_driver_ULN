@@ -981,7 +981,6 @@ async function sendViaAlternativeMethod(data) {
 }
 
 // ==================== API ФУНКЦИИ ====================
-// ==================== API ФУНКЦИИ ====================
 async function sendAPIRequest(requestData) {
   try {
     logToConsole('INFO', 'Отправляю API запрос', {
@@ -992,20 +991,27 @@ async function sendAPIRequest(requestData) {
     const action = requestData.action || 'unknown';
     
     // Для GET запросов используем GET метод с параметрами URL
-    if (action === 'get_suppliers' || action === 'ping' || action === 'get_popular_brands') {
+    if (action === 'get_suppliers' || action === 'ping' || action === 'get_popular_brands' || action === 'clear_cache' || action === 'test_cache') {
       const url = new URL(CONFIG.APP_SCRIPT_URL);
       
       // Добавляем параметры в URL
       Object.keys(requestData).forEach(key => {
         if (requestData[key] !== undefined && requestData[key] !== null) {
-          url.searchParams.append(key, requestData[key]);
+          // Для объектов сериализуем в JSON
+          if (typeof requestData[key] === 'object') {
+            url.searchParams.append(key, JSON.stringify(requestData[key]));
+          } else {
+            url.searchParams.append(key, requestData[key]);
+          }
         }
       });
       
-      // Добавляем timestamp для избежания кэширования
+      // Добавляем timestamp для избежания кэширования браузером
       url.searchParams.append('_t', Date.now());
       
       logToConsole('INFO', 'GET запрос URL', url.toString());
+      
+      const startTime = Date.now();
       
       // Отправляем GET запрос
       const response = await fetch(url.toString(), {
@@ -1017,13 +1023,30 @@ async function sendAPIRequest(requestData) {
         }
       });
       
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      
       logToConsole('INFO', 'GET статус ответа', {
         status: response.status,
         ok: response.ok,
+        duration: `${duration}ms`,
         url: url.toString()
       });
       
       if (!response.ok) {
+        let errorText = '';
+        try {
+          errorText = await response.text();
+        } catch (e) {
+          errorText = 'Не удалось прочитать текст ошибки';
+        }
+        
+        logToConsole('ERROR', 'HTTP ошибка', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText: errorText.substring(0, 200)
+        });
+        
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
@@ -1031,15 +1054,21 @@ async function sendAPIRequest(requestData) {
       
       try {
         const result = JSON.parse(text);
+        
         logToConsole('INFO', 'GET ответ получен', {
           success: result.success,
-          action: action
+          action: action,
+          duration: duration,
+          fromCache: result.fromCache || false,
+          suppliersCount: result.suppliers ? result.suppliers.length : 0
         });
+        
         return result;
       } catch (parseError) {
         logToConsole('ERROR', 'Ошибка парсинга JSON', {
           error: parseError.message,
-          rawText: text.substring(0, 200)
+          rawText: text.substring(0, 200),
+          url: url.toString()
         });
         
         // Если ответ содержит success в текстовом виде
@@ -1047,7 +1076,8 @@ async function sendAPIRequest(requestData) {
           return {
             success: true,
             message: 'Запрос обработан (парсинг не удался)',
-            rawResponse: text
+            rawResponse: text,
+            fromCache: text.includes('fromCache') || false
           };
         }
         
@@ -1055,11 +1085,14 @@ async function sendAPIRequest(requestData) {
       }
       
     } else {
-      // Для POST запросов
+      // Для POST запросов (register_driver и другие)
       logToConsole('INFO', 'Отправляю POST запрос', {
         url: CONFIG.APP_SCRIPT_URL,
+        action: action,
         dataSize: JSON.stringify(requestData).length
       });
+      
+      const startTime = Date.now();
       
       const response = await fetch(CONFIG.APP_SCRIPT_URL, {
         method: 'POST',
@@ -1071,24 +1104,33 @@ async function sendAPIRequest(requestData) {
         mode: 'cors'
       });
       
+      const endTime = Date.now();
+      const duration = endTime - startTime;
+      
       logToConsole('INFO', 'POST статус ответа', {
         status: response.status,
-        ok: response.ok
+        ok: response.ok,
+        duration: `${duration}ms`,
+        action: action
       });
       
       if (response.ok) {
         const text = await response.text();
         try {
           const result = JSON.parse(text);
+          
           logToConsole('INFO', 'POST ответ получен', {
             success: result.success,
-            action: action
+            action: action,
+            duration: duration
           });
+          
           return result;
         } catch (parseError) {
           logToConsole('ERROR', 'Ошибка парсинга JSON', {
             error: parseError.message,
-            rawText: text.substring(0, 200)
+            rawText: text.substring(0, 200),
+            action: action
           });
           
           if (text.includes('success')) {
@@ -1103,6 +1145,13 @@ async function sendAPIRequest(requestData) {
         }
       } else {
         const errorText = await response.text().catch(() => 'Не удалось прочитать ошибку');
+        
+        logToConsole('ERROR', 'POST HTTP ошибка', {
+          status: response.status,
+          errorText: errorText.substring(0, 200),
+          action: action
+        });
+        
         throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
     }
@@ -1112,13 +1161,24 @@ async function sendAPIRequest(requestData) {
       error: error.message,
       stack: error.stack,
       action: requestData.action,
-      url: CONFIG.APP_SCRIPT_URL
+      url: CONFIG.APP_SCRIPT_URL,
+      timestamp: new Date().toISOString()
     });
     
     // Пробуем альтернативный метод
-    return await sendViaAlternativeMethod(requestData);
+    try {
+      return await sendViaAlternativeMethod(requestData);
+    } catch (altError) {
+      logToConsole('ERROR', 'Альтернативный метод тоже не сработал', {
+        error: altError.message,
+        action: requestData.action
+      });
+      
+      throw new Error(`Не удалось отправить запрос: ${error.message}`);
+    }
   }
 }
+
 async function testAPIConnection() {
     try {
         logToConsole('INFO', 'Тестирую соединение с API');
@@ -2205,6 +2265,7 @@ window.exportLogs = exportLogs;
 window.resetOfflineAttempts = resetOfflineAttempts;
 window.sendViaAlternativeMethod = sendViaAlternativeMethod;
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
 
 
 
