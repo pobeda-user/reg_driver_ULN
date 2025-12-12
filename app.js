@@ -372,6 +372,120 @@ function handleManualSupplier() {
     showStep(4);
 }
 
+async function loadPopularBrands() {
+    logToConsole('INFO', 'Загрузка популярных марок авто');
+    
+    const container = document.getElementById('brand-buttons');
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div class="info-box">
+            <p>🔄 Загрузка популярных марок авто...</p>
+            <div class="loader" style="width: 20px; height: 20px; margin: 10px auto;"></div>
+        </div>
+    `;
+    
+    try {
+        // Используем GET запрос для получения марок
+        const response = await sendAPIRequest({
+            action: 'get_popular_brands'
+        });
+        
+        logToConsole('INFO', 'Ответ по маркам авто', {
+            success: response.success,
+            count: response.brands ? response.brands.length : 0
+        });
+        
+        if (response && response.success && response.brands && response.brands.length > 0) {
+            container.innerHTML = '';
+            
+            // Добавляем кнопки для популярных марок
+            response.brands.forEach((brand, index) => {
+                if (!brand || brand.trim() === '') return;
+                
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'option-btn';
+                button.innerHTML = `
+                    <span class="option-number">${index + 1}</span>
+                    <span class="option-text">${brand}</span>
+                `;
+                button.onclick = () => {
+                    logToConsole('INFO', 'Выбрана марка авто', { 
+                        brand,
+                        index: index + 1
+                    });
+                    selectBrand(brand);
+                };
+                container.appendChild(button);
+            });
+            
+            logToConsole('SUCCESS', `Загружено ${response.brands.length} популярных марок`);
+            
+        } else {
+            // Показываем стандартные марки если API не ответил
+            showDefaultBrands();
+            logToConsole('WARN', 'Используются стандартные марки авто', {
+                message: response?.message || 'Нет ответа от сервера'
+            });
+        }
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка загрузки марок авто', error);
+        
+        // В случае ошибки показываем стандартные марки
+        showDefaultBrands();
+        container.innerHTML += `
+            <div class="info-box warning" style="margin-top: 10px;">
+                <p>⚠️ Ошибка загрузки популярных марок</p>
+                <p>Вы можете ввести марку вручную ниже</p>
+            </div>
+        `;
+    }
+}
+
+function showDefaultBrands() {
+    const container = document.getElementById('brand-buttons');
+    if (!container) return;
+    
+    const defaultBrands = [
+        'Газель',
+        'Мерседес',
+        'Вольво',
+        'Скания',
+        'MAN',
+        'DAF',
+        'Ford',
+        'Renault',
+        'Iveco',
+        'Камаз',
+        'Hyundai',
+        'Киа',
+        'Тойота'
+    ];
+    
+    container.innerHTML = '';
+    
+    defaultBrands.forEach((brand, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'option-btn';
+        button.innerHTML = `
+            <span class="option-number">${index + 1}</span>
+            <span class="option-text">${brand}</span>
+        `;
+        button.onclick = () => {
+            logToConsole('INFO', 'Выбрана стандартная марка', { 
+                brand,
+                index: index + 1
+            });
+            selectBrand(brand);
+        };
+        container.appendChild(button);
+    });
+}
+
+
 // ==================== ШАГ 4: ЮРЛИЦО ====================
 function selectLegalEntity(entity) {
     logToConsole('INFO', 'Выбрано юрлицо', { entity });
@@ -389,6 +503,8 @@ function selectProductType(type) {
     registrationState.data.gate = gate;
     logToConsole('INFO', 'Назначены ворота', { gate });
     
+    // Загружаем популярные марки авто перед переходом на шаг 6
+    loadPopularBrands();
     showStep(6);
 }
 
@@ -2217,6 +2333,7 @@ window.exportLogs = exportLogs;
 window.resetOfflineAttempts = resetOfflineAttempts;
 window.sendViaAlternativeMethod = sendViaAlternativeMethod;
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
 
 
 
