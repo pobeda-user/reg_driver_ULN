@@ -1151,32 +1151,32 @@
 
         <!-- Шаг 11: Транзит -->
         <div class="step" data-step="11">
-            <div class="step-header">
-                <div class="step-number">11</div>
-                <h2>Транзит или местный?</h2>
-            </div>
-            <div class="step-content">
-                <div class="option-buttons">
-                    <button type="button" class="option-btn" onclick="selectTransit('Транзит')">
-                        <span class="option-number">1</span>
-                        <span class="option-text">Транзит (с перевалкой)</span>
-                    </button>
-                    <button type="button" class="option-btn" onclick="selectTransit('Местный')">
-                        <span class="option-number">2</span>
-                        <span class="option-text">Местный (без перевалкой)</span>
-                    </button>
-                </div>
-                <div class="info-box">
-                    <p>🔄 Транзит - товар следует через склад с перевалкой</p>
-                    <p>📍 Местный - товар доставляется непосредственно</p>
-                </div>
-                <div class="button-group">
-                    <button type="button" class="btn btn-secondary" onclick="goBack()">
-                        Назад
-                    </button>
-                </div>
-            </div>
+    <div class="step-header">
+        <div class="step-number">11</div>
+        <h2>Привезли ли вы транзит?</h2>
+    </div>
+    <div class="step-content">
+        <div class="option-buttons">
+            <button type="button" class="option-btn" onclick="selectTransit('Да')">
+                <span class="option-number">1</span>
+                <span class="option-text">Да (товар с перевалкой)</span>
+            </button>
+            <button type="button" class="option-btn" onclick="selectTransit('Нет')">
+                <span class="option-number">2</span>
+                <span class="option-text">Нет (товар без перевалки)</span>
+            </button>
         </div>
+        <div class="info-box">
+            <p>🔄 <strong>Транзит</strong> - товар следует через склад с перевалкой</p>
+            <p>📍 <strong>Без транзита</strong> - товар доставляется непосредственно</p>
+        </div>
+        <div class="button-group">
+            <button type="button" class="btn btn-secondary" onclick="goBack()">
+                Назад
+            </button>
+        </div>
+    </div>
+</div>
 
         <!-- Шаг 12: Подтверждение -->
         <div class="step" data-step="12">
@@ -1550,6 +1550,7 @@ updateServiceWorker();
     </script>
 </body>
 </html>
+
 
 
 
