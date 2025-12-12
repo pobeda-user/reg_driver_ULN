@@ -256,9 +256,7 @@ function handleFioSubmit() {
 
 // ==================== ШАГ 3: ПОСТАВЩИКИ ====================
 async function loadSupplierHistory() {
-  logToConsole('INFO', 'Загрузка истории поставщиков', {
-    phone: registrationState.data.phone
-  });
+  logToConsole('INFO', 'Загрузка истории поставщиков');
   
   const container = document.getElementById('supplier-buttons');
   const infoBox = document.getElementById('supplier-history-info');
@@ -270,36 +268,19 @@ async function loadSupplierHistory() {
     return;
   }
   
-  infoBox.innerHTML = `
-    <p>🔍 Ищу поставщиков...</p>
-    <div class="loader" style="width: 20px; height: 20px; margin: 10px auto;"></div>
-  `;
-  
-  container.innerHTML = '<div class="info-box">Загрузка истории поставщиков...</div>';
+  infoBox.innerHTML = '<p>🔍 Ищу поставщиков...</p>';
+  container.innerHTML = '<div class="info-box">Загрузка...</div>';
   
   try {
-    logToConsole('INFO', 'Запрос поставщиков на сервер', {
-      phone: registrationState.data.phone,
-      url: CONFIG.APP_SCRIPT_URL
-    });
-    
     const response = await sendAPIRequest({
       action: 'get_suppliers',
       phone: registrationState.data.phone
     });
     
-    logToConsole('INFO', 'Ответ от сервера по поставщикам', {
-      success: response.success,
-      count: response.suppliers ? response.suppliers.length : 0,
-      message: response.message || 'Нет сообщения'
-    });
+    logToConsole('INFO', 'Ответ поставщиков', response);
     
     if (response && response.success && response.suppliers && response.suppliers.length > 0) {
-      infoBox.innerHTML = `
-        <p>✅ Найдено поставщиков: ${response.suppliers.length}</p>
-        <p style="font-size: 12px; color: #666;">Выберите из истории:</p>
-      `;
-      
+      infoBox.innerHTML = `<p>✅ Найдено поставщиков: ${response.suppliers.length}</p>`;
       container.innerHTML = '';
       
       response.suppliers.forEach((supplier, index) => {
@@ -313,44 +294,21 @@ async function loadSupplierHistory() {
           <span class="option-text">${supplier}</span>
         `;
         button.onclick = () => {
-          logToConsole('INFO', 'Выбран поставщик из истории', { 
-            supplier,
-            index: index + 1
-          });
+          logToConsole('INFO', 'Выбран поставщик', { supplier });
           selectSupplier(supplier);
         };
         container.appendChild(button);
       });
       
-      // Добавляем разделитель
-      const separator = document.querySelector('.separator');
-      if (separator) {
-        separator.style.display = 'block';
-      }
-      
     } else {
-      const errorMessage = response.message || 'История поставщиков не найдена';
-      infoBox.innerHTML = `<p>📭 ${errorMessage}</p>`;
-      container.innerHTML = '<div class="info-box info">История не найдена. Введите поставщика вручную.</div>';
-      
-      logToConsole('WARN', 'Поставщики не найдены', {
-        phone: registrationState.data.phone,
-        message: response.message
-      });
+      const errorMsg = response?.message || 'История поставщиков не найдена';
+      infoBox.innerHTML = `<p>📭 ${errorMsg}</p>`;
+      container.innerHTML = '<div class="info-box">История не найдена. Введите поставщика вручную.</div>';
     }
     
   } catch (error) {
-    logToConsole('ERROR', 'Ошибка загрузки поставщиков', {
-      error: error.message,
-      stack: error.stack,
-      phone: registrationState.data.phone
-    });
-    
-    infoBox.innerHTML = `
-      <p>⚠️ Ошибка загрузки истории</p>
-      <p style="font-size: 12px; color: #666;">${error.message}</p>
-    `;
-    
+    logToConsole('ERROR', 'Ошибка загрузки поставщиков', error);
+    infoBox.innerHTML = '<p>⚠️ Ошибка загрузки истории</p>';
     container.innerHTML = `
       <div class="info-box warning">
         <p>Ошибка загрузки истории поставщиков</p>
@@ -986,83 +944,65 @@ async function sendViaAlternativeMethod(data) {
 
 // ==================== API ФУНКЦИИ ====================
 async function sendAPIRequest(requestData) {
-    try {
-        logToConsole('INFO', 'Отправляю API запрос', {
-            action: requestData.action,
-            dataSize: JSON.stringify(requestData).length
+  try {
+    logToConsole('INFO', 'Отправляю API запрос', {
+      action: requestData.action,
+      dataSize: JSON.stringify(requestData).length
+    });
+    
+    const startTime = Date.now();
+    
+    // Используем POST для всех запросов
+    const response = await fetch(CONFIG.APP_SCRIPT_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestData),
+      mode: 'cors'
+    });
+    
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    
+    logToConsole('INFO', 'Статус ответа API', { 
+      status: response.status, 
+      duration: `${duration}ms`,
+      action: requestData.action
+    });
+    
+    if (response.ok) {
+      const text = await response.text();
+      try {
+        const result = JSON.parse(text);
+        logToConsole('INFO', 'Ответ API получен', {
+          success: result.success,
+          action: requestData.action
         });
-        
-        const startTime = Date.now();
-        
-        const response = await fetch(CONFIG.APP_SCRIPT_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestData),
-            mode: 'cors'
+        return result;
+      } catch (parseError) {
+        logToConsole('ERROR', 'Ошибка парсинга JSON API', {
+          error: parseError.message,
+          rawText: text.substring(0, 200)
         });
-        
-        const endTime = Date.now();
-        const duration = endTime - startTime;
-        
-        logToConsole('INFO', 'Статус ответа API', { 
-            status: response.status,
-            duration: `${duration}ms`,
-            action: requestData.action
-        });
-        
-        if (response.ok) {
-            const text = await response.text();
-            try {
-                const result = JSON.parse(text);
-                logToConsole('INFO', 'Ответ API получен', {
-                    success: result.success,
-                    action: requestData.action,
-                    responseSize: text.length
-                });
-                return result;
-            } catch (parseError) {
-                logToConsole('ERROR', 'Ошибка парсинга JSON API', {
-                    error: parseError.message,
-                    action: requestData.action,
-                    rawText: text.substring(0, 200)
-                });
-                return { 
-                    success: false, 
-                    message: 'Неверный формат ответа API',
-                    action: requestData.action
-                };
-            }
-        } else {
-            let errorText = '';
-            try {
-                errorText = await response.text();
-            } catch (e) {
-                errorText = 'Не удалось прочитать текст ошибки';
-            }
-            
-            logToConsole('ERROR', 'HTTP ошибка API', { 
-                status: response.status,
-                action: requestData.action,
-                errorText: errorText.substring(0, 200),
-                url: CONFIG.APP_SCRIPT_URL
-            });
-            
-            throw new Error(`HTTP ошибка ${response.status} для действия ${requestData.action}`);
-        }
-        
-    } catch (error) {
-        logToConsole('ERROR', 'Ошибка отправки API запроса', {
-            error: error.message,
-            stack: error.stack,
-            action: requestData.action,
-            url: CONFIG.APP_SCRIPT_URL
-        });
-        throw error;
+        return { 
+          success: false, 
+          message: 'Неверный формат ответа API'
+        };
+      }
+    } else {
+      throw new Error(`HTTP ошибка ${response.status}`);
     }
+    
+  } catch (error) {
+    logToConsole('ERROR', 'Ошибка отправки API запроса', {
+      error: error.message,
+      stack: error.stack,
+      action: requestData.action
+    });
+    throw error;
+  }
 }
-
 async function testAPIConnection() {
     try {
         logToConsole('INFO', 'Тестирую соединение с API');
@@ -2122,6 +2062,7 @@ window.exportLogs = exportLogs;
 window.resetOfflineAttempts = resetOfflineAttempts;
 window.sendViaAlternativeMethod = sendViaAlternativeMethod;
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
 
 
 
