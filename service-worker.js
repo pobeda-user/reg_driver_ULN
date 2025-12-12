@@ -1,10 +1,10 @@
 // service-worker.js - ОБНОВЛЕННАЯ ВЕРСИЯ
 
 // ИЗМЕНИТЕ версию кэша при каждом обновлении
-const CACHE_NAME = 'driver-registration-v1.4'; // ← ИЗМЕНИТЕ версию
+const CACHE_NAME = 'driver-registration-v1.4'; // ← Должно совпадать с HTML
 const urlsToCache = [
   '/reg_driver_ULN/',
-  '/reg_driver_ULN/index.html?v=1.4', // ← Добавьте версию
+  '/reg_driver_ULN/index.html?v=1.4',
   '/reg_driver_ULN/app.js?v=1.4',
   '/reg_driver_ULN/styles.css?v=1.4',
   '/reg_driver_ULN/manifest.json',
@@ -88,3 +88,4 @@ self.addEventListener('fetch', event => {
             })
     );
 });
+
