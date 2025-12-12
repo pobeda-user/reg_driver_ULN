@@ -605,18 +605,27 @@ function handleEtrnSubmit() {
 }
 
 // ==================== ШАГ 11: ТРАНЗИТ ====================
-function selectTransit(type) {
-    logToConsole('INFO', 'Выбран тип доставки', { type });
-    registrationState.data.transit = type;
+function selectTransit(answer) {
+    logToConsole('INFO', 'Выбран ответ по транзиту', { answer });
+    registrationState.data.transit = answer;
     
     // Обновляем дату и время
     const now = new Date();
     registrationState.data.date = formatDate(now);
     registrationState.data.time = formatTime(now);
     
-    // Проверяем нарушение графика
+    // Проверяем нарушение графика (для столбца S)
     registrationState.data.scheduleViolation = checkScheduleViolation() ? 'Да' : 'Нет';
-    logToConsole('INFO', 'Нарушение графика', { violation: registrationState.data.scheduleViolation });
+    logToConsole('INFO', 'Нарушение графика', { 
+        violation: registrationState.data.scheduleViolation,
+        time: now.toLocaleTimeString()
+    });
+    
+    // Проверяем наличие проблем
+    registrationState.data.problemTypes = checkForProblems();
+    logToConsole('INFO', 'Типы проблем', { 
+        problemTypes: registrationState.data.problemTypes || 'Нет'
+    });
     
     // Показываем подтверждение
     showConfirmation();
@@ -2333,6 +2342,7 @@ window.exportLogs = exportLogs;
 window.resetOfflineAttempts = resetOfflineAttempts;
 window.sendViaAlternativeMethod = sendViaAlternativeMethod;
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
 
 
 
