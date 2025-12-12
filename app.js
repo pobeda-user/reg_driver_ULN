@@ -2149,6 +2149,33 @@ function showSuccessMessage(serverData = null) {
     container.innerHTML = html;
 }
 
+// ==================== ОЧИСТКА КЭША ====================
+async function clearCache() {
+  try {
+    showLoader(true);
+    
+    const response = await fetch(`${CONFIG.APP_SCRIPT_URL}?action=clear_cache&_t=${Date.now()}`);
+    const data = await response.json();
+    
+    showLoader(false);
+    
+    if (data.success) {
+      showNotification('✅ Кэш поставщиков очищен', 'success');
+      logToConsole('INFO', 'Кэш очищен', data);
+    } else {
+      showNotification('❌ Ошибка очистки кэша', 'error');
+      logToConsole('ERROR', 'Ошибка очистки кэша', data);
+    }
+  } catch (error) {
+    showLoader(false);
+    showNotification('❌ Ошибка сети при очистке кэша', 'error');
+    logToConsole('ERROR', 'Ошибка сети при очистке кэша', error);
+  }
+}
+
+// Экспортируем функцию для кнопки
+window.clearCache = clearCache;
+
 // ==================== ЭКСПОРТ ФУНКЦИЙ ====================
 window.handlePhoneSubmit = handlePhoneSubmit;
 window.handleFioSubmit = handleFioSubmit;
@@ -2178,6 +2205,7 @@ window.exportLogs = exportLogs;
 window.resetOfflineAttempts = resetOfflineAttempts;
 window.sendViaAlternativeMethod = sendViaAlternativeMethod;
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
 
 
 
