@@ -3,7 +3,7 @@
 // Конфигурация
 let CONFIG = {
     APP_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbzt-xQk-DSNfofBV5ewoioKNHJ8p7Idn3GDSu9PY6Dq-MSpl8NpgHiONiQgAcCfGwD0/exec',
-    APP_VERSION: '1.4'
+    APP_VERSION: '1.3'
 };
 
 // Глобальные переменные
@@ -760,6 +760,52 @@ async function submitRegistration() {
     } finally {
         showLoader(false);
     }
+}
+
+async function testConnection() {
+  const testUrl = CONFIG.APP_SCRIPT_URL + '?action=ping&test=' + Date.now();
+  
+  console.log('Тестирую:', testUrl);
+  
+  try {
+    // Пробуем через XMLHttpRequest как fallback
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', testUrl, true);
+    xhr.timeout = 10000;
+    
+    const result = await new Promise((resolve) => {
+      xhr.onload = () => resolve({ success: xhr.status === 200, status: xhr.status, response: xhr.responseText });
+      xhr.onerror = () => resolve({ success: false, error: 'Network error' });
+      xhr.ontimeout = () => resolve({ success: false, error: 'Timeout' });
+      xhr.send();
+    });
+    
+    console.log('Результат XHR:', result);
+    
+    // Пробуем fetch с разными опциями
+    try {
+      const response = await fetch(testUrl, {
+        method: 'GET',
+        mode: 'cors',
+        cache: 'no-cache'
+      });
+      
+      console.log('Fetch статус:', response.status, response.ok);
+      
+      if (response.ok) {
+        const data = await response.text();
+        console.log('Fetch ответ:', data);
+      }
+    } catch (fetchError) {
+      console.log('Fetch ошибка:', fetchError);
+    }
+    
+    return result.success;
+    
+  } catch (error) {
+    console.error('Ошибка теста:', error);
+    return false;
+  }
 }
 
 // ==================== ФУНКЦИЯ ОТПРАВКИ НА СЕРВЕР ====================
@@ -2076,6 +2122,7 @@ window.exportLogs = exportLogs;
 window.resetOfflineAttempts = resetOfflineAttempts;
 window.sendViaAlternativeMethod = sendViaAlternativeMethod;
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
 
 
 
