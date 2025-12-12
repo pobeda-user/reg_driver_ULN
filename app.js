@@ -256,60 +256,112 @@ function handleFioSubmit() {
 
 // ==================== ШАГ 3: ПОСТАВЩИКИ ====================
 async function loadSupplierHistory() {
-    logToConsole('INFO', 'Загрузка истории поставщиков');
+  logToConsole('INFO', 'Загрузка истории поставщиков', {
+    phone: registrationState.data.phone
+  });
+  
+  const container = document.getElementById('supplier-buttons');
+  const infoBox = document.getElementById('supplier-history-info');
+  
+  if (!container || !infoBox) return;
+  
+  if (!registrationState.data.phone) {
+    infoBox.innerHTML = '<p>❌ Нет номера телефона для поиска</p>';
+    return;
+  }
+  
+  infoBox.innerHTML = `
+    <p>🔍 Ищу поставщиков...</p>
+    <div class="loader" style="width: 20px; height: 20px; margin: 10px auto;"></div>
+  `;
+  
+  container.innerHTML = '<div class="info-box">Загрузка истории поставщиков...</div>';
+  
+  try {
+    logToConsole('INFO', 'Запрос поставщиков на сервер', {
+      phone: registrationState.data.phone,
+      url: CONFIG.APP_SCRIPT_URL
+    });
     
-    const container = document.getElementById('supplier-buttons');
-    const infoBox = document.getElementById('supplier-history-info');
+    const response = await sendAPIRequest({
+      action: 'get_suppliers',
+      phone: registrationState.data.phone
+    });
     
-    if (!container || !infoBox) return;
+    logToConsole('INFO', 'Ответ от сервера по поставщикам', {
+      success: response.success,
+      count: response.suppliers ? response.suppliers.length : 0,
+      message: response.message || 'Нет сообщения'
+    });
     
-    if (!registrationState.data.phone) {
-        infoBox.innerHTML = '<p>❌ Нет номера телефона для поиска</p>';
-        return;
+    if (response && response.success && response.suppliers && response.suppliers.length > 0) {
+      infoBox.innerHTML = `
+        <p>✅ Найдено поставщиков: ${response.suppliers.length}</p>
+        <p style="font-size: 12px; color: #666;">Выберите из истории:</p>
+      `;
+      
+      container.innerHTML = '';
+      
+      response.suppliers.forEach((supplier, index) => {
+        if (!supplier || supplier.trim() === '') return;
+        
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'option-btn';
+        button.innerHTML = `
+          <span class="option-number">${index + 1}</span>
+          <span class="option-text">${supplier}</span>
+        `;
+        button.onclick = () => {
+          logToConsole('INFO', 'Выбран поставщик из истории', { 
+            supplier,
+            index: index + 1
+          });
+          selectSupplier(supplier);
+        };
+        container.appendChild(button);
+      });
+      
+      // Добавляем разделитель
+      const separator = document.querySelector('.separator');
+      if (separator) {
+        separator.style.display = 'block';
+      }
+      
+    } else {
+      const errorMessage = response.message || 'История поставщиков не найдена';
+      infoBox.innerHTML = `<p>📭 ${errorMessage}</p>`;
+      container.innerHTML = '<div class="info-box info">История не найдена. Введите поставщика вручную.</div>';
+      
+      logToConsole('WARN', 'Поставщики не найдены', {
+        phone: registrationState.data.phone,
+        message: response.message
+      });
     }
     
-    infoBox.innerHTML = '<p>🔍 Ищу поставщиков...</p>';
-    container.innerHTML = '<div class="info-box">Загрузка...</div>';
+  } catch (error) {
+    logToConsole('ERROR', 'Ошибка загрузки поставщиков', {
+      error: error.message,
+      stack: error.stack,
+      phone: registrationState.data.phone
+    });
     
-    try {
-        const response = await sendAPIRequest({
-            action: 'get_suppliers',
-            phone: registrationState.data.phone
-        });
-        
-        logToConsole('INFO', 'Ответ поставщиков', response);
-        
-        if (response && response.success && response.suppliers && response.suppliers.length > 0) {
-            infoBox.innerHTML = `<p>✅ Найдено поставщиков: ${response.suppliers.length}</p>`;
-            container.innerHTML = '';
-            
-            response.suppliers.forEach((supplier, index) => {
-                if (!supplier || supplier.trim() === '') return;
-                
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'option-btn';
-                button.innerHTML = `
-                    <span class="option-number">${index + 1}</span>
-                    <span class="option-text">${supplier}</span>
-                `;
-                button.onclick = () => {
-                    logToConsole('INFO', 'Выбран поставщик', { supplier });
-                    selectSupplier(supplier);
-                };
-                container.appendChild(button);
-            });
-            
-        } else {
-            infoBox.innerHTML = '<p>📭 История поставщиков не найдена</p>';
-            container.innerHTML = '<div class="info-box">История не найдена. Введите поставщика вручную.</div>';
-        }
-        
-    } catch (error) {
-        logToConsole('ERROR', 'Ошибка загрузки поставщиков', error);
-        infoBox.innerHTML = '<p>⚠️ Ошибка загрузки истории</p>';
-        container.innerHTML = '<div class="info-box warning">Ошибка загрузки. Введите поставщика вручную.</div>';
-    }
+    infoBox.innerHTML = `
+      <p>⚠️ Ошибка загрузки истории</p>
+      <p style="font-size: 12px; color: #666;">${error.message}</p>
+    `;
+    
+    container.innerHTML = `
+      <div class="info-box warning">
+        <p>Ошибка загрузки истории поставщиков</p>
+        <p>Вы можете:</p>
+        <ol style="margin: 10px 0 10px 20px;">
+          <li>Ввести поставщика вручную ниже</li>
+          <li>Нажать "Назад" и повторить</li>
+        </ol>
+      </div>
+    `;
+  }
 }
 
 function selectSupplier(supplier) {
@@ -2024,6 +2076,7 @@ window.exportLogs = exportLogs;
 window.resetOfflineAttempts = resetOfflineAttempts;
 window.sendViaAlternativeMethod = sendViaAlternativeMethod;
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
 
 
 
