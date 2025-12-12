@@ -614,18 +614,25 @@ function selectTransit(answer) {
     registrationState.data.date = formatDate(now);
     registrationState.data.time = formatTime(now);
     
-    // Проверяем нарушение графика (для столбца S)
+    // Проверяем нарушение графика
     registrationState.data.scheduleViolation = checkScheduleViolation() ? 'Да' : 'Нет';
-    logToConsole('INFO', 'Нарушение графика', { 
-        violation: registrationState.data.scheduleViolation,
-        time: now.toLocaleTimeString(),
-        productType: registrationState.data.productType
-    });
     
-    // Проверяем наличие проблем
-    registrationState.data.problemTypes = checkForProblems();
-    logToConsole('INFO', 'Типы проблем', { 
-        problemTypes: registrationState.data.problemTypes || 'Нет'
+    // Проверяем наличие проблем (с отладкой)
+    const problemTypes = checkForProblems();
+    registrationState.data.problemTypes = problemTypes;
+    
+    // Отладочная информация
+    console.log('=== ОТЛАДКА ПРОБЛЕМ ===');
+    console.log('Тип товара:', registrationState.data.productType);
+    console.log('Номер заказа:', registrationState.data.orderNumber);
+    console.log('ЭТрН:', registrationState.data.etrn);
+    console.log('Опоздание:', registrationState.data.scheduleViolation);
+    console.log('Найденные проблемы:', problemTypes);
+    console.log('========================');
+    
+    logToConsole('INFO', 'Проблемы определены', { 
+        problemTypes: problemTypes,
+        hasProblems: problemTypes !== 'Нет'
     });
     
     // Показываем подтверждение
@@ -1064,16 +1071,37 @@ async function sendViaAlternativeMethodForRegistration(data) {
 }
 
 // ==================== ПРОВЕРКА ПРОБЛЕМ ====================
+// ==================== ПРОВЕРКА ПРОБЛЕМ ====================
 function checkForProblems() {
     const problems = [];
     const data = registrationState.data;
     
     // Проверяем отсутствующие обязательные поля
     const requiredFields = ['phone', 'fio', 'supplier', 'legalEntity', 'productType', 'vehicleNumber'];
-    const missingFields = requiredFields.filter(field => !data[field]);
+    const missingFields = requiredFields.filter(field => !data[field] || data[field].toString().trim() === '');
     
     if (missingFields.length > 0) {
-        problems.push('Не заполнены обязательные поля');
+        const fieldNames = {
+            'phone': 'Телефон',
+            'fio': 'ФИО',
+            'supplier': 'Поставщик',
+            'legalEntity': 'Юрлицо',
+            'productType': 'Тип товара',
+            'vehicleNumber': 'Номер ТС'
+        };
+        
+        const missingFieldNames = missingFields.map(field => fieldNames[field] || field);
+        problems.push(`Не заполнены: ${missingFieldNames.join(', ')}`);
+    }
+    
+    // Проверяем отсутствие номера заказа или значение 0
+    if (!data.orderNumber || data.orderNumber.toString().trim() === '' || data.orderNumber.toString().trim() === '0') {
+        problems.push('Отсутствует номер заказа');
+    }
+    
+    // Проверяем отсутствие ЭТрН или значение 0
+    if (!data.etrn || data.etrn.toString().trim() === '' || data.etrn.toString().trim() === '0') {
+        problems.push('Отсутствует ЭТрН');
     }
     
     // Проверяем нарушение графика
@@ -1081,17 +1109,16 @@ function checkForProblems() {
         problems.push('Нарушение графика заезда');
     }
     
-    // Проверяем отсутствие номера заказа
-    if (!data.orderNumber || data.orderNumber === '0') {
-        problems.push('Нет номера заказа');
-    }
+    // Логируем для отладки
+    logToConsole('INFO', 'Проверка проблем', {
+        problemsFound: problems,
+        hasProblems: problems.length > 0,
+        orderNumber: data.orderNumber,
+        etrn: data.etrn,
+        scheduleViolation: data.scheduleViolation
+    });
     
-    // Проверяем отсутствие ЭТрН
-    if (!data.etrn || data.etrn === '0') {
-        problems.push('Нет ЭТрН');
-    }
-    
-    return problems.length > 0 ? problems.join(', ') : 'Нет';
+    return problems.length > 0 ? problems.join('; ') : 'Нет';
 }
 
 // ==================== API ФУНКЦИИ ====================
@@ -2399,6 +2426,7 @@ window.exportLogs = exportLogs;
 window.resetOfflineAttempts = resetOfflineAttempts;
 window.sendViaAlternativeMethod = sendViaAlternativeMethod;
 logToConsole('INFO', 'app.js загружен и готов к работе');
+
 
 
 
