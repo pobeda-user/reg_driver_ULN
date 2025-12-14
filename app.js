@@ -1,10 +1,14 @@
-// app.js v1.3 - ПОЛНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ
+// app.js v1.4 - ПОЛНАЯ ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ТОП-ДАННЫМИ
 
 // Конфигурация
 let CONFIG = {
     APP_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbzt-xQk-DSNfofBV5ewoioKNHJ8p7Idn3GDSu9PY6Dq-MSpl8NpgHiONiQgAcCfGwD0/exec',
     APP_VERSION: '1.4'
 };
+
+// Константы для кэширования ТОП-данных
+const TOP_DATA_CACHE_KEY = 'driver_registration_top_data';
+const TOP_DATA_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 часа
 
 // Глобальные переменные
 let registrationState = {
@@ -28,7 +32,84 @@ let registrationState = {
     }
 };
 
-// Логирование
+// ==================== КЭШИРОВАНИЕ ТОП-ДАННЫХ ====================
+
+// Загрузка ТОП-данных при старте приложения
+async function loadTopData() {
+  try {
+    logToConsole('INFO', 'Загрузка ТОП данных');
+    
+    // Проверяем локальный кэш
+    const cached = localStorage.getItem(TOP_DATA_CACHE_KEY);
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      const age = Date.now() - timestamp;
+      
+      // Если кэш свежий (менее 24 часов), используем его
+      if (age < TOP_DATA_CACHE_TTL) {
+        logToConsole('INFO', 'Использую ТОП данные из кэша', {
+          age: Math.round(age / 1000 / 60) + ' минут',
+          suppliers: data.suppliers?.length || 0,
+          brands: data.brands?.length || 0
+        });
+        return data;
+      }
+    }
+    
+    // Загружаем с сервера
+    const response = await sendAPIRequest({
+      action: 'get_top_data'
+    });
+    
+    if (response && response.success) {
+      // Сохраняем в кэш
+      const cacheData = {
+        data: response,
+        timestamp: Date.now()
+      };
+      localStorage.setItem(TOP_DATA_CACHE_KEY, JSON.stringify(cacheData));
+      
+      logToConsole('SUCCESS', 'ТОП данные загружены и сохранены', {
+        suppliers: response.suppliers?.length || 0,
+        brands: response.brands?.length || 0,
+        fromCache: response.fromCache || false
+      });
+      
+      return response;
+    } else {
+      throw new Error('Не удалось загрузить ТОП данные');
+    }
+    
+  } catch (error) {
+    logToConsole('ERROR', 'Ошибка загрузки ТОП данных', error);
+    
+    // Пробуем использовать старый кэш даже если он устарел
+    const cached = localStorage.getItem(TOP_DATA_CACHE_KEY);
+    if (cached) {
+      const { data } = JSON.parse(cached);
+      logToConsole('WARN', 'Использую устаревшие ТОП данные из кэша');
+      return data;
+    }
+    
+    return null;
+  }
+}
+
+// Принудительное обновление ТОП-данных
+async function refreshTopData() {
+  try {
+    logToConsole('INFO', 'Принудительное обновление ТОП данных');
+    localStorage.removeItem(TOP_DATA_CACHE_KEY);
+    await loadTopData();
+    showNotification('✅ ТОП данные обновлены', 'success');
+  } catch (error) {
+    logToConsole('ERROR', 'Ошибка обновления ТОП данных', error);
+    showNotification('❌ Ошибка обновления данных', 'error');
+  }
+}
+
+// ==================== ЛОГИРОВАНИЕ ====================
+
 function logToConsole(level, message, data = null) {
     const timestamp = new Date().toLocaleString('ru-RU');
     
@@ -93,6 +174,7 @@ function logToConsole(level, message, data = null) {
 }
 
 // ==================== ИНИЦИАЛИЗАЦИЯ ====================
+
 document.addEventListener('DOMContentLoaded', function() {
     logToConsole('INFO', 'Приложение загружается', { version: CONFIG.APP_VERSION });
     
@@ -109,6 +191,15 @@ document.addEventListener('DOMContentLoaded', function() {
     setupPhoneInput();
     setupEventListeners();
     
+    // ПРЕДВАРИТЕЛЬНАЯ ЗАГРУЗКА ТОП ДАННЫХ (в фоне)
+    setTimeout(() => {
+        loadTopData().then(() => {
+            logToConsole('INFO', 'Предварительная загрузка ТОП данных завершена');
+        }).catch(error => {
+            logToConsole('ERROR', 'Ошибка предварительной загрузки ТОП данных', error);
+        });
+    }, 1000);
+    
     // Показываем текущий шаг
     showStep(registrationState.step);
     
@@ -121,12 +212,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 1000);
     
     // Периодическая проверка соединения
-    setInterval(checkConnectionAndSendOffline, 60000); // Каждую минуту
+    setInterval(checkConnectionAndSendOffline, 60000);
     
     logToConsole('INFO', 'Приложение инициализировано');
 });
 
 // ==================== ОБРАБОТЧИКИ СОБЫТИЙ ====================
+
 function setupEventListeners() {
     // Обработка Enter в полях ввода
     document.addEventListener('keypress', function(e) {
@@ -156,6 +248,7 @@ function setupEventListeners() {
 }
 
 // ==================== НАВИГАЦИЯ ====================
+
 function showStep(stepNumber) {
     logToConsole('INFO', `Переход к шагу: ${stepNumber}`);
     
@@ -191,6 +284,7 @@ function goBack() {
 }
 
 // ==================== ШАГ 1: ТЕЛЕФОН ====================
+
 function setupPhoneInput() {
     const phoneInput = document.getElementById('phone-input');
     if (!phoneInput) return;
@@ -234,6 +328,7 @@ async function handlePhoneSubmit() {
 }
 
 // ==================== ШАГ 2: ФИО ====================
+
 function handleFioSubmit() {
     const fioInput = document.getElementById('fio-input');
     if (!fioInput) return;
@@ -249,14 +344,15 @@ function handleFioSubmit() {
     registrationState.data.fio = fio;
     logToConsole('INFO', 'ФИО сохранено', { fio });
     
-    // Загружаем историю поставщиков
-    loadSupplierHistory();
+    // Используем оптимизированный поиск поставщиков
+    loadSupplierHistoryOptimized();
     showStep(3);
 }
 
-// ==================== ШАГ 3: ПОСТАВЩИКИ ====================
-async function loadSupplierHistory() {
-  logToConsole('INFO', 'Загрузка истории поставщиков', {
+// ==================== ШАГ 3: ПОСТАВЩИКИ (ОПТИМИЗИРОВАННЫЙ) ====================
+
+async function loadSupplierHistoryOptimized() {
+  logToConsole('INFO', 'Оптимизированный поиск поставщиков', {
     phone: registrationState.data.phone
   });
   
@@ -278,75 +374,110 @@ async function loadSupplierHistory() {
   container.innerHTML = '<div class="info-box">Загрузка истории поставщиков...</div>';
   
   try {
-    // Используем GET запрос с параметрами в URL
+    // 1. Сначала пробуем найти в локальных ТОП данных
+    const topData = await loadTopData();
+    
+    if (topData && topData.phoneSuppliers) {
+      const cleanPhone = normalizePhone(registrationState.data.phone);
+      const last7Digits = cleanPhone.slice(-7);
+      
+      let suppliers = [];
+      
+      // Ищем в локальных данных
+      // Прямое совпадение
+      if (topData.phoneSuppliers[cleanPhone]) {
+        suppliers = topData.phoneSuppliers[cleanPhone];
+      }
+      
+      // Поиск по последним 7 цифрам
+      if (suppliers.length === 0) {
+        Object.keys(topData.phoneSuppliers).forEach(storedPhone => {
+          if (storedPhone.slice(-7) === last7Digits) {
+            suppliers = suppliers.concat(topData.phoneSuppliers[storedPhone]);
+          }
+        });
+      }
+      
+      // Убираем дубликаты
+      const uniqueSuppliers = [...new Set(suppliers)];
+      
+      if (uniqueSuppliers.length > 0) {
+        logToConsole('INFO', 'Поставщики найдены в локальных ТОП данных', {
+          count: uniqueSuppliers.length,
+          source: 'local_cache'
+        });
+        
+        displaySuppliers(uniqueSuppliers, container, infoBox);
+        return;
+      }
+    }
+    
+    // 2. Если в локальных данных не нашли, запрашиваем с сервера
+    logToConsole('INFO', 'Запрашиваю поставщиков с сервера');
+    
     const response = await sendAPIRequest({
-      action: 'get_suppliers',
+      action: 'get_suppliers_optimized',
       phone: registrationState.data.phone
     });
     
-    logToConsole('INFO', 'Ответ от сервера по поставщикам', {
-      success: response.success,
-      count: response.suppliers ? response.suppliers.length : 0,
-      message: response.message || 'Нет сообщения'
-    });
-    
     if (response && response.success && response.suppliers && response.suppliers.length > 0) {
-      infoBox.innerHTML = `
-        <p>✅ Найдено поставщиков: ${response.suppliers.length}</p>
-        <p style="font-size: 12px; color: #666;">Выберите из истории:</p>
-      `;
-      
-      container.innerHTML = '';
-      
-      response.suppliers.forEach((supplier, index) => {
-        if (!supplier || supplier.trim() === '') return;
-        
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'option-btn';
-        button.innerHTML = `
-          <span class="option-number">${index + 1}</span>
-          <span class="option-text">${supplier}</span>
-        `;
-        button.onclick = () => {
-          logToConsole('INFO', 'Выбран поставщик из истории', { 
-            supplier,
-            index: index + 1
-          });
-          selectSupplier(supplier);
-        };
-        container.appendChild(button);
+      logToConsole('INFO', 'Поставщики получены с сервера', {
+        count: response.suppliers.length,
+        searchMethod: response.searchMethod
       });
       
+      displaySuppliers(response.suppliers, container, infoBox);
+      
     } else {
-      const errorMessage = response.message || 'История поставщиков не найдена';
+      const errorMessage = response?.message || 'История поставщиков не найдена';
       infoBox.innerHTML = `<p>📭 ${errorMessage}</p>`;
       container.innerHTML = '<div class="info-box info">История не найдена. Введите поставщика вручную.</div>';
     }
     
   } catch (error) {
-    logToConsole('ERROR', 'Ошибка загрузки поставщиков', {
-      error: error.message,
-      stack: error.stack,
-      phone: registrationState.data.phone
-    });
+    logToConsole('ERROR', 'Ошибка поиска поставщиков', error);
     
     infoBox.innerHTML = `
       <p>⚠️ Ошибка загрузки истории</p>
-      <p style="font-size: 12px; color: #666;">${error.message}</p>
+      <p style="font-size: 12px; color: #666;">Вы можете ввести поставщика вручную ниже</p>
     `;
     
     container.innerHTML = `
       <div class="info-box warning">
         <p>Ошибка загрузки истории поставщиков</p>
-        <p>Вы можете:</p>
-        <ol style="margin: 10px 0 10px 20px;">
-          <li>Ввести поставщика вручную ниже</li>
-          <li>Нажать "Назад" и повторить</li>
-        </ol>
       </div>
     `;
   }
+}
+
+// Вспомогательная функция для отображения поставщиков
+function displaySuppliers(suppliers, container, infoBox) {
+  infoBox.innerHTML = `
+    <p>✅ Найдено поставщиков: ${suppliers.length}</p>
+    <p style="font-size: 12px; color: #666;">Выберите из истории:</p>
+  `;
+  
+  container.innerHTML = '';
+  
+  suppliers.forEach((supplier, index) => {
+    if (!supplier || supplier.trim() === '') return;
+    
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'option-btn';
+    button.innerHTML = `
+      <span class="option-number">${index + 1}</span>
+      <span class="option-text">${supplier}</span>
+    `;
+    button.onclick = () => {
+      logToConsole('INFO', 'Выбран поставщик из истории', { 
+        supplier,
+        index: index + 1
+      });
+      selectSupplier(supplier);
+    };
+    container.appendChild(button);
+  });
 }
 
 function selectSupplier(supplier) {
@@ -372,78 +503,120 @@ function handleManualSupplier() {
     showStep(4);
 }
 
-async function loadPopularBrands() {
-    logToConsole('INFO', 'Загрузка популярных марок авто');
-    
-    const container = document.getElementById('brand-buttons');
-    if (!container) return;
-    
-    container.innerHTML = `
-        <div class="info-box">
-            <p>🔄 Загрузка популярных марок авто...</p>
-            <div class="loader" style="width: 20px; height: 20px; margin: 10px auto;"></div>
-        </div>
-    `;
-    
-    try {
-        // Используем GET запрос для получения марок
-        const response = await sendAPIRequest({
-            action: 'get_popular_brands'
-        });
-        
-        logToConsole('INFO', 'Ответ по маркам авто', {
-            success: response.success,
-            count: response.brands ? response.brands.length : 0
-        });
-        
-        if (response && response.success && response.brands && response.brands.length > 0) {
-            container.innerHTML = '';
-            
-            // Добавляем кнопки для популярных марок
-            response.brands.forEach((brand, index) => {
-                if (!brand || brand.trim() === '') return;
-                
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'option-btn';
-                button.innerHTML = `
-                    <span class="option-number">${index + 1}</span>
-                    <span class="option-text">${brand}</span>
-                `;
-                button.onclick = () => {
-                    logToConsole('INFO', 'Выбрана марка авто', { 
-                        brand,
-                        index: index + 1
-                    });
-                    selectBrand(brand);
-                };
-                container.appendChild(button);
-            });
-            
-            logToConsole('SUCCESS', `Загружено ${response.brands.length} популярных марок`);
-            
-        } else {
-            // Показываем стандартные марки если API не ответил
-            showDefaultBrands();
-            logToConsole('WARN', 'Используются стандартные марки авто', {
-                message: response?.message || 'Нет ответа от сервера'
-            });
-        }
-        
-    } catch (error) {
-        logToConsole('ERROR', 'Ошибка загрузки марок авто', error);
-        
-        // В случае ошибки показываем стандартные марки
-        showDefaultBrands();
-        container.innerHTML += `
-            <div class="info-box warning" style="margin-top: 10px;">
-                <p>⚠️ Ошибка загрузки популярных марок</p>
-                <p>Вы можете ввести марку вручную ниже</p>
-            </div>
-        `;
-    }
+// ==================== ШАГ 4: ЮРЛИЦО ====================
+
+function selectLegalEntity(entity) {
+    logToConsole('INFO', 'Выбрано юрлицо', { entity });
+    registrationState.data.legalEntity = entity;
+    showStep(5);
 }
 
+// ==================== ШАГ 5: ТИП ТОВАРА ====================
+
+function selectProductType(type) {
+    logToConsole('INFO', 'Выбран тип товара', { type });
+    registrationState.data.productType = type;
+    
+    // Автоматическое назначение ворот
+    const gate = assignGateAutomatically(registrationState.data.legalEntity, type);
+    registrationState.data.gate = gate;
+    logToConsole('INFO', 'Назначены ворота', { gate });
+    
+    // Используем оптимизированную загрузку марок
+    loadPopularBrandsOptimized();
+    showStep(6);
+}
+
+// ==================== ШАГ 6: МАРКА АВТО (ОПТИМИЗИРОВАННАЯ) ====================
+
+async function loadPopularBrandsOptimized() {
+  logToConsole('INFO', 'Оптимизированная загрузка марок авто');
+  
+  const container = document.getElementById('brand-buttons');
+  if (!container) return;
+  
+  container.innerHTML = `
+    <div class="info-box">
+      <p>🔄 Загрузка популярных марок авто...</p>
+      <div class="loader" style="width: 20px; height: 20px; margin: 10px auto;"></div>
+    </div>
+  `;
+  
+  try {
+    // 1. Сначала пробуем из локальных ТОП данных
+    const topData = await loadTopData();
+    
+    if (topData && topData.brands && topData.brands.length > 0) {
+      logToConsole('INFO', 'Марки загружены из локальных ТОП данных', {
+        count: topData.brands.length,
+        source: 'local_cache'
+      });
+      
+      displayBrands(topData.brands, container);
+      return;
+    }
+    
+    // 2. Если нет локальных данных, запрашиваем с сервера
+    const response = await sendAPIRequest({
+      action: 'get_brands_optimized'
+    });
+    
+    if (response && response.success && response.brands && response.brands.length > 0) {
+      logToConsole('INFO', 'Марки получены с сервера', {
+        count: response.brands.length,
+        fromTopData: response.fromTopData || false
+      });
+      
+      displayBrands(response.brands, container);
+      
+    } else {
+      // 3. Fallback: стандартные марки
+      logToConsole('WARN', 'Использую стандартные марки авто');
+      showDefaultBrands();
+    }
+    
+  } catch (error) {
+    logToConsole('ERROR', 'Ошибка загрузки марок авто', error);
+    
+    // В случае ошибки показываем стандартные марки
+    showDefaultBrands();
+    container.innerHTML += `
+      <div class="info-box warning" style="margin-top: 10px;">
+        <p>⚠️ Ошибка загрузки популярных марок</p>
+        <p>Вы можете ввести марку вручную ниже</p>
+      </div>
+    `;
+  }
+}
+
+// Вспомогательная функция для отображения марок
+function displayBrands(brands, container) {
+  container.innerHTML = '';
+  
+  brands.forEach((brand, index) => {
+    if (!brand || brand.trim() === '') return;
+    
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'option-btn';
+    button.innerHTML = `
+      <span class="option-number">${index + 1}</span>
+      <span class="option-text">${brand}</span>
+    `;
+    button.onclick = () => {
+      logToConsole('INFO', 'Выбрана марка авто', { 
+        brand,
+        index: index + 1
+      });
+      selectBrand(brand);
+    };
+    container.appendChild(button);
+  });
+  
+  logToConsole('SUCCESS', `Отображено ${brands.length} марок авто`);
+}
+
+// Функция показа стандартных марок
 function showDefaultBrands() {
     const container = document.getElementById('brand-buttons');
     if (!container) return;
@@ -485,30 +658,6 @@ function showDefaultBrands() {
     });
 }
 
-
-// ==================== ШАГ 4: ЮРЛИЦО ====================
-function selectLegalEntity(entity) {
-    logToConsole('INFO', 'Выбрано юрлицо', { entity });
-    registrationState.data.legalEntity = entity;
-    showStep(5);
-}
-
-// ==================== ШАГ 5: ТИП ТОВАРА ====================
-function selectProductType(type) {
-    logToConsole('INFO', 'Выбран тип товара', { type });
-    registrationState.data.productType = type;
-    
-    // Автоматическое назначение ворот
-    const gate = assignGateAutomatically(registrationState.data.legalEntity, type);
-    registrationState.data.gate = gate;
-    logToConsole('INFO', 'Назначены ворота', { gate });
-    
-    // Загружаем популярные марки авто перед переходом на шаг 6
-    loadPopularBrands();
-    showStep(6);
-}
-
-// ==================== ШАГ 6: МАРКА АВТО ====================
 function selectBrand(brand) {
     logToConsole('INFO', 'Выбрана марка авто', { brand });
     registrationState.data.vehicleType = brand;
@@ -533,6 +682,7 @@ function handleManualBrand() {
 }
 
 // ==================== ШАГ 7: НОМЕР ТС ====================
+
 function handleVehicleNumberSubmit() {
     const input = document.getElementById('vehicle-number-input');
     if (!input) return;
@@ -551,6 +701,7 @@ function handleVehicleNumberSubmit() {
 }
 
 // ==================== ШАГ 8: ПОДДОНЫ ====================
+
 function handlePalletsSubmit() {
     const input = document.getElementById('pallets-input');
     if (!input) return;
@@ -569,6 +720,7 @@ function handlePalletsSubmit() {
 }
 
 // ==================== ШАГ 9: НОМЕР ЗАКАЗА ====================
+
 function handleOrderSubmit() {
     const input = document.getElementById('order-input');
     if (!input) return;
@@ -587,6 +739,7 @@ function handleOrderSubmit() {
 }
 
 // ==================== ШАГ 10: ЭТРН ====================
+
 function handleEtrnSubmit() {
     const input = document.getElementById('etrn-input');
     if (!input) return;
@@ -605,6 +758,7 @@ function handleEtrnSubmit() {
 }
 
 // ==================== ШАГ 11: ТРАНЗИТ ====================
+
 function selectTransit(answer) {
     logToConsole('INFO', 'Выбран ответ по транзиту', { answer });
     registrationState.data.transit = answer;
@@ -633,7 +787,7 @@ function selectTransit(answer) {
 }
 
 // ==================== ШАГ 12: ПОДТВЕРЖДЕНИЕ ====================
-// ==================== ШАГ 12: ПОДТВЕРЖДЕНИЕ ====================
+
 function showConfirmation() {
     logToConsole('INFO', 'Показываю подтверждение с исправленными данными');
     
@@ -712,6 +866,7 @@ function showConfirmation() {
 }
 
 // ==================== ШАГ 13: ОТПРАВКА ====================
+
 async function submitRegistration() {
     logToConsole('INFO', 'Начинаю отправку регистрации', {
         data: registrationState.data,
@@ -829,53 +984,8 @@ async function submitRegistration() {
     }
 }
 
-async function testConnection() {
-  const testUrl = CONFIG.APP_SCRIPT_URL + '?action=ping&test=' + Date.now();
-  
-  console.log('Тестирую:', testUrl);
-  
-  try {
-    // Пробуем через XMLHttpRequest как fallback
-    const xhr = new XMLHttpRequest();
-    xhr.open('GET', testUrl, true);
-    xhr.timeout = 10000;
-    
-    const result = await new Promise((resolve) => {
-      xhr.onload = () => resolve({ success: xhr.status === 200, status: xhr.status, response: xhr.responseText });
-      xhr.onerror = () => resolve({ success: false, error: 'Network error' });
-      xhr.ontimeout = () => resolve({ success: false, error: 'Timeout' });
-      xhr.send();
-    });
-    
-    console.log('Результат XHR:', result);
-    
-    // Пробуем fetch с разными опциями
-    try {
-      const response = await fetch(testUrl, {
-        method: 'GET',
-        mode: 'cors',
-        cache: 'no-cache'
-      });
-      
-      console.log('Fetch статус:', response.status, response.ok);
-      
-      if (response.ok) {
-        const data = await response.text();
-        console.log('Fetch ответ:', data);
-      }
-    } catch (fetchError) {
-      console.log('Fetch ошибка:', fetchError);
-    }
-    
-    return result.success;
-    
-  } catch (error) {
-    console.error('Ошибка теста:', error);
-    return false;
-  }
-}
-
 // ==================== ФУНКЦИЯ ОТПРАВКИ НА СЕРВЕР ====================
+
 async function sendRegistrationToServer(data) {
   try {
     // Добавляем уникальный ID регистрации
@@ -890,8 +1000,7 @@ async function sendRegistrationToServer(data) {
       clientTime: data._clientTimestamp
     });
     
-    // ИСПРАВЛЕНИЕ: Используем GET запрос вместо POST для регистрации
-    // Google Apps Script лучше работает с GET для веб-приложений
+    // Используем GET запрос вместо POST для регистрации
     const url = new URL(CONFIG.APP_SCRIPT_URL);
     url.searchParams.append('action', 'register_driver');
     url.searchParams.append('data', JSON.stringify(data));
@@ -941,7 +1050,6 @@ async function sendRegistrationToServer(data) {
         url: CONFIG.APP_SCRIPT_URL
       });
       
-      // Проверяем, если это HTML страница с ошибкой
       if (text.includes('<!DOCTYPE') || text.includes('<html')) {
         logToConsole('ERROR', 'Получен HTML вместо JSON');
         return { 
@@ -973,12 +1081,11 @@ async function sendRegistrationToServer(data) {
 }
 
 // ==================== АЛЬТЕРНАТИВНЫЙ МЕТОД ОТПРАВКИ ====================
-// ==================== АЛЬТЕРНАТИВНЫЙ МЕТОД ОТПРАВКИ ====================
+
 async function sendViaAlternativeMethodForRegistration(data) {
   try {
     logToConsole('INFO', 'Пробую альтернативный метод регистрации');
     
-    // Используем POST с более простыми заголовками
     const url = CONFIG.APP_SCRIPT_URL;
     
     const response = await fetch(url, {
@@ -987,7 +1094,7 @@ async function sendViaAlternativeMethodForRegistration(data) {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: `action=register_driver&data=${encodeURIComponent(JSON.stringify(data))}`,
-      mode: 'no-cors' // Пробуем no-cors режим
+      mode: 'no-cors'
     });
     
     logToConsole('INFO', 'Альтернативный метод статус', {
@@ -995,7 +1102,6 @@ async function sendViaAlternativeMethodForRegistration(data) {
       url: url
     });
     
-    // В режиме no-cors мы не можем прочитать ответ, только проверить что запрос отправлен
     return {
       success: true,
       message: 'Данные отправлены (no-cors режим)',
@@ -1014,58 +1120,8 @@ async function sendViaAlternativeMethodForRegistration(data) {
   }
 }
 
-// ==================== ПРОВЕРКА ПРОБЛЕМ ====================
-// ==================== ПРОВЕРКА ПРОБЛЕМ ====================
-function checkForProblems() {
-    const problems = [];
-    const data = registrationState.data;
-    
-    // Проверяем отсутствующие обязательные поля
-    const requiredFields = ['phone', 'fio', 'supplier', 'legalEntity', 'productType', 'vehicleNumber'];
-    const missingFields = requiredFields.filter(field => !data[field] || data[field].toString().trim() === '');
-    
-    if (missingFields.length > 0) {
-        const fieldNames = {
-            'phone': 'Телефон',
-            'fio': 'ФИО',
-            'supplier': 'Поставщик',
-            'legalEntity': 'Юрлицо',
-            'productType': 'Тип товара',
-            'vehicleNumber': 'Номер ТС'
-        };
-        
-        const missingFieldNames = missingFields.map(field => fieldNames[field] || field);
-        problems.push(`Не заполнены: ${missingFieldNames.join(', ')}`);
-    }
-    
-    // Проверяем отсутствие номера заказа или значение 0
-    if (!data.orderNumber || data.orderNumber.toString().trim() === '' || data.orderNumber.toString().trim() === '0') {
-        problems.push('Отсутствует номер заказа');
-    }
-    
-    // Проверяем отсутствие ЭТрН или значение 0
-    if (!data.etrn || data.etrn.toString().trim() === '' || data.etrn.toString().trim() === '0') {
-        problems.push('Отсутствует ЭТрН');
-    }
-    
-    // Проверяем нарушение графика
-    if (data.scheduleViolation === 'Да') {
-        problems.push('Нарушение графика заезда');
-    }
-    
-    // Логируем для отладки
-    logToConsole('INFO', 'Проверка проблем', {
-        problemsFound: problems,
-        hasProblems: problems.length > 0,
-        orderNumber: data.orderNumber,
-        etrn: data.etrn,
-        scheduleViolation: data.scheduleViolation
-    });
-    
-    return problems.length > 0 ? problems.join('; ') : 'Нет';
-}
-
 // ==================== API ФУНКЦИИ ====================
+
 async function sendAPIRequest(requestData) {
   try {
     logToConsole('INFO', 'Отправляю API запрос', {
@@ -1076,13 +1132,14 @@ async function sendAPIRequest(requestData) {
     const action = requestData.action || 'unknown';
     
     // Для GET запросов используем GET метод с параметрами URL
-    if (action === 'get_suppliers' || action === 'ping' || action === 'get_popular_brands' || action === 'clear_cache' || action === 'test_cache') {
+    if (action === 'get_suppliers_optimized' || action === 'get_brands_optimized' || 
+        action === 'get_top_data' || action === 'get_suppliers' || action === 'get_popular_brands' || 
+        action === 'ping' || action === 'clear_cache' || action === 'test_cache') {
       const url = new URL(CONFIG.APP_SCRIPT_URL);
       
       // Добавляем параметры в URL
       Object.keys(requestData).forEach(key => {
         if (requestData[key] !== undefined && requestData[key] !== null) {
-          // Для объектов сериализуем в JSON
           if (typeof requestData[key] === 'object') {
             url.searchParams.append(key, JSON.stringify(requestData[key]));
           } else {
@@ -1091,14 +1148,12 @@ async function sendAPIRequest(requestData) {
         }
       });
       
-      // Добавляем timestamp для избежания кэширования браузером
       url.searchParams.append('_t', Date.now());
       
       logToConsole('INFO', 'GET запрос URL', url.toString());
       
       const startTime = Date.now();
       
-      // Отправляем GET запрос
       const response = await fetch(url.toString(), {
         method: 'GET',
         mode: 'cors',
@@ -1156,7 +1211,6 @@ async function sendAPIRequest(requestData) {
           url: url.toString()
         });
         
-        // Если ответ содержит success в текстовом виде
         if (text.includes('success') || text.includes('suppliers')) {
           return {
             success: true,
@@ -1250,7 +1304,6 @@ async function sendAPIRequest(requestData) {
       timestamp: new Date().toISOString()
     });
     
-    // Пробуем альтернативный метод
     try {
       return await sendViaAlternativeMethod(requestData);
     } catch (altError) {
@@ -1264,11 +1317,49 @@ async function sendAPIRequest(requestData) {
   }
 }
 
+async function sendViaAlternativeMethod(requestData) {
+  try {
+    logToConsole('INFO', 'Пробую альтернативный метод');
+    
+    const url = CONFIG.APP_SCRIPT_URL;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: `action=${requestData.action}&data=${encodeURIComponent(JSON.stringify(requestData))}`,
+      mode: 'no-cors'
+    });
+    
+    logToConsole('INFO', 'Альтернативный метод статус', {
+      status: response.status,
+      url: url
+    });
+    
+    return {
+      success: true,
+      message: 'Запрос отправлен (no-cors режим)',
+      sentInNoCors: true
+    };
+    
+  } catch (error) {
+    logToConsole('ERROR', 'Альтернативный метод также не сработал', {
+      error: error.message,
+      stack: error.stack
+    });
+    
+    return {
+      success: false,
+      message: 'Не удалось отправить запрос: ' + error.message
+    };
+  }
+}
+
 async function testAPIConnection() {
     try {
         logToConsole('INFO', 'Тестирую соединение с API');
         
-        // Тест GET запросом
         const testUrl = CONFIG.APP_SCRIPT_URL + '?action=ping&test=' + Date.now();
         
         const response = await fetch(testUrl, {
@@ -1305,6 +1396,7 @@ async function testAPIConnection() {
 }
 
 // ==================== ОФФЛАЙН СОХРАНЕНИЕ ====================
+
 function saveRegistrationOffline() {
     try {
         const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
@@ -1327,7 +1419,6 @@ function saveRegistrationOffline() {
             total: offlineRegistrations.length 
         });
         
-        // Обновляем счетчик
         showOfflineDataCount();
         
         return true;
@@ -1338,8 +1429,8 @@ function saveRegistrationOffline() {
     }
 }
 
-
 // ==================== ОТПРАВКА ОФФЛАЙН ДАННЫХ ====================
+
 async function sendOfflineData(resetAttempts = false) {
     if (!navigator.onLine) {
         logToConsole('WARN', 'Нет соединения, пропускаю отправку оффлайн данных');
@@ -1352,7 +1443,6 @@ async function sendOfflineData(resetAttempts = false) {
         const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
         
         if (resetAttempts) {
-            // Сбрасываем счетчики попыток для всех записей
             offlineRegistrations.forEach(record => {
                 if (record.status === 'pending') {
                     record.attempts = 0;
@@ -1378,7 +1468,6 @@ async function sendOfflineData(resetAttempts = false) {
         const failed = [];
         
         for (const record of pendingRecords) {
-            // Если попыток >= 5, пропускаем (но можем сбросить через resetAttempts)
             if (record.attempts >= 5 && !resetAttempts) {
                 logToConsole('WARN', `Запись ${record.id} превысила лимит попыток`, { 
                     attempts: record.attempts,
@@ -1387,7 +1476,6 @@ async function sendOfflineData(resetAttempts = false) {
                 continue;
             }
             
-            // Добавляем информацию о попытке отправки
             record.data._offlineId = record.id;
             record.data._offlineAttempt = (record.attempts || 0) + 1;
             record.data._sentFrom = 'offline_retry';
@@ -1408,7 +1496,6 @@ async function sendOfflineData(resetAttempts = false) {
                 });
                 
                 if (response && response.success) {
-                    // Проверяем, не является ли это дублирующей записью
                     if (response.message && response.message.includes('уже зарегистрирован')) {
                         record.status = 'duplicate';
                         record.duplicateAt = new Date().toISOString();
@@ -1446,20 +1533,15 @@ async function sendOfflineData(resetAttempts = false) {
                 });
             }
             
-            // Небольшая пауза между запросами
             await new Promise(resolve => setTimeout(resolve, 2000));
             
-            // Сохраняем прогресс после каждой записи
             localStorage.setItem('offline_registrations', JSON.stringify(offlineRegistrations));
         }
         
-        // Очищаем старые отправленные записи (старше 7 дней)
         cleanupOldOfflineRecords();
         
-        // Обновляем счетчик
         showOfflineDataCount();
         
-        // Показываем результат
         if (successful.length > 0) {
             const sentCount = successful.filter(s => typeof s === 'string').length;
             const duplicateCount = successful.filter(s => typeof s === 'object' && s.type === 'duplicate').length;
@@ -1495,7 +1577,9 @@ async function sendOfflineData(resetAttempts = false) {
         showNotification('❌ Ошибка при отправке оффлайн данных', 'error');
     }
 }
+
 // ==================== ФУНКЦИЯ СБРОСА ПОПЫТОК ====================
+
 function resetOfflineAttempts() {
     if (confirm('Сбросить счетчики попыток для всех оффлайн записей?\n\nЭто позволит повторно отправить записи, которые превысили лимит попыток.')) {
         const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
@@ -1515,18 +1599,16 @@ function resetOfflineAttempts() {
         showNotification(`✅ Сброшены попытки для ${resetCount} записей`, 'success');
         logToConsole('INFO', 'Сброшены счетчики попыток', { resetCount });
         
-        // Закрываем модальное окно если открыто
         closeModal();
         
-        // Обновляем счетчик
         showOfflineDataCount();
         
-        // Пробуем отправить снова
         setTimeout(() => sendOfflineData(true), 1000);
     }
 }
 
 // ==================== ПОКАЗ ОФФЛАЙН ДАННЫХ ====================
+
 function getOfflineDataCount() {
     try {
         const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
@@ -1558,7 +1640,6 @@ function showOfflineDataModal() {
         const pendingRecords = offlineRegistrations.filter(r => r.status === 'pending');
         const sentRecords = offlineRegistrations.filter(r => r.status === 'sent');
         
-        // Подсчитываем записи с превышенным лимитом
         const exceededRecords = pendingRecords.filter(r => r.attempts >= 5);
         
         let html = `
@@ -1585,7 +1666,6 @@ function showOfflineDataModal() {
                         </div>
         `;
         
-        // Предупреждение если есть записи с превышенным лимитом
         if (exceededRecords.length > 0) {
             html += `
                 <div class="warning-box" style="margin-bottom: 20px;">
@@ -1664,7 +1744,6 @@ function showOfflineDataModal() {
             </div>
         `;
         
-        // Создаем модальное окно
         const modalContainer = document.createElement('div');
         modalContainer.innerHTML = html;
         document.body.appendChild(modalContainer);
@@ -1714,7 +1793,7 @@ function cleanupOldOfflineRecords() {
                 const sentDate = new Date(record.sentAt || record.timestamp);
                 return sentDate > sevenDaysAgo;
             }
-            return true; // Храним все pending записи
+            return true;
         });
         
         if (filtered.length !== offlineRegistrations.length) {
@@ -1730,6 +1809,7 @@ function cleanupOldOfflineRecords() {
 }
 
 // ==================== СБРОС РЕГИСТРАЦИИ ====================
+
 function resetRegistration() {
     if (confirm('Начать новую регистрацию? Все введенные данные будут потеряны.')) {
         resetRegistrationState();
@@ -1777,6 +1857,7 @@ function clearFormFields() {
 }
 
 // ==================== СОХРАНЕНИЕ СОСТОЯНИЯ ====================
+
 function saveRegistrationState() {
     try {
         localStorage.setItem('driver_registration_state', JSON.stringify(registrationState));
@@ -1809,6 +1890,7 @@ function loadRegistrationState() {
 }
 
 // ==================== ПОКАЗ ЛОГОВ ====================
+
 function showLogsModal() {
     try {
         const logs = JSON.parse(localStorage.getItem('app_logs') || '[]');
@@ -1909,6 +1991,7 @@ function clearLogs() {
 }
 
 // ==================== ТЕСТИРОВАНИЕ API ====================
+
 async function testAPIConnectionDetailed() {
     try {
         logToConsole('INFO', 'Тестирую соединение с API (детально)');
@@ -1975,6 +2058,7 @@ async function testAPIConnectionDetailed() {
 }
 
 // ==================== СЕТЕВЫЕ ЛОГИ ====================
+
 function showNetworkLogs() {
     try {
         const logs = JSON.parse(localStorage.getItem('app_logs') || '[]');
@@ -2084,6 +2168,7 @@ async function retryFailedRequests() {
 }
 
 // ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
+
 function normalizePhone(phone) {
     let cleaned = phone.replace(/\D/g, '');
     
@@ -2133,10 +2218,7 @@ function formatTime(date) {
 
 function checkScheduleViolation() {
     const productType = registrationState.data.productType;
-    if (!productType) {
-        logToConsole('WARN', 'Не указан тип товара для проверки графика');
-        return false;
-    }
+    if (!productType) return false;
     
     const schedules = {
         'Сухой': { end: 16, endMinutes: 30 },
@@ -2146,60 +2228,43 @@ function checkScheduleViolation() {
     };
     
     const schedule = schedules[productType];
-    if (!schedule) {
-        logToConsole('WARN', `Неизвестный тип товара для проверки графика: ${productType}`);
-        return false;
-    }
+    if (!schedule) return false;
     
     const now = new Date();
     const hours = now.getHours();
     const minutes = now.getMinutes();
     
-    const isViolation = hours > schedule.end || (hours === schedule.end && minutes > schedule.endMinutes);
-    
-    logToConsole('INFO', 'Проверка графика', {
-        productType: productType,
-        currentTime: `${hours}:${minutes}`,
-        endTime: `${schedule.end}:${schedule.endMinutes}`,
-        isViolation: isViolation
-    });
-    
-    return isViolation;
+    return hours > schedule.end || (hours === schedule.end && minutes > schedule.endMinutes);
 }
 
 function assignGateAutomatically(legalEntity, productType) {
-  if (!productType || !legalEntity) {
+    if (productType === 'Сухой') {
+        if (legalEntity === 'Гулливер') {
+            return 'с 31 по 36 (бакалея соль, мука, вода, консервы) и с 38 по 39 (кондитерка, уголь, пакеты)';
+        }
+        if (legalEntity === 'ТК Лето') {
+            return 'с 26 по 30, с 20 по 22 (для кондитерки)';
+        }
+    }
+    
+    if (productType === 'ФРЕШ') {
+        if (legalEntity === 'Гулливер') {
+            return 'с 45 по 51, с 5 по 8 (мясо, куры, колбасы, сыры)';
+        }
+        if (legalEntity === 'ТК Лето') {
+            return 'с 45 по 51 (мясная продукция)';
+        }
+    }
+    
+    if (productType === 'ФРОВ') {
+        return 'с 9 по 11 (фрукты, овощи)';
+    }
+    
+    if (productType === 'Акциз') {
+        return 'с 40 по 41 (крепкий алкоголь)';
+    }
+    
     return 'Не назначены (проверьте тип товара и юрлицо)';
-  }
-  
-  // Ворота назначенные (более подробное описание для водителя)
-  if (productType === 'Сухой') {
-    if (legalEntity === 'Гулливер') {
-      return 'с 31 по 36 (бакалея соль, мука, вода, консервы) и с 38 по 39 (кондитерка, уголь, пакеты)';
-    }
-    if (legalEntity === 'ТК Лето') {
-      return 'с 26 по 30, с 20 по 22 (для кондитерки)';
-    }
-  }
-  
-  if (productType === 'ФРЕШ') {
-    if (legalEntity === 'Гулливер') {
-      return 'с 45 по 51, с 5 по 8 (мясо, куры, колбасы, сыры)';
-    }
-    if (legalEntity === 'ТК Лето') {
-      return 'с 45 по 51 (мясная продукция)';
-    }
-  }
-  
-  if (productType === 'ФРОВ') {
-    return 'с 9 по 11 (фрукты, овощи)';
-  }
-  
-  if (productType === 'Акциз') {
-    return 'с 40 по 41 (крепкий алкоголь)';
-  }
-  
-  return 'Не назначены (проверьте тип товара и юрлицо)';
 }
 
 function handleEnterKey(input) {
@@ -2218,6 +2283,7 @@ function handleEnterKey(input) {
 }
 
 // ==================== UI ФУНКЦИИ ====================
+
 function showNotification(message, type = 'info') {
     logToConsole('INFO', `Уведомление: ${message}`, { type });
     
@@ -2272,7 +2338,7 @@ function showSuccessMessage(serverData = null) {
     if (!container) return;
     
     const data = registrationState.data;
-    const gate = serverData?.gate || data.gate || 'Не назначены';
+    const gate = serverData?.assignedGate || data.gate || 'Не назначены';
     const date = serverData?.date || data.date || '';
     const time = serverData?.time || data.time || '';
     
@@ -2315,6 +2381,7 @@ function showSuccessMessage(serverData = null) {
 }
 
 // ==================== ОЧИСТКА КЭША ====================
+
 async function clearCache() {
   try {
     showLoader(true);
@@ -2338,10 +2405,8 @@ async function clearCache() {
   }
 }
 
-// Экспортируем функцию для кнопки
-window.clearCache = clearCache;
-
 // ==================== ЭКСПОРТ ФУНКЦИЙ ====================
+
 window.handlePhoneSubmit = handlePhoneSubmit;
 window.handleFioSubmit = handleFioSubmit;
 window.handleManualSupplier = handleManualSupplier;
@@ -2369,23 +2434,7 @@ window.clearLogs = clearLogs;
 window.exportLogs = exportLogs;
 window.resetOfflineAttempts = resetOfflineAttempts;
 window.sendViaAlternativeMethod = sendViaAlternativeMethod;
-logToConsole('INFO', 'app.js загружен и готов к работе');
+window.clearCache = clearCache;
+window.refreshTopData = refreshTopData;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
