@@ -450,18 +450,41 @@ async function loadSupplierHistoryOptimized() {
   }
 }
 
+function filterCaseInsensitive(items, searchText) {
+  if (!searchText || searchText.trim() === '') {
+    return items;
+  }
+  
+  const searchLower = searchText.toLowerCase();
+  return items.filter(item => {
+    if (!item) return false;
+    return item.toLowerCase().includes(searchLower);
+  });
+}
+
 // Вспомогательная функция для отображения поставщиков
 function displaySuppliers(suppliers, container, infoBox) {
   infoBox.innerHTML = `
     <p>✅ Найдено поставщиков: ${suppliers.length}</p>
-    <p style="font-size: 12px; color: #666;">Выберите из истории:</p>
+    <p style="font-size: 12px; color: #666;">Выберите из истории (регистр не учитывается):</p>
   `;
   
   container.innerHTML = '';
   
-  suppliers.forEach((supplier, index) => {
-    if (!supplier || supplier.trim() === '') return;
-    
+  // Убираем дубликаты с учетом регистра
+  const uniqueSuppliersMap = new Map();
+  suppliers.forEach(supplier => {
+    if (supplier && supplier.trim() !== '') {
+      const supplierLower = supplier.toLowerCase();
+      if (!uniqueSuppliersMap.has(supplierLower)) {
+        uniqueSuppliersMap.set(supplierLower, supplier); // Сохраняем оригинальный регистр
+      }
+    }
+  });
+  
+  const uniqueSuppliers = Array.from(uniqueSuppliersMap.values());
+  
+  uniqueSuppliers.forEach((supplier, index) => {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'option-btn';
@@ -2438,3 +2461,4 @@ window.clearCache = clearCache;
 window.refreshTopData = refreshTopData;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
+
