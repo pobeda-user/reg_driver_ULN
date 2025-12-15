@@ -1118,6 +1118,17 @@
                 Назад
             </button>
         </div>
+        <!-- Контейнер для sticky-уведомлений -->
+<div id="sticky-notifications" style="display: none;"></div>
+
+<!-- Иконка уведомлений в шапке (добавьте в контейнер или рядом с другими элементами) -->
+<!-- Например, можно добавить так: -->
+<div style="position: fixed; top: 15px; right: 50px; z-index: 10001;">
+  <button onclick="showNotificationHistory()" style="background: none; border: none; padding: 8px; cursor: pointer; position: relative;">
+    <span style="font-size: 24px;">📋</span>
+    <div id="notification-badge" class="notification-badge" style="display: none;"></div>
+  </button>
+</div>
     </div>
 </div>
 
@@ -1499,5 +1510,6 @@
     </script>
 </body>
 </html>
+
 
 
