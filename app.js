@@ -876,12 +876,15 @@ function selectTransit(answer) {
 // ==================== ШАГ 12: ПОДТВЕРЖДЕНИЕ ====================
 
 function showConfirmation() {
-    logToConsole('INFO', 'Показываю подтверждение с исправленными данными');
+    logToConsole('INFO', 'Показываю подтверждение');
     
     const container = document.getElementById('data-review');
     if (!container) return;
     
     const data = registrationState.data;
+    
+    // Получаем ворота для показа (они уже есть в registrationState.data.gate)
+    const gate = data.gate || 'Не назначены';
     
     let html = `
         <div class="data-item">
@@ -929,25 +932,14 @@ function showConfirmation() {
             <span class="data-value">${data.transit || ''}</span>
         </div>
         <div class="data-item highlight">
-            <span class="data-label">🚪 Ворота назначенные:</span>
-            <span class="data-value">${data.gate || 'Не назначены'}</span>
+            <span class="data-label">🚪 Ваши ворота:</span>
+            <span class="data-value">${gate}</span>
         </div>
         <div class="data-item">
             <span class="data-label">⏰ Опоздание по графику:</span>
             <span class="data-value">${data.scheduleViolation || 'Нет'}</span>
         </div>
     `;
-    
-    // Блок оффлайн данных (если есть)
-    const offlineCount = getOfflineDataCount();
-    if (offlineCount > 0) {
-        html += `
-            <div class="data-item info" style="background: #e3f2fd; border-radius: 8px; padding: 10px; margin-top: 10px;">
-                <span class="data-label">📱 Оффлайн записей:</span>
-                <span class="data-value">${offlineCount} <button onclick="showOfflineDataModal()" style="margin-left: 10px; padding: 5px 10px; background: #4285f4; color: white; border: none; border-radius: 4px; cursor: pointer;">Просмотр</button></span>
-            </div>
-        `;
-    }
     
     container.innerHTML = html;
 }
@@ -2325,7 +2317,9 @@ function checkScheduleViolation() {
 }
 
 function assignGateAutomatically(legalEntity, productType) {
-  // Возвращаем полное описание ворот в одном столбце
+  // Эта функция теперь используется только для показа пользователю
+  // В таблицу записывается getDefaultGate из Google Apps Script
+  
   if (productType === 'Сухой') {
     if (legalEntity === 'Гулливер') {
       return 'с 31 по 36 (бакалея соль, мука, вода, консервы) и с 38 по 39 (кондитерка, уголь, пакеты)';
@@ -2353,21 +2347,6 @@ function assignGateAutomatically(legalEntity, productType) {
   }
   
   return 'Не назначены (проверьте тип товара и юрлицо)';
-}
-
-function handleEnterKey(input) {
-    const step = registrationState.step;
-    
-    switch(step) {
-        case 1: handlePhoneSubmit(); break;
-        case 2: handleFioSubmit(); break;
-        case 3: handleManualSupplier(); break;
-        case 6: handleManualBrand(); break;
-        case 7: handleVehicleNumberSubmit(); break;
-        case 8: handlePalletsSubmit(); break;
-        case 9: handleOrderSubmit(); break;
-        case 10: handleEtrnSubmit(); break;
-    }
 }
 
 // ==================== UI ФУНКЦИИ ====================
@@ -2526,6 +2505,7 @@ window.clearCache = clearCache;
 window.refreshTopData = refreshTopData;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
+
 
 
 
