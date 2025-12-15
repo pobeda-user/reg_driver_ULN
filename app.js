@@ -559,8 +559,7 @@ function selectProductType(type) {
     registrationState.data.gate = gate;
     logToConsole('INFO', 'Назначены ворота', { gate });
     
-    // Используем оптимизированную загрузку марок
-    loadPopularBrandsOptimized();
+    // НЕ ЗАГРУЖАЕМ марки - они уже в HTML
     showStep(6);
 }
 
@@ -2326,33 +2325,34 @@ function checkScheduleViolation() {
 }
 
 function assignGateAutomatically(legalEntity, productType) {
-    if (productType === 'Сухой') {
-        if (legalEntity === 'Гулливер') {
-            return 'с 31 по 36 (бакалея соль, мука, вода, консервы) и с 38 по 39 (кондитерка, уголь, пакеты)';
-        }
-        if (legalEntity === 'ТК Лето') {
-            return 'с 26 по 30, с 20 по 22 (для кондитерки)';
-        }
+  // Возвращаем полное описание ворот в одном столбце
+  if (productType === 'Сухой') {
+    if (legalEntity === 'Гулливер') {
+      return 'с 31 по 36 (бакалея соль, мука, вода, консервы) и с 38 по 39 (кондитерка, уголь, пакеты)';
     }
-    
-    if (productType === 'ФРЕШ') {
-        if (legalEntity === 'Гулливер') {
-            return 'с 45 по 51, с 5 по 8 (мясо, куры, колбасы, сыры)';
-        }
-        if (legalEntity === 'ТК Лето') {
-            return 'с 45 по 51 (мясная продукция)';
-        }
+    if (legalEntity === 'ТК Лето') {
+      return 'с 26 по 30, с 20 по 22 (для кондитерки)';
     }
-    
-    if (productType === 'ФРОВ') {
-        return 'с 9 по 11 (фрукты, овощи)';
+  }
+  
+  if (productType === 'ФРЕШ') {
+    if (legalEntity === 'Гулливер') {
+      return 'с 45 по 51, с 5 по 8 (мясо, куры, колбасы, сыры)';
     }
-    
-    if (productType === 'Акциз') {
-        return 'с 40 по 41 (крепкий алкоголь)';
+    if (legalEntity === 'ТК Лето') {
+      return 'с 45 по 51 (мясная продукция)';
     }
-    
-    return 'Не назначены (проверьте тип товара и юрлицо)';
+  }
+  
+  if (productType === 'ФРОВ') {
+    return 'с 9 по 11 (фрукты, овощи)';
+  }
+  
+  if (productType === 'Акциз') {
+    return 'с 40 по 41 (крепкий алкоголь)';
+  }
+  
+  return 'Не назначены (проверьте тип товара и юрлицо)';
 }
 
 function handleEnterKey(input) {
@@ -2526,6 +2526,7 @@ window.clearCache = clearCache;
 window.refreshTopData = refreshTopData;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
+
 
 
 
