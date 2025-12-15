@@ -554,10 +554,13 @@ function selectProductType(type) {
     logToConsole('INFO', 'Выбран тип товара', { type });
     registrationState.data.productType = type;
     
-    // Автоматическое назначение ворот
-    const gate = assignGateAutomatically(registrationState.data.legalEntity, type);
-    registrationState.data.gate = gate;
-    logToConsole('INFO', 'Назначены ворота', { gate });
+    // УДАЛЯЕМ эту строку:
+    // const gate = assignGateAutomatically(registrationState.data.legalEntity, type);
+    // registrationState.data.gate = gate;
+    
+    // Вместо нее просто логируем:
+    const gateForInfo = assignGateAutomatically(registrationState.data.legalEntity, type);
+    logToConsole('INFO', 'Назначены ворота (для информации)', { gate: gateForInfo });
     
     // НЕ ЗАГРУЖАЕМ марки - они уже в HTML
     showStep(6);
@@ -883,8 +886,8 @@ function showConfirmation() {
     
     const data = registrationState.data;
     
-    // Получаем ворота для показа (они уже есть в registrationState.data.gate)
-    const gate = data.gate || 'Не назначены';
+    // ИСПРАВЛЕНИЕ: Вычисляем ворота для показа, но не храним их в data
+    const gateForDisplay = assignGateAutomatically(data.legalEntity, data.productType) || 'Не назначены';
     
     let html = `
         <div class="data-item">
@@ -933,7 +936,7 @@ function showConfirmation() {
         </div>
         <div class="data-item highlight">
             <span class="data-label">🚪 Ваши ворота:</span>
-            <span class="data-value">${gate}</span>
+            <span class="data-value">${gateForDisplay}</span>
         </div>
         <div class="data-item">
             <span class="data-label">⏰ Опоздание по графику:</span>
@@ -943,7 +946,6 @@ function showConfirmation() {
     
     container.innerHTML = html;
 }
-
 // ==================== ШАГ 13: ОТПРАВКА ====================
 
 async function submitRegistration() {
@@ -961,17 +963,21 @@ async function submitRegistration() {
         return;
     }
     
-    // УДАЛЯЕМ поле problemTypes из данных перед отправкой
+    // ИСПРАВЛЕНИЕ 1: Нормализуем телефон перед отправкой
+    registrationState.data.phone = normalizePhone(registrationState.data.phone);
+    logToConsole('DEBUG', 'Телефон нормализован', { phone: registrationState.data.phone });
+    
+    // ИСПРАВЛЕНИЕ 2: Удаляем поле gate из данных перед отправкой
     const dataToSend = {...registrationState.data};
-    delete dataToSend.problemTypes; // Убедимся что поле не отправляется
+    delete dataToSend.gate; // УБИРАЕМ ворота
+    delete dataToSend.problemTypes; // УБИРАЕМ problemTypes (уже есть)
+    
+    logToConsole('DEBUG', 'Данные для отправки', dataToSend);
     
     // Проверяем соединение
     if (!navigator.onLine) {
         logToConsole('WARN', 'Нет соединения с интернетом');
         showNotification('⚠️ Нет соединения с интернетом. Данные будут сохранены локально.', 'warning');
-        
-        // Удаляем problemTypes из данных для оффлайн сохранения
-        delete registrationState.data.problemTypes;
         
         const saved = saveRegistrationOffline();
         if (saved) {
@@ -985,51 +991,23 @@ async function submitRegistration() {
     showLoader(true);
     
     try {
-        // Добавляем временную метку и уникальный ID для отслеживания
+        // Добавляем временную метку
         dataToSend._timestamp = Date.now();
         dataToSend._localId = `local_${dataToSend._timestamp}_${Math.random().toString(36).substr(2, 6)}`;
         dataToSend._attempt = 1;
         dataToSend._sentFrom = 'online_submit';
         
-        logToConsole('INFO', 'Подготовка данных для отправки', {
-            localId: dataToSend._localId,
-            timestamp: dataToSend._timestamp,
-            phone: dataToSend.phone
-        });
-        
         const response = await sendRegistrationToServer(dataToSend);
-        
-        logToConsole('INFO', 'Ответ от сервера получен', {
-            success: response.success,
-            message: response.message,
-            hasData: !!response.data
-        });
         
         if (response && response.success) {
             logToConsole('SUCCESS', 'Регистрация успешна на сервере!');
             
-            // Удаляем problemTypes из локального состояния
-            delete registrationState.data.problemTypes;
-            
-            // Показываем успешное сообщение
             showSuccessMessage(response.data);
-            
-            // Сбрасываем состояние
             resetRegistrationState();
-            
-            // Переходим к шагу успеха
             showStep(13);
-            
             showNotification('✅ Регистрация успешно завершена!', 'success');
-            
         } else {
-            logToConsole('ERROR', 'Ошибка от сервера', {
-                response: response,
-                errorMessage: response?.message
-            });
-            
-            // Удаляем problemTypes при сохранении оффлайн
-            delete registrationState.data.problemTypes;
+            logToConsole('ERROR', 'Ошибка от сервера', response);
             
             const saved = saveRegistrationOffline();
             if (saved) {
@@ -1043,19 +1021,12 @@ async function submitRegistration() {
     } catch (error) {
         logToConsole('ERROR', 'Критическая ошибка отправки', error);
         
-        // Удаляем problemTypes при сохранении оффлайн
-        delete registrationState.data.problemTypes;
-        
         const saved = saveRegistrationOffline();
-        
         if (saved) {
             logToConsole('INFO', 'Данные сохранены оффлайн');
-            
-            // Показываем успех даже при оффлайн
             showSuccessMessage();
             resetRegistrationState();
             showStep(13);
-            
             showNotification('📱 Данные сохранены локально. Отправятся при восстановлении связи.', 'warning');
         }
     } finally {
@@ -2505,6 +2476,7 @@ window.clearCache = clearCache;
 window.refreshTopData = refreshTopData;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
+
 
 
 
