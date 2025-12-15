@@ -2118,5 +2118,110 @@
         font-size: 11px;
     }
 }
+    /* ==================== КОМПАКТНЫЙ ВЫБОР МАРОК АВТО ==================== */
+.compact-brands-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
 }
+
+.brands-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.compact-brand-btn {
+    padding: 12px 8px;
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+    outline: none;
+    font-family: inherit;
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.compact-brand-btn:hover {
+    border-color: #4285f4;
+    background: #f8f9ff;
+    transform: translateY(-2px);
+    box-shadow: 0 3px 10px rgba(66, 133, 244, 0.1);
+}
+
+.compact-brand-btn:active {
+    transform: translateY(0);
+}
+
+.brand-text {
+    color: #333;
+    font-weight: 500;
+    line-height: 1.2;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
+}
+
+/* Адаптивность для компактной сетки */
+@media (max-width: 600px) {
+    .compact-brands-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+    
+    .brands-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+    
+    .compact-brand-btn {
+        padding: 10px 6px;
+        font-size: 13px;
+        min-height: 45px;
+    }
+}
+
+@media (max-width: 400px) {
+    .compact-brands-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+    }
+    
+    .brands-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+    }
+    
+    .compact-brand-btn {
+        padding: 8px 4px;
+        font-size: 12px;
+        min-height: 40px;
+    }
+}
+
+/* Стиль для выбранной марки */
+.compact-brand-btn.selected {
+    background: #4285f4;
+    border-color: #4285f4;
+    color: white;
+}
+
+.compact-brand-btn.selected .brand-text {
+    color: white;
+}
+}
+
 
