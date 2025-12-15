@@ -565,42 +565,19 @@ function selectProductType(type) {
 }
 
 // ==================== ШАГ 6: МАРКА АВТО (ОПТИМИЗИРОВАННАЯ) ====================
-
 async function loadPopularBrandsOptimized() {
-  logToConsole('INFO', 'Загрузка ТОП-5 марок авто');
+  logToConsole('INFO', 'Загрузка компактного списка марок авто');
   
   const container = document.getElementById('brand-buttons');
   const infoBox = document.getElementById('brands-info');
-  const searchIndicator = document.getElementById('brand-search-indicator');
   
-  if (!container || !infoBox || !searchIndicator) return;
+  if (!container) return;
   
-  // Показываем индикатор поиска
-  searchIndicator.style.display = 'block';
-  infoBox.style.display = 'none';
+  // Очищаем контейнер
   container.innerHTML = '';
   
   try {
-    // 1. Сначала пробуем из локальных ТОП данных
-    const topData = await loadTopData();
-    
-    if (topData && topData.brands && topData.brands.length > 0) {
-      logToConsole('INFO', 'Марки загружены из локальных ТОП данных', {
-        count: topData.brands.length,
-        source: 'local_cache'
-      });
-      
-      // Берем только ТОП-5
-      const top5Brands = topData.brands.slice(0, 5);
-      
-      // Скрываем индикатор, показываем результаты
-      searchIndicator.style.display = 'none';
-      infoBox.style.display = 'block';
-      displayBrands(top5Brands, container, infoBox);
-      return;
-    }
-    
-    // 2. Если нет локальных данных, запрашиваем с сервера
+    // Получаем список марок с сервера
     const response = await sendAPIRequest({
       action: 'get_brands_optimized'
     });
@@ -608,43 +585,22 @@ async function loadPopularBrandsOptimized() {
     if (response && response.success && response.brands && response.brands.length > 0) {
       logToConsole('INFO', 'Марки получены с сервера', {
         count: response.brands.length,
-        fromTopData: response.fromTopData || false
+        fixedList: response.fixedList || false
       });
       
-      // Берем только ТОП-5
-      const top5Brands = response.brands.slice(0, 5);
-      
-      // Скрываем индикатор, показываем результаты
-      searchIndicator.style.display = 'none';
-      infoBox.style.display = 'block';
-      displayBrands(top5Brands, container, infoBox);
+      displayCompactBrands(response.brands, container);
       
     } else {
-      // 3. Fallback: стандартные марки (только 5)
-      logToConsole('WARN', 'Использую стандартные марки авто (ТОП-5)');
-      
-      // Скрываем индикатор, показываем результаты
-      searchIndicator.style.display = 'none';
-      infoBox.style.display = 'block';
-      showDefaultBrands(container, infoBox);
+      // Fallback: фиксированный список
+      logToConsole('WARN', 'Использую фиксированный список марок');
+      showFixedBrands(container);
     }
     
   } catch (error) {
     logToConsole('ERROR', 'Ошибка загрузки марок авто', error);
     
-    // Скрываем индикатор
-    searchIndicator.style.display = 'none';
-    infoBox.style.display = 'block';
-    
-    // В случае ошибки показываем стандартные марки
-    showDefaultBrands(container, infoBox);
-    
-    container.innerHTML += `
-      <div class="info-box warning" style="margin-top: 10px;">
-        <p>⚠️ Ошибка загрузки популярных марок</p>
-        <p>Вы можете ввести марку вручную ниже</p>
-      </div>
-    `;
+    // В случае ошибки показываем фиксированный список
+    showFixedBrands(container);
   }
 }
 
@@ -684,6 +640,73 @@ function displayBrands(brands, container, infoBox) {
   });
   
   logToConsole('SUCCESS', `Отображено ${top5Brands.length} марок авто (ТОП-5)`);
+}
+
+// Функция для отображения компактного списка марок (в 3 столбца)
+function displayCompactBrands(brands, container) {
+  if (!container) return;
+  
+  // Фильтруем пустые и цифровые марки
+  const filteredBrands = brands.filter(brand => 
+    brand && brand.trim() !== '' && !/^\d+$/.test(brand.trim())
+  );
+  
+  // Создаем компактную сетку
+  const grid = document.createElement('div');
+  grid.className = 'brands-grid';
+  grid.style.display = 'grid';
+  grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(140px, 1fr))';
+  grid.style.gap = '10px';
+  grid.style.marginBottom = '20px';
+  
+  filteredBrands.forEach((brand, index) => {
+    if (index >= 15) return; // Ограничиваем до 15 марок максимум
+    
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'compact-brand-btn';
+    button.innerHTML = `
+      <span class="brand-text">${brand}</span>
+    `;
+    button.title = brand;
+    button.onclick = () => {
+      logToConsole('INFO', 'Выбрана марка авто', { 
+        brand,
+        index: index + 1
+      });
+      selectBrand(brand);
+    };
+    
+    grid.appendChild(button);
+  });
+  
+  container.innerHTML = '';
+  container.appendChild(grid);
+  
+  logToConsole('SUCCESS', `Отображено ${Math.min(filteredBrands.length, 15)} марок в компактном виде`);
+}
+
+// Функция показа фиксированного списка (если сервер не отвечает)
+function showFixedBrands(container) {
+  if (!container) return;
+  
+  const fixedBrands = [
+    'Газель',
+    'Газель NEXT',
+    'DAF',
+    'Dongfeng',
+    'JAC',
+    'KAMAZ',
+    'MAN',
+    'Мерседес',
+    'Рено',
+    'Ситрак',
+    'Скания',
+    'Хендай',
+    'VOLVO'
+  ];
+  
+  displayCompactBrands(fixedBrands, container);
 }
 
 // Обновленная функция показа стандартных марок (только 5)
@@ -2503,5 +2526,6 @@ window.clearCache = clearCache;
 window.refreshTopData = refreshTopData;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
+
 
 
