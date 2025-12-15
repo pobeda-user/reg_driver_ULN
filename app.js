@@ -173,6 +173,20 @@ function logToConsole(level, message, data = null) {
     return logEntry;
 }
 
+function debugRegistrationData() {
+    console.log('=== ДЕБАГ ДАННЫХ РЕГИСТРАЦИИ ===');
+    console.log('Текущее состояние:', registrationState);
+    console.log('Телефон:', registrationState.data.phone);
+    console.log('Нормализованный телефон:', normalizePhone(registrationState.data.phone));
+    console.log('Поле gate в данных:', registrationState.data.gate);
+    console.log('Объект для отправки:', JSON.stringify(registrationState.data, null, 2));
+    
+    // Проверяем, есть ли функция normalizePhone
+    console.log('Функция normalizePhone:', typeof normalizePhone);
+    
+    return registrationState.data;
+}
+
 // ==================== ИНИЦИАЛИЗАЦИЯ ====================
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -554,13 +568,10 @@ function selectProductType(type) {
     logToConsole('INFO', 'Выбран тип товара', { type });
     registrationState.data.productType = type;
     
-    // УДАЛЯЕМ эту строку:
-    // const gate = assignGateAutomatically(registrationState.data.legalEntity, type);
-    // registrationState.data.gate = gate;
-    
-    // Вместо нее просто логируем:
+    // ИСПРАВЛЕНИЕ: НЕ сохраняем gate в registrationState
+    // Просто вычисляем для информации
     const gateForInfo = assignGateAutomatically(registrationState.data.legalEntity, type);
-    logToConsole('INFO', 'Назначены ворота (для информации)', { gate: gateForInfo });
+    logToConsole('INFO', 'Назначены ворота (только для информации)', { gate: gateForInfo });
     
     // НЕ ЗАГРУЖАЕМ марки - они уже в HTML
     showStep(6);
@@ -877,7 +888,6 @@ function selectTransit(answer) {
 }
 
 // ==================== ШАГ 12: ПОДТВЕРЖДЕНИЕ ====================
-
 function showConfirmation() {
     logToConsole('INFO', 'Показываю подтверждение');
     
@@ -886,7 +896,7 @@ function showConfirmation() {
     
     const data = registrationState.data;
     
-    // ИСПРАВЛЕНИЕ: Вычисляем ворота для показа, но не храним их в data
+    // ИСПРАВЛЕНИЕ: Вычисляем ворота для отображения, но НЕ сохраняем
     const gateForDisplay = assignGateAutomatically(data.legalEntity, data.productType) || 'Не назначены';
     
     let html = `
@@ -947,12 +957,27 @@ function showConfirmation() {
     container.innerHTML = html;
 }
 // ==================== ШАГ 13: ОТПРАВКА ====================
-
 async function submitRegistration() {
     logToConsole('INFO', 'Начинаю отправку регистрации', {
         data: registrationState.data,
         connectionStatus: navigator.onLine ? 'online' : 'offline'
     });
+    
+    // ДЕБАГ: Выводим данные перед отправкой
+    console.log('=== ДАННЫЕ ПЕРЕД ОТПРАВКОЙ (PWA) ===');
+    console.log('Оригинальный телефон:', registrationState.data.phone);
+    console.log('Тип телефона:', typeof registrationState.data.phone);
+    console.log('Поле gate:', registrationState.data.gate);
+    
+    // ИСПРАВЛЕНИЕ 1: Принудительная нормализация телефона
+    registrationState.data.phone = normalizePhone(registrationState.data.phone);
+    console.log('Нормализованный телефон:', registrationState.data.phone);
+    
+    // ИСПРАВЛЕНИЕ 2: Удаляем поле gate
+    if (registrationState.data.gate) {
+        console.log('⚠️ Удаляю поле gate:', registrationState.data.gate);
+        delete registrationState.data.gate;
+    }
     
     // Проверяем заполненность обязательных полей
     const requiredFields = ['phone', 'fio', 'supplier', 'legalEntity', 'productType', 'vehicleNumber'];
@@ -963,21 +988,24 @@ async function submitRegistration() {
         return;
     }
     
-    // ИСПРАВЛЕНИЕ 1: Нормализуем телефон перед отправкой
-    registrationState.data.phone = normalizePhone(registrationState.data.phone);
-    logToConsole('DEBUG', 'Телефон нормализован', { phone: registrationState.data.phone });
-    
-    // ИСПРАВЛЕНИЕ 2: Удаляем поле gate из данных перед отправкой
+    // ИСПРАВЛЕНИЕ 3: Копируем данные и удаляем лишние поля
     const dataToSend = {...registrationState.data};
-    delete dataToSend.gate; // УБИРАЕМ ворота
-    delete dataToSend.problemTypes; // УБИРАЕМ problemTypes (уже есть)
     
-    logToConsole('DEBUG', 'Данные для отправки', dataToSend);
+    // Убедимся, что удалили все лишние поля
+    delete dataToSend.gate;
+    delete dataToSend.problemTypes;
+    
+    console.log('=== ДАННЫЕ ДЛЯ ОТПРАВКИ (после очистки) ===');
+    console.log(JSON.stringify(dataToSend, null, 2));
+    console.log('Поле gate в dataToSend:', dataToSend.gate);
     
     // Проверяем соединение
     if (!navigator.onLine) {
         logToConsole('WARN', 'Нет соединения с интернетом');
         showNotification('⚠️ Нет соединения с интернетом. Данные будут сохранены локально.', 'warning');
+        
+        // Удаляем gate из оффлайн данных
+        delete registrationState.data.gate;
         
         const saved = saveRegistrationOffline();
         if (saved) {
@@ -1002,12 +1030,18 @@ async function submitRegistration() {
         if (response && response.success) {
             logToConsole('SUCCESS', 'Регистрация успешна на сервере!');
             
+            // Удаляем gate из локального состояния
+            delete registrationState.data.gate;
+            
             showSuccessMessage(response.data);
             resetRegistrationState();
             showStep(13);
             showNotification('✅ Регистрация успешно завершена!', 'success');
         } else {
             logToConsole('ERROR', 'Ошибка от сервера', response);
+            
+            // Удаляем gate при сохранении оффлайн
+            delete registrationState.data.gate;
             
             const saved = saveRegistrationOffline();
             if (saved) {
@@ -1020,6 +1054,9 @@ async function submitRegistration() {
         
     } catch (error) {
         logToConsole('ERROR', 'Критическая ошибка отправки', error);
+        
+        // Удаляем gate при сохранении оффлайн
+        delete registrationState.data.gate;
         
         const saved = saveRegistrationOffline();
         if (saved) {
@@ -2476,6 +2513,7 @@ window.clearCache = clearCache;
 window.refreshTopData = refreshTopData;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
+
 
 
 
