@@ -232,6 +232,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ==================== ОБРАБОТЧИКИ СОБЫТИЙ ====================
+// ==================== ОБРАБОТЧИКИ СОБЫТИЙ ====================
 
 function setupEventListeners() {
     // Обработка Enter в полях ввода
@@ -259,6 +260,48 @@ function setupEventListeners() {
         updateConnectionStatus(false);
         showNotification('⚠️ Нет соединения с интернетом', 'warning');
     });
+}
+
+// ==================== ОБРАБОТКА КЛАВИШИ ENTER ====================
+
+function handleEnterKey(input) {
+    const currentStep = registrationState.step;
+    
+    switch(currentStep) {
+        case 1:
+            handlePhoneSubmit();
+            break;
+        case 2:
+            handleFioSubmit();
+            break;
+        case 3:
+            // Если это поле для ручного ввода поставщика
+            if (input.id === 'supplier-input') {
+                handleManualSupplier();
+            }
+            break;
+        case 6:
+            // Если это поле для ручного ввода марки авто
+            if (input.id === 'brand-input') {
+                handleManualBrand();
+            }
+            break;
+        case 7:
+            handleVehicleNumberSubmit();
+            break;
+        case 8:
+            handlePalletsSubmit();
+            break;
+        case 9:
+            handleOrderSubmit();
+            break;
+        case 10:
+            handleEtrnSubmit();
+            break;
+        default:
+            // Для других шагов Enter не обрабатываем
+            break;
+    }
 }
 
 // ==================== НАВИГАЦИЯ ====================
@@ -2513,6 +2556,7 @@ window.clearCache = clearCache;
 window.refreshTopData = refreshTopData;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
+
 
 
 
