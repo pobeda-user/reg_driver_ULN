@@ -358,20 +358,21 @@ async function loadSupplierHistoryOptimized() {
   
   const container = document.getElementById('supplier-buttons');
   const infoBox = document.getElementById('supplier-history-info');
+  const searchIndicator = document.getElementById('supplier-search-indicator');
   
-  if (!container || !infoBox) return;
+  if (!container || !infoBox || !searchIndicator) return;
+  
+  // Показываем индикатор поиска
+  searchIndicator.style.display = 'block';
+  infoBox.style.display = 'none';
+  container.innerHTML = '';
   
   if (!registrationState.data.phone) {
+    searchIndicator.style.display = 'none';
+    infoBox.style.display = 'block';
     infoBox.innerHTML = '<p>❌ Нет номера телефона для поиска</p>';
     return;
   }
-  
-  infoBox.innerHTML = `
-    <p>🔍 Ищу поставщиков для ${registrationState.data.phone}...</p>
-    <div class="loader" style="width: 20px; height: 20px; margin: 10px auto;"></div>
-  `;
-  
-  container.innerHTML = '<div class="info-box">Загрузка истории поставщиков...</div>';
   
   try {
     // 1. Сначала пробуем найти в локальных ТОП данных
@@ -407,6 +408,9 @@ async function loadSupplierHistoryOptimized() {
           source: 'local_cache'
         });
         
+        // Скрываем индикатор, показываем результаты
+        searchIndicator.style.display = 'none';
+        infoBox.style.display = 'block';
         displaySuppliers(uniqueSuppliers, container, infoBox);
         return;
       }
@@ -426,10 +430,17 @@ async function loadSupplierHistoryOptimized() {
         searchMethod: response.searchMethod
       });
       
+      // Скрываем индикатор, показываем результаты
+      searchIndicator.style.display = 'none';
+      infoBox.style.display = 'block';
       displaySuppliers(response.suppliers, container, infoBox);
       
     } else {
       const errorMessage = response?.message || 'История поставщиков не найдена';
+      
+      // Скрываем индикатор, показываем сообщение
+      searchIndicator.style.display = 'none';
+      infoBox.style.display = 'block';
       infoBox.innerHTML = `<p>📭 ${errorMessage}</p>`;
       container.innerHTML = '<div class="info-box info">История не найдена. Введите поставщика вручную.</div>';
     }
@@ -437,6 +448,9 @@ async function loadSupplierHistoryOptimized() {
   } catch (error) {
     logToConsole('ERROR', 'Ошибка поиска поставщиков', error);
     
+    // Скрываем индикатор, показываем ошибку
+    searchIndicator.style.display = 'none';
+    infoBox.style.display = 'block';
     infoBox.innerHTML = `
       <p>⚠️ Ошибка загрузки истории</p>
       <p style="font-size: 12px; color: #666;">Вы можете ввести поставщика вручную ниже</p>
@@ -553,17 +567,18 @@ function selectProductType(type) {
 // ==================== ШАГ 6: МАРКА АВТО (ОПТИМИЗИРОВАННАЯ) ====================
 
 async function loadPopularBrandsOptimized() {
-  logToConsole('INFO', 'Оптимизированная загрузка марок авто');
+  logToConsole('INFO', 'Загрузка ТОП-5 марок авто');
   
   const container = document.getElementById('brand-buttons');
-  if (!container) return;
+  const infoBox = document.getElementById('brands-info');
+  const searchIndicator = document.getElementById('brand-search-indicator');
   
-  container.innerHTML = `
-    <div class="info-box">
-      <p>🔄 Загрузка популярных марок авто...</p>
-      <div class="loader" style="width: 20px; height: 20px; margin: 10px auto;"></div>
-    </div>
-  `;
+  if (!container || !infoBox || !searchIndicator) return;
+  
+  // Показываем индикатор поиска
+  searchIndicator.style.display = 'block';
+  infoBox.style.display = 'none';
+  container.innerHTML = '';
   
   try {
     // 1. Сначала пробуем из локальных ТОП данных
@@ -575,7 +590,13 @@ async function loadPopularBrandsOptimized() {
         source: 'local_cache'
       });
       
-      displayBrands(topData.brands, container);
+      // Берем только ТОП-5
+      const top5Brands = topData.brands.slice(0, 5);
+      
+      // Скрываем индикатор, показываем результаты
+      searchIndicator.style.display = 'none';
+      infoBox.style.display = 'block';
+      displayBrands(top5Brands, container, infoBox);
       return;
     }
     
@@ -590,19 +611,34 @@ async function loadPopularBrandsOptimized() {
         fromTopData: response.fromTopData || false
       });
       
-      displayBrands(response.brands, container);
+      // Берем только ТОП-5
+      const top5Brands = response.brands.slice(0, 5);
+      
+      // Скрываем индикатор, показываем результаты
+      searchIndicator.style.display = 'none';
+      infoBox.style.display = 'block';
+      displayBrands(top5Brands, container, infoBox);
       
     } else {
-      // 3. Fallback: стандартные марки
-      logToConsole('WARN', 'Использую стандартные марки авто');
-      showDefaultBrands();
+      // 3. Fallback: стандартные марки (только 5)
+      logToConsole('WARN', 'Использую стандартные марки авто (ТОП-5)');
+      
+      // Скрываем индикатор, показываем результаты
+      searchIndicator.style.display = 'none';
+      infoBox.style.display = 'block';
+      showDefaultBrands(container, infoBox);
     }
     
   } catch (error) {
     logToConsole('ERROR', 'Ошибка загрузки марок авто', error);
     
+    // Скрываем индикатор
+    searchIndicator.style.display = 'none';
+    infoBox.style.display = 'block';
+    
     // В случае ошибки показываем стандартные марки
-    showDefaultBrands();
+    showDefaultBrands(container, infoBox);
+    
     container.innerHTML += `
       <div class="info-box warning" style="margin-top: 10px;">
         <p>⚠️ Ошибка загрузки популярных марок</p>
@@ -612,11 +648,22 @@ async function loadPopularBrandsOptimized() {
   }
 }
 
-// Вспомогательная функция для отображения марок
-function displayBrands(brands, container) {
+// Обновленная функция отображения марок (только 5)
+function displayBrands(brands, container, infoBox) {
   container.innerHTML = '';
   
-  brands.forEach((brand, index) => {
+  // Показываем заголовок с количеством
+  if (infoBox) {
+    infoBox.innerHTML = `
+      <p>🚗 <strong>ТОП-${Math.min(brands.length, 5)} популярных марок авто</strong> (из истории регистраций):</p>
+      ${brands.length < 5 ? `<p style="font-size: 12px; color: #666;">Найдено только ${brands.length} уникальных марок</p>` : ''}
+    `;
+  }
+  
+  // Ограничиваем до 5 марок
+  const top5Brands = brands.slice(0, 5);
+  
+  top5Brands.forEach((brand, index) => {
     if (!brand || brand.trim() === '') return;
     
     const button = document.createElement('button');
@@ -636,51 +683,46 @@ function displayBrands(brands, container) {
     container.appendChild(button);
   });
   
-  logToConsole('SUCCESS', `Отображено ${brands.length} марок авто`);
+  logToConsole('SUCCESS', `Отображено ${top5Brands.length} марок авто (ТОП-5)`);
 }
 
-// Функция показа стандартных марок
-function showDefaultBrands() {
-    const container = document.getElementById('brand-buttons');
-    if (!container) return;
-    
-    const defaultBrands = [
-        'Газель',
-        'Мерседес',
-        'Вольво',
-        'Скания',
-        'MAN',
-        'DAF',
-        'Ford',
-        'Renault',
-        'Iveco',
-        'Камаз',
-        'Hyundai',
-        'Киа',
-        'Тойота'
-    ];
-    
-    container.innerHTML = '';
-    
-    defaultBrands.forEach((brand, index) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'option-btn';
-        button.innerHTML = `
-            <span class="option-number">${index + 1}</span>
-            <span class="option-text">${brand}</span>
-        `;
-        button.onclick = () => {
-            logToConsole('INFO', 'Выбрана стандартная марка', { 
-                brand,
-                index: index + 1
-            });
-            selectBrand(brand);
-        };
-        container.appendChild(button);
-    });
+// Обновленная функция показа стандартных марок (только 5)
+function showDefaultBrands(container, infoBox) {
+  if (!container) return;
+  
+  const defaultBrands = [
+    'Газель',
+    'Mercedes',
+    'Volvo',
+    'Scania',
+    'MAN'
+  ];
+  
+  // Показываем заголовок
+  if (infoBox) {
+    infoBox.innerHTML = '<p>🚗 <strong>ТОП-5 популярных марок авто</strong> (стандартный список):</p>';
+  }
+  
+  container.innerHTML = '';
+  
+  defaultBrands.slice(0, 5).forEach((brand, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'option-btn';
+    button.innerHTML = `
+      <span class="option-number">${index + 1}</span>
+      <span class="option-text">${brand}</span>
+    `;
+    button.onclick = () => {
+      logToConsole('INFO', 'Выбрана стандартная марка', { 
+        brand,
+        index: index + 1
+      });
+      selectBrand(brand);
+    };
+    container.appendChild(button);
+  });
 }
-
 function selectBrand(brand) {
     logToConsole('INFO', 'Выбрана марка авто', { brand });
     registrationState.data.vehicleType = brand;
@@ -2461,4 +2503,5 @@ window.clearCache = clearCache;
 window.refreshTopData = refreshTopData;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
+
 
