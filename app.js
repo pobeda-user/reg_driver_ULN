@@ -228,6 +228,41 @@ document.addEventListener('DOMContentLoaded', function() {
     // Периодическая проверка соединения
     setInterval(checkConnectionAndSendOffline, 60000);
     
+    // ==================== ИНИЦИАЛИЗАЦИЯ УВЕДОМЛЕНИЙ О СТАТУСЕ ====================
+    setTimeout(() => {
+        initWebNotifications().then(enabled => {
+            if (enabled) {
+                logToConsole('INFO', 'Веб-уведомления инициализированы');
+                
+                // Запускаем первую проверку статуса через 3 секунды
+                setTimeout(() => {
+                    checkForStatusUpdates();
+                }, 3000);
+            }
+        });
+    }, 2000);
+    
+    // Обновляем бейдж уведомлений при загрузке
+    updateNotificationBadge();
+    
+    logToConsole('INFO', 'Приложение инициализировано');
+});
+    }, 1000);
+    
+    // Показываем текущий шаг
+    showStep(registrationState.step);
+    
+    // Показываем оффлайн данные
+    showOfflineDataCount();
+    
+    // Тестируем соединение
+    setTimeout(() => {
+        testAPIConnection();
+    }, 1000);
+    
+    // Периодическая проверка соединения
+    setInterval(checkConnectionAndSendOffline, 60000);
+    
     logToConsole('INFO', 'Приложение инициализировано');
 });
 
@@ -3707,6 +3742,7 @@ window.closeStickyNotification = closeStickyNotification;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
 logToConsole('INFO', 'Модуль уведомлений о статусе загружен'); 
+
 
 
 
