@@ -246,8 +246,7 @@ document.addEventListener('DOMContentLoaded', function() {
     updateNotificationBadge();
     
     logToConsole('INFO', 'Приложение инициализировано');
-});
-    }, 1000);
+});  
     
     // Показываем текущий шаг
     showStep(registrationState.step);
@@ -3186,6 +3185,7 @@ window.closeStickyNotification = closeStickyNotification;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
 logToConsole('INFO', 'Модуль уведомлений о статусе загружен'); 
+
 
 
 
