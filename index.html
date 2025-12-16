@@ -1258,7 +1258,7 @@
         </div>
 
         <!-- Шаг 6: Марка авто -->
-        <div class="step" data-step="6">
+<div class="step" data-step="6">
     <div class="step-header">
         <div class="step-number">6</div>
         <h2>Выберите марку авто</h2>
@@ -1337,20 +1337,8 @@
                 Назад
             </button>
         </div>
-        <!-- Контейнер для sticky-уведомлений -->
-<div id="sticky-notifications" style="display: none;"></div>
-
-<!-- Иконка уведомлений в шапке (добавьте в контейнер или рядом с другими элементами) -->
-<!-- Например, можно добавить так: -->
-<div style="position: fixed; top: 15px; right: 50px; z-index: 10001;">
-  <button onclick="showNotificationHistory()" style="background: none; border: none; padding: 8px; cursor: pointer; position: relative;">
-    <span style="font-size: 24px;">📋</span>
-    <div id="notification-badge" class="notification-badge" style="display: none;"></div>
-  </button>
-</div>
     </div>
 </div>
-
         <!-- Шаг 7: Номер ТС -->
         <div class="step" data-step="7">
             <div class="step-header">
@@ -1563,11 +1551,33 @@
             </div>
         </div>
     </div>
+   
+    <!-- Контейнер для sticky-уведомлений -->
+    <div id="sticky-notifications" style="display: none;"></div>
 
-    <!-- Уведомление -->
+    <!-- Иконка уведомлений -->
+    <div id="notification-icon" style="position: fixed; top: 15px; right: 50px; z-index: 10001;">
+        <button onclick="showNotificationHistory()" style="background: none; border: none; padding: 8px; cursor: pointer; position: relative;">
+            <span style="font-size: 24px;">📋</span>
+            <div id="notification-badge" class="notification-badge" style="display: none;"></div>
+        </button>
+    </div>
+
+    <!-- Контейнер для sticky-уведомлений -->
+    <div id="sticky-notifications" style="display: none;"></div>
+
+    <!-- Иконка уведомлений -->
+    <div id="notification-icon" style="position: fixed; top: 15px; right: 50px; z-index: 10001;">
+        <button onclick="showNotificationHistory()" style="background: none; border: none; padding: 8px; cursor: pointer; position: relative;">
+            <span style="font-size: 24px;">📋</span>
+            <div id="notification-badge" class="notification-badge" style="display: none;"></div>
+        </button>
+    </div>
+
+    <!-- Уведомление (только один раз!) -->
     <div id="notification" class="notification" style="display: none;"></div>
 
-    <!-- Загрузка -->
+    <!-- Загрузка (только один раз!) -->
     <div id="loader" class="loader-overlay" style="display: none;">
         <div class="loader"></div>
         <p style="margin-top: 20px; color: #666;">Пожалуйста, подождите...</p>
@@ -1729,6 +1739,7 @@
     </script>
 </body>
 </html>
+
 
 
 
