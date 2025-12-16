@@ -1002,6 +1002,7 @@ function showConfirmation() {
     container.innerHTML = html;
 }
 // ==================== ШАГ 13: ОТПРАВКА ====================
+// ==================== ПОЛНАЯ ФУНКЦИЯ SUBMITREGISTRATION ====================
 async function submitRegistration() {
     logToConsole('INFO', 'Начинаю отправку регистрации', {
         data: registrationState.data,
@@ -1009,7 +1010,7 @@ async function submitRegistration() {
     });
     
     // ДЕБАГ: Выводим данные перед отправкой
-    console.log('=== ДАННЫЕ ПЕРЕД ОТПРАВКОЙ (PWA) ===');
+    console.log('=== ДАННЫЕ ПЕРЕД ОТПРАВКОЙ ===');
     console.log('Оригинальный телефон:', registrationState.data.phone);
     console.log('Тип телефона:', typeof registrationState.data.phone);
     console.log('Поле gate:', registrationState.data.gate);
@@ -1054,6 +1055,9 @@ async function submitRegistration() {
         
         const saved = saveRegistrationOffline();
         if (saved) {
+            // СОХРАНЯЕМ ДАННЫЕ ДЛЯ ЛИЧНОГО КАБИНЕТА ДАЖЕ В ОФФЛАЙН РЕЖИМЕ
+            saveDriverRegistrationData();
+            
             showSuccessMessage();
             resetRegistrationState();
             showStep(13);
@@ -1078,6 +1082,9 @@ async function submitRegistration() {
             // Удаляем gate из локального состояния
             delete registrationState.data.gate;
             
+            // ВАЖНО: СОХРАНЯЕМ ДАННЫЕ ДЛЯ ЛИЧНОГО КАБИНЕТА
+            saveDriverRegistrationData();
+            
             showSuccessMessage(response.data);
             resetRegistrationState();
             showStep(13);
@@ -1090,6 +1097,9 @@ async function submitRegistration() {
             
             const saved = saveRegistrationOffline();
             if (saved) {
+                // СОХРАНЯЕМ ДАННЫЕ ДЛЯ ЛИЧНОГО КАБИНЕТА ДАЖЕ ПРИ ОШИБКЕ
+                saveDriverRegistrationData();
+                
                 showSuccessMessage();
                 resetRegistrationState();
                 showStep(13);
@@ -1106,6 +1116,10 @@ async function submitRegistration() {
         const saved = saveRegistrationOffline();
         if (saved) {
             logToConsole('INFO', 'Данные сохранены оффлайн');
+            
+            // СОХРАНЯЕМ ДАННЫЕ ДЛЯ ЛИЧНОГО КАБИНЕТА ДАЖЕ ПРИ ОШИБКЕ
+            saveDriverRegistrationData();
+            
             showSuccessMessage();
             resetRegistrationState();
             showStep(13);
@@ -3455,6 +3469,7 @@ window.refreshCabinet = refreshCabinet;
 window.closeModal = closeModal;
 window.enterCabinetWithPhone = enterCabinetWithPhone;
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
+
 
 
 
