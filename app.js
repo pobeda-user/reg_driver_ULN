@@ -2149,23 +2149,25 @@ async function getPWANotifications(phone) {
         const lastUpdate = localStorage.getItem('last_notification_update_' + phone);
         
         const response = await sendAPIRequest({
-            action: 'get_pwa_updates',
+            action: 'get_pwa_notifications',  // ИЗМЕНИТЬ СЮДА
             phone: phone,
             lastUpdate: lastUpdate || null
         });
         
-        if (response && response.success && response.updates) {
+        console.log('Ответ уведомлений:', response);
+        
+        if (response && response.success && response.notifications) {
             // Сохраняем время последнего обновления
-            if (response.updates.length > 0) {
-                localStorage.setItem('last_notification_update_' + phone, response.updates[0].timestamp);
+            if (response.notifications.length > 0) {
+                localStorage.setItem('last_notification_update_' + phone, response.notifications[0].timestamp);
             }
             
             // Показываем новые уведомления
-            response.updates.forEach(notification => {
+            response.notifications.forEach(notification => {
                 showPushNotification(notification);
             });
             
-            return response.updates;
+            return response.notifications;
         }
         
         return [];
@@ -3469,6 +3471,7 @@ window.refreshCabinet = refreshCabinet;
 window.closeModal = closeModal;
 window.enterCabinetWithPhone = enterCabinetWithPhone;
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
+
 
 
 
