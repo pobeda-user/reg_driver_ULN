@@ -204,6 +204,8 @@ document.addEventListener('DOMContentLoaded', function() {
     // Настраиваем обработчики
     setupPhoneInput();
     setupEventListeners();
+// Добавить инициализацию push уведомлений
+    initializePushNotifications();
     
     // ПРЕДВАРИТЕЛЬНАЯ ЗАГРУЗКА ТОП ДАННЫХ (в фоне)
     setTimeout(() => {
@@ -3231,8 +3233,12 @@ window.resetOfflineAttempts = resetOfflineAttempts;
 window.sendViaAlternativeMethod = sendViaAlternativeMethod;
 window.clearCache = clearCache;
 window.refreshTopData = refreshTopData;
-
+window.openDriverCabinet = openDriverCabinet;
+window.closeDriverCabinet = closeDriverCabinet;
+window.switchTab = switchTab;
+window.refreshDriverCabinet = refreshDriverCabinet;
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
+
 
 
 
