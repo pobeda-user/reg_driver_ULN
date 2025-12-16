@@ -8,7 +8,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>УЛН. Регистрация водителей v1.5</title>
+    <title>УЛН. Регистрация водителей v1.4</title>
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="/reg_driver_ULN/manifest.json">
@@ -843,225 +843,6 @@
                 font-size: 16px;
             }
         }
-        /* Добавьте эти стили в существующий CSS блок, например в конец */
-
-/* Стили для компактных кнопок марок авто */
-.compact-brands-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 10px;
-    margin-bottom: 20px;
-}
-
-.compact-brand-btn {
-    background: white;
-    border: 2px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 12px 8px;
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.3s;
-    text-align: center;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 50px;
-    outline: none;
-    font-family: inherit;
-}
-
-.compact-brand-btn:hover {
-    border-color: #4285f4;
-    background: #f8f9ff;
-    transform: translateY(-2px);
-}
-
-.brand-text {
-    font-weight: 500;
-    color: #333;
-}
-
-/* Бейдж для уведомлений */
-.notification-badge {
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    background: #f44336;
-    color: white;
-    border-radius: 50%;
-    width: 20px;
-    height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    font-weight: bold;
-}
-
-/* Sticky уведомления */
-#sticky-notifications {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    z-index: 1000;
-    max-width: 350px;
-}
-
-.sticky-notification {
-    background: white;
-    border-radius: 12px;
-    padding: 15px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-    display: flex;
-    align-items: center;
-    gap: 15px;
-    transition: all 0.3s;
-    border-left: 4px solid #2196f3;
-}
-
-.sticky-notification.info {
-    border-left-color: #2196f3;
-}
-
-.sticky-notification.warning {
-    border-left-color: #ff9800;
-}
-
-.sticky-notification.error {
-    border-left-color: #f44336;
-}
-
-.sticky-notification.success {
-    border-left-color: #4caf50;
-}
-
-.sticky-content {
-    flex: 1;
-    font-size: 14px;
-    line-height: 1.5;
-}
-
-.sticky-close {
-    background: none;
-    border: none;
-    font-size: 18px;
-    color: #666;
-    cursor: pointer;
-    padding: 5px;
-    width: 30px;
-    height: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-
-.sticky-close:hover {
-    background: #f0f0f0;
-}
-
-/* История уведомлений */
-.notification-item {
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 10px;
-    cursor: pointer;
-    transition: all 0.3s;
-}
-
-.notification-item:hover {
-    background: #f8f9ff;
-    border-color: #4285f4;
-}
-
-.notification-item.unread {
-    background: #e3f2fd;
-    border-left: 4px solid #2196f3;
-}
-
-.notification-item.read {
-    opacity: 0.8;
-}
-
-.notification-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-}
-
-.notification-title {
-    font-weight: 600;
-    color: #333;
-    font-size: 14px;
-}
-
-.notification-time {
-    font-size: 12px;
-    color: #666;
-}
-
-.notification-body {
-    font-size: 13px;
-    color: #555;
-    line-height: 1.4;
-}
-
-.notification-unread-dot {
-    width: 8px;
-    height: 8px;
-    background: #2196f3;
-    border-radius: 50%;
-    margin-top: 5px;
-}
-
-.empty-state {
-    text-align: center;
-    padding: 30px;
-    color: #999;
-    font-style: italic;
-}
-        /* Стили для деталей статуса */
-.status-details {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 15px;
-    margin-bottom: 15px;
-}
-
-.status-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid #e0e0e0;
-}
-
-.status-item:last-child {
-    border-bottom: none;
-}
-
-.status-label {
-    color: #666;
-    font-weight: 500;
-}
-
-.status-value {
-    color: #333;
-    font-weight: 600;
-}
-
-.current-status {
-    margin-top: 20px;
-    padding: 15px;
-    background: #e3f2fd;
-    border-radius: 8px;
-    border-left: 4px solid #2196f3;
-}
     </style>
 </head>
 <body>
@@ -1258,7 +1039,7 @@
         </div>
 
         <!-- Шаг 6: Марка авто -->
-<div class="step" data-step="6">
+        <div class="step" data-step="6">
     <div class="step-header">
         <div class="step-number">6</div>
         <h2>Выберите марку авто</h2>
@@ -1339,6 +1120,7 @@
         </div>
     </div>
 </div>
+
         <!-- Шаг 7: Номер ТС -->
         <div class="step" data-step="7">
             <div class="step-header">
@@ -1548,39 +1330,14 @@
                 <button type="button" class="btn btn-secondary" onclick="showOfflineDataModal()">
                     📊 Оффлайн данные
                 </button>
-                <button onclick="forceCheckNotifications()" class="btn btn-secondary">
-  🔍 Проверить уведомления
-</button>               
             </div>
         </div>
     </div>
-   
-    <!-- Контейнер для sticky-уведомлений -->
-    <div id="sticky-notifications" style="display: none;"></div>
 
-    <!-- Иконка уведомлений -->
-    <div id="notification-icon" style="position: fixed; top: 15px; right: 50px; z-index: 10001;">
-        <button onclick="showNotificationHistory()" style="background: none; border: none; padding: 8px; cursor: pointer; position: relative;">
-            <span style="font-size: 24px;">📋</span>
-            <div id="notification-badge" class="notification-badge" style="display: none;"></div>
-        </button>
-    </div>
-
-    <!-- Контейнер для sticky-уведомлений -->
-    <div id="sticky-notifications" style="display: none;"></div>
-
-    <!-- Иконка уведомлений -->
-    <div id="notification-icon" style="position: fixed; top: 15px; right: 50px; z-index: 10001;">
-        <button onclick="showNotificationHistory()" style="background: none; border: none; padding: 8px; cursor: pointer; position: relative;">
-            <span style="font-size: 24px;">📋</span>
-            <div id="notification-badge" class="notification-badge" style="display: none;"></div>
-        </button>
-    </div>
-
-    <!-- Уведомление (только один раз!) -->
+    <!-- Уведомление -->
     <div id="notification" class="notification" style="display: none;"></div>
 
-    <!-- Загрузка (только один раз!) -->
+    <!-- Загрузка -->
     <div id="loader" class="loader-overlay" style="display: none;">
         <div class="loader"></div>
         <p style="margin-top: 20px; color: #666;">Пожалуйста, подождите...</p>
@@ -1671,8 +1428,10 @@
         });
         
         // Экспорт функций
-        window.showLoader = showLoader;       
-       
+        window.showLoader = showLoader;
+        
+        // Экспортируем CONFIG для использования в app.js
+        window.CONFIG = CONFIG;
         
         // Автоматическое обновление Service Worker
         if ('serviceWorker' in navigator) {
@@ -1740,10 +1499,5 @@
     </script>
 </body>
 </html>
-
-
-
-
-
 
 
