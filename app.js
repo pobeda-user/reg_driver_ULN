@@ -2603,35 +2603,55 @@ function setupNotificationListener() {
 }
 
 // Проверка обновлений статуса на сервере
+// Проверка обновлений статуса на сервере
 async function checkForStatusUpdates() {
   try {
-    if (!registrationState.data.phone) return;
+    if (!registrationState.data.phone) {
+      logToConsole('WARN', 'checkForStatusUpdates: Нет телефона для проверки');
+      return;
+    }
     
     // Получаем последнее время проверки
     const lastCheckTime = localStorage.getItem('last_notification_check') || 
-                         Date.now() - 10 * 60 * 1000; // 10 минут назад по умолчанию
+                         Date.now() - 24 * 60 * 60 * 1000; // сутки назад по умолчанию
     
-    logToConsole('INFO', 'Проверка обновлений статуса', {
+    logToConsole('INFO', 'Проверка PWA уведомлений', {
       phone: registrationState.data.phone,
       lastCheckTime: new Date(parseInt(lastCheckTime)).toISOString()
     });
     
-    // ИСПРАВЛЕНИЕ: используем новый action для PWA уведомлений
+    // ИСПРАВЛЕННЫЙ КОД: используем get_pwa_notifications
     const response = await sendAPIRequest({
-      action: 'get_pwa_notifications', // ← ДОЛЖНО БЫТЬ get_pwa_notifications, а не get_status_updates
+      action: 'get_pwa_notifications',
       phone: registrationState.data.phone,
       since: lastCheckTime
     });
     
+    logToConsole('DEBUG', 'Ответ от сервера PWA уведомлений', {
+      success: response?.success,
+      count: response?.notifications?.length,
+      hasError: response?.error
+    });
+    
     if (response && response.success && response.notifications && response.notifications.length > 0) {
-      logToConsole('INFO', 'Получены уведомления из PWA системы', {
+      logToConsole('SUCCESS', 'Получены PWA уведомления', {
         count: response.notifications.length,
-        serverTime: response.serverTime
+        firstNotification: response.notifications[0]
       });
       
       // Обрабатываем каждое уведомление
-      response.notifications.forEach(notification => {
-        handleStatusUpdate(notification);
+      response.notifications.forEach((notification, index) => {
+        logToConsole('INFO', `Обработка уведомления ${index + 1}`, {
+          id: notification.id,
+          type: notification.type,
+          title: notification.title
+        });
+        
+        // Преобразуем PWA уведомление в формат для handleStatusUpdate
+        const update = convertPwaNotificationToUpdate(notification);
+        
+        // Обрабатываем уведомление
+        handleStatusUpdate(update);
         
         // Помечаем как прочитанное на сервере
         if (notification.id) {
@@ -2643,14 +2663,45 @@ async function checkForStatusUpdates() {
       localStorage.setItem('last_notification_check', Date.now().toString());
       
     } else {
-      logToConsole('INFO', 'Нет новых уведомлений', {
+      logToConsole('INFO', 'Нет новых PWA уведомлений', {
         phone: registrationState.data.phone,
-        count: response?.notifications?.length || 0
+        count: response?.notifications?.length || 0,
+        message: response?.message || 'Нет данных'
       });
     }
   } catch (error) {
-    logToConsole('ERROR', 'Ошибка проверки обновлений статуса', error);
+    logToConsole('ERROR', 'Ошибка проверки PWA уведомлений', {
+      error: error.message,
+      stack: error.stack,
+      phone: registrationState.data.phone
+    });
   }
+}
+
+// Функция преобразования PWA уведомления в формат update
+function convertPwaNotificationToUpdate(notification) {
+  return {
+    registrationId: notification.registrationId || notification.id,
+    driverId: notification.phone,
+    rowNumber: notification.rowNumber || 0,
+    timestamp: notification.serverTime || notification.timestamp,
+    newStatus: notification.data?.status || notification.type,
+    oldStatus: '',
+    assignedGate: notification.data?.gate || '',
+    supplier: notification.data?.supplier || '',
+    fio: notification.data?.driverName || '',
+    phone: notification.phone || '',
+    problemType: notification.data?.problemType || '',
+    productType: notification.data?.productType || '',
+    legalEntity: notification.data?.legalEntity || '',
+    transit: notification.data?.transit || '',
+    vehicleNumber: notification.data?.vehicleNumber || '',
+    orderNumber: notification.data?.orderNumber || '',
+    // Дополнительные поля для совместимости
+    _isPwaNotification: true,
+    _notificationData: notification.data,
+    _originalNotification: notification
+  };
 }
 
 // Функция пометки уведомления как прочитанного на сервере
@@ -2697,31 +2748,21 @@ async function markNotificationAsReadOnServer(notificationId) {
 
 // Обработка обновления статуса
 // Обновите функцию handleStatusUpdate для обработки данных из PWA уведомлений:
-function handleStatusUpdate(notification) {
-  logToConsole('INFO', 'Обработка уведомления из PWA системы', notification);
-  
-  // Формируем update объект для совместимости с существующим кодом
-  const update = {
-    registrationId: notification.registrationId || notification.id,
-    driverId: notification.phone,
-    rowNumber: notification.rowNumber || 0,
-    timestamp: notification.serverTime || notification.timestamp,
-    newStatus: notification.data?.status || 'unknown',
-    oldStatus: '',
-    assignedGate: notification.data?.gate || '',
-    supplier: notification.data?.supplier || '',
-    fio: notification.data?.driverName || '',
-    phone: notification.phone || '',
-    problemType: notification.data?.problemType || '',
-    productType: notification.data?.productType || '',
-    legalEntity: notification.data?.legalEntity || '',
-    transit: notification.data?.transit || '',
-    vehicleNumber: notification.data?.vehicleNumber || '',
-    orderNumber: notification.data?.orderNumber || ''
-  };
+// Обработка обновления статуса
+function handleStatusUpdate(update) {
+  logToConsole('DEBUG', 'handleStatusUpdate вызван', {
+    updateId: update.registrationId,
+    newStatus: update.newStatus,
+    isPwaNotification: update._isPwaNotification,
+    update: update
+  });
   
   // Показываем системное уведомление
-  showBrowserNotification(update);
+  if (Notification.permission === 'granted') {
+    showBrowserNotification(update);
+  } else {
+    logToConsole('WARN', 'Нет разрешения на браузерные уведомления');
+  }
   
   // Показываем уведомление в приложении
   showAppNotification(update);
@@ -2733,6 +2774,105 @@ function handleStatusUpdate(notification) {
   
   // Добавляем в историю уведомлений
   addToNotificationHistory(update);
+  
+  // Показываем всплывающее уведомление в UI
+  showInAppPopupNotification(update);
+}
+
+// Показ всплывающего уведомления в приложении
+function showInAppPopupNotification(update) {
+  try {
+    logToConsole('INFO', 'Показ всплывающего уведомления в приложении', {
+      status: update.newStatus,
+      driverName: update.fio
+    });
+    
+    // Создаем элемент уведомления
+    const notificationElement = document.createElement('div');
+    notificationElement.id = 'in-app-notification-' + Date.now();
+    notificationElement.className = 'in-app-notification';
+    notificationElement.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: white;
+      border-left: 4px solid #2196f3;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      padding: 15px;
+      border-radius: 8px;
+      max-width: 400px;
+      z-index: 10000;
+      animation: slideIn 0.3s ease-out;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    `;
+    
+    // Добавляем стиль анимации
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes slideOut {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Заголовок уведомления
+    const title = formatNotificationTitle(update);
+    const body = formatNotificationBody(update);
+    
+    notificationElement.innerHTML = `
+      <div style="display: flex; align-items: flex-start; gap: 10px;">
+        <div style="font-size: 24px; line-height: 1;">${getStatusEmoji(update.newStatus)}</div>
+        <div style="flex: 1;">
+          <div style="font-weight: 600; margin-bottom: 5px; color: #333;">${title}</div>
+          <div style="font-size: 14px; color: #666; line-height: 1.4;">${body.replace(/\n/g, '<br>')}</div>
+          ${update.supplier ? `<div style="margin-top: 8px; font-size: 13px; color: #555;">🏢 ${update.supplier}</div>` : ''}
+          ${update.assignedGate ? `<div style="margin-top: 5px; font-size: 13px; color: #2196f3;">🚪 Ворота: ${update.assignedGate}</div>` : ''}
+        </div>
+        <button onclick="document.getElementById('${notificationElement.id}').style.animation='slideOut 0.3s ease-out'; setTimeout(() => document.getElementById('${notificationElement.id}').remove(), 300)" 
+                style="background: none; border: none; font-size: 20px; cursor: pointer; color: #999; padding: 0; margin: -5px 0 0 0; line-height: 1;">✕</button>
+      </div>
+      <div style="margin-top: 10px; display: flex; gap: 10px;">
+        <button onclick="showStatusDetailsModal(${JSON.stringify(update).replace(/"/g, '&quot;')}); document.getElementById('${notificationElement.id}').remove()" 
+                style="flex: 1; padding: 8px 12px; background: #2196f3; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">Подробнее</button>
+        <button onclick="document.getElementById('${notificationElement.id}').style.animation='slideOut 0.3s ease-out'; setTimeout(() => document.getElementById('${notificationElement.id}').remove(), 300)" 
+                style="flex: 1; padding: 8px 12px; background: #f5f5f5; color: #666; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;">Закрыть</button>
+      </div>
+    `;
+    
+    document.body.appendChild(notificationElement);
+    
+    // Автоматически скрываем через 10 секунд
+    setTimeout(() => {
+      if (document.getElementById(notificationElement.id)) {
+        notificationElement.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => notificationElement.remove(), 300);
+      }
+    }, 10000);
+    
+    logToConsole('SUCCESS', 'Всплывающее уведомление показано');
+    
+  } catch (error) {
+    logToConsole('ERROR', 'Ошибка показа всплывающего уведомления', error);
+  }
+}
+
+// Получение эмодзи для статуса
+function getStatusEmoji(status) {
+  const emojis = {
+    'Назначены ворота': '🚪',
+    'Документы готовы к выдаче': '📄',
+    'Отказ в приемке': '❌',
+    'Нет в графике': '⏰',
+    'Проблема с товаром': '⚠️',
+    'Проблема с документами': '⚠️',
+    'Зарегистрирован': '✅'
+  };
+  return emojis[status] || '📋';
 }
 
 // Показ браузерного уведомления
@@ -3313,6 +3453,7 @@ window.closeStickyNotification = closeStickyNotification;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
 logToConsole('INFO', 'Модуль уведомлений о статусе загружен');
+
 
 
 
