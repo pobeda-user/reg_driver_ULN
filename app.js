@@ -257,14 +257,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Тестируем соединение
     setTimeout(() => {
         testAPIConnection();
-    }, 1000);
     
-    // Периодическая проверка соединения
-    setInterval(checkConnectionAndSendOffline, 60000);
-    
-    logToConsole('INFO', 'Приложение инициализировано');
-});
-
 /// ==================== ОБРАБОТЧИКИ СОБЫТИЙ ====================
 
 function setupEventListeners() {
@@ -3185,6 +3178,7 @@ window.closeStickyNotification = closeStickyNotification;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
 logToConsole('INFO', 'Модуль уведомлений о статусе загружен'); 
+
 
 
 
