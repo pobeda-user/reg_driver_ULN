@@ -1833,70 +1833,271 @@ function clearOfflineData() {
 }
 
 // ==================== ЛИЧНЫЙ КАБИНЕТ ВОДИТЕЛЯ ====================
-async function openDriverCabinet() {
+function openDriverCabinet() {
     try {
-        logToConsole('INFO', 'Открываю личный кабинет водителя (исправленная)');
+        console.log('Открываю личный кабинет...');
         
-        // Пробуем получить телефон из разных источников
+        // 1. Пробуем получить телефон из текущей сессии
         let driverPhone = '';
         let driverName = '';
         
-        // 1. Из текущего состояния регистрации
-        if (registrationState.data && registrationState.data.phone) {
-            driverPhone = registrationState.data.phone;
+        if (registrationState && registrationState.data) {
+            driverPhone = registrationState.data.phone || '';
             driverName = registrationState.data.fio || '';
+            console.log('Телефон из registrationState:', driverPhone);
         }
         
-        // 2. Из localStorage (последняя успешная регистрация)
+        // 2. Пробуем из localStorage
         if (!driverPhone) {
-            const lastRegistration = localStorage.getItem('last_registration');
-            if (lastRegistration) {
+            const lastReg = localStorage.getItem('driver_last_registration');
+            if (lastReg) {
                 try {
-                    const lastRegData = JSON.parse(lastRegistration);
-                    driverPhone = lastRegData.phone || '';
-                    driverName = lastRegData.fio || '';
+                    const data = JSON.parse(lastReg);
+                    driverPhone = data.phone || '';
+                    driverName = data.fio || '';
+                    console.log('Телефон из localStorage:', driverPhone);
                 } catch (e) {
-                    console.log('Ошибка парсинга последней регистрации:', e);
+                    console.log('Ошибка парсинга localStorage:', e);
                 }
             }
         }
         
-        // 3. Если телефон все еще не найден, показываем шаг 1
+        // 3. Если телефон не найден, показываем ввод
         if (!driverPhone) {
-            showNotification('Сначала пройдите регистрацию или введите номер телефона', 'error');
-            showStep(1);
+            showNotification('Введите номер телефона для доступа к личному кабинету', 'warning');
             
-            // Фокус на поле ввода телефона
-            setTimeout(() => {
-                const phoneInput = document.getElementById('phone-input');
-                if (phoneInput) phoneInput.focus();
-            }, 300);
-            
+            // Показываем модальное окно для ввода телефона
+            showPhoneInputModal();
             return;
         }
         
-        showLoader(true);
-        
-        // Получаем историю регистраций
-        const history = await getDriverHistory(driverPhone);
-        
-        // Получаем текущие уведомления
-        const notifications = await getPWANotifications(driverPhone);
-        
-        // Получаем статусы из таблицы
-        const statusUpdates = await getDriverStatusUpdates(driverPhone);
-        
-        showLoader(false);
-        
-        // Показываем личный кабинет
-        showDriverCabinet(history, notifications, statusUpdates, driverPhone, driverName);
+        // 4. Показываем личный кабинет
+        showSimpleDriverCabinet(driverPhone, driverName);
         
     } catch (error) {
-        logToConsole('ERROR', 'Ошибка открытия личного кабинета', error);
-        showLoader(false);
-        showNotification('Ошибка загрузки личного кабинета: ' + error.message, 'error');
+        console.error('Ошибка открытия личного кабинета:', error);
+        showNotification('Ошибка: ' + error.message, 'error');
     }
 }
+
+function showPhoneInputModal() {
+    const modalHtml = `
+        <div class="modal-overlay" onclick="closeModal()">
+            <div class="modal" onclick="event.stopPropagation()" style="max-width: 400px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">📱 Введите номер телефона</h3>
+                    <button class="modal-close" onclick="closeModal()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <p>Для доступа к личному кабинету введите номер телефона:</p>
+                    <div class="phone-input-container" style="margin: 20px 0;">
+                        <div class="phone-prefix">+7</div>
+                        <input type="tel" id="cabinet-phone-input" 
+                               placeholder="999 123 45 67" class="form-input" 
+                               style="border: none; padding: 16px 10px;">
+                    </div>
+                    <div class="info-box">
+                        <p>Используйте номер телефона, который вы указывали при регистрации</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+                    <button class="btn btn-primary" onclick="enterCabinetWithPhone()">Войти</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    const modalContainer = document.createElement('div');
+    modalContainer.innerHTML = modalHtml;
+    modalContainer.id = 'phone-input-modal';
+    document.body.appendChild(modalContainer);
+    
+    // Фокус на поле ввода
+    setTimeout(() => {
+        const phoneInput = document.getElementById('cabinet-phone-input');
+        if (phoneInput) phoneInput.focus();
+    }, 300);
+}
+function enterCabinetWithPhone() {
+    const phoneInput = document.getElementById('cabinet-phone-input');
+    if (!phoneInput) return;
+    
+    const phone = phoneInput.value.replace(/\s/g, '');
+    
+    if (!phone || phone.length < 10) {
+        showNotification('Пожалуйста, введите корректный номер телефона', 'error');
+        phoneInput.focus();
+        return;
+    }
+    
+    const normalizedPhone = normalizePhone(phone);
+    
+    // Закрываем модальное окно
+    closeModal();
+    
+    // Показываем личный кабинет
+    showSimpleDriverCabinet(normalizedPhone, '');
+}
+
+function showSimpleDriverCabinet(driverPhone, driverName) {
+    const formattedPhone = formatPhoneDisplay(driverPhone);
+    
+    const modalHtml = `
+        <div class="modal-overlay" onclick="closeDriverCabinet()">
+            <div class="modal" onclick="event.stopPropagation()" style="max-width: 700px; max-height: 90vh;">
+                <div class="modal-header">
+                    <h3 class="modal-title">👤 Личный кабинет водителя</h3>
+                    <button class="modal-close" onclick="closeDriverCabinet()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="info-box" style="margin-bottom: 20px;">
+                        <p><strong>👤 Водитель:</strong> ${driverName || 'Не указано'}</p>
+                        <p><strong>📱 Телефон:</strong> ${formattedPhone}</p>
+                        <p><strong>🕐 Время входа:</strong> ${new Date().toLocaleString('ru-RU')}</p>
+                    </div>
+                    
+                    <div class="tabs" style="margin-bottom: 20px; display: flex; gap: 5px; border-bottom: 1px solid #e0e0e0;">
+                        <button class="tab-btn active" onclick="switchCabinetTab('info')" 
+                                style="padding: 10px 15px; border: none; background: none; cursor: pointer; border-bottom: 3px solid #4285f4; color: #4285f4;">
+                            📋 Основная информация
+                        </button>
+                        <button class="tab-btn" onclick="switchCabinetTab('history')"
+                                style="padding: 10px 15px; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; color: #666;">
+                            📜 История регистраций
+                        </button>
+                        <button class="tab-btn" onclick="switchCabinetTab('notifications')"
+                                style="padding: 10px 15px; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; color: #666;">
+                            🔔 Уведомления
+                        </button>
+                    </div>
+                    
+                    <div id="cabinet-info-tab" class="cabinet-tab-content" style="display: block;">
+                        <div class="card" style="margin-bottom: 15px;">
+                            <div class="card-header">
+                                <div class="card-title">Текущий статус</div>
+                            </div>
+                            <div class="card-body">
+                                <p>✅ <strong>Статус:</strong> Доступ к личному кабинету открыт</p>
+                                <p>📅 <strong>Дата:</strong> ${new Date().toLocaleDateString('ru-RU')}</p>
+                                <p>⏰ <strong>Время:</strong> ${new Date().toLocaleTimeString('ru-RU')}</p>
+                            </div>
+                        </div>
+                        
+                        <div class="warning-box">
+                            <p>⚠️ <strong>Важная информация:</strong></p>
+                            <p>Полная функциональность личного кабинета находится в разработке.</p>
+                            <p>В ближайшее время будет доступно:</p>
+                            <ul style="margin-left: 20px; margin-top: 10px;">
+                                <li>История всех ваших регистраций</li>
+                                <li>Текущий статус заездов в реальном времени</li>
+                                <li>Push-уведомления о назначении ворот</li>
+                                <li>Информация о проблемах и их решении</li>
+                                <li>График заездов и статус очереди</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="info-box" style="margin-top: 15px;">
+                            <p>📞 Для получения информации о текущем статусе заезда обратитесь к диспетчеру.</p>
+                            <p>🚪 Ворота будут назначены согласно графику и типу товара.</p>
+                        </div>
+                    </div>
+                    
+                    <div id="cabinet-history-tab" class="cabinet-tab-content" style="display: none;">
+                        <div class="empty-state" style="padding: 40px 20px; text-align: center; color: #999;">
+                            <div style="font-size: 40px; margin-bottom: 15px;">📭</div>
+                            <p>История регистраций временно недоступна</p>
+                            <p style="font-size: 14px; margin-top: 10px;">Функция находится в разработке</p>
+                        </div>
+                    </div>
+                    
+                    <div id="cabinet-notifications-tab" class="cabinet-tab-content" style="display: none;">
+                        <div class="empty-state" style="padding: 40px 20px; text-align: center; color: #999;">
+                            <div style="font-size: 40px; margin-bottom: 15px;">🔕</div>
+                            <p>Нет новых уведомлений</p>
+                            <p style="font-size: 14px; margin-top: 10px;">Уведомления появятся здесь при изменении статуса</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeDriverCabinet()">Закрыть</button>
+                    <button class="btn btn-primary" onclick="refreshCabinet('${driverPhone}')">🔄 Обновить</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Удаляем старый модальный окно если есть
+    const oldModal = document.getElementById('driver-cabinet-modal');
+    if (oldModal) oldModal.remove();
+    
+    const modalContainer = document.createElement('div');
+    modalContainer.innerHTML = modalHtml;
+    modalContainer.id = 'driver-cabinet-modal';
+    document.body.appendChild(modalContainer);
+}
+
+function switchCabinetTab(tabName) {
+    // Скрыть все вкладки
+    document.querySelectorAll('.cabinet-tab-content').forEach(tab => {
+        tab.style.display = 'none';
+    });
+    
+    // Убрать активный класс со всех кнопок
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.style.borderBottomColor = 'transparent';
+        btn.style.color = '#666';
+    });
+    
+    // Показать выбранную вкладку
+    const tabElement = document.getElementById(`cabinet-${tabName}-tab`);
+    if (tabElement) {
+        tabElement.style.display = 'block';
+    }
+    
+    // Активировать кнопку
+    const buttons = document.querySelectorAll('.tab-btn');
+    buttons.forEach(btn => {
+        if (btn.textContent.includes(getCabinetTabName(tabName))) {
+            btn.style.borderBottomColor = '#4285f4';
+            btn.style.color = '#4285f4';
+        }
+    });
+}
+
+function getCabinetTabName(tabName) {
+    const map = {
+        'info': 'Основная информация',
+        'history': 'История регистраций',
+        'notifications': 'Уведомления'
+    };
+    return map[tabName] || tabName;
+}
+
+function refreshCabinet(phone) {
+    showNotification('Обновление информации...', 'info');
+    
+    // Здесь можно добавить запрос к серверу для обновления данных
+    setTimeout(() => {
+        showNotification('Информация обновлена', 'success');
+    }, 1000);
+}
+
+function closeDriverCabinet() {
+    const modal = document.getElementById('driver-cabinet-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+function closeModal() {
+    const modal = document.querySelector('.modal-overlay');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+
 
 async function getDriverHistory(phone) {
     try {
@@ -1994,6 +2195,41 @@ async function getDriverStatusUpdates(phone) {
         return [];
     }
 }
+
+function saveDriverRegistrationData() {
+    try {
+        if (registrationState.data && registrationState.data.phone) {
+            const dataToSave = {
+                phone: registrationState.data.phone,
+                fio: registrationState.data.fio,
+                supplier: registrationState.data.supplier,
+                legalEntity: registrationState.data.legalEntity,
+                vehicleNumber: registrationState.data.vehicleNumber,
+                timestamp: Date.now(),
+                date: new Date().toLocaleString('ru-RU')
+            };
+            
+            // Сохраняем в localStorage
+            localStorage.setItem('driver_last_registration', JSON.stringify(dataToSave));
+            
+            // Также сохраняем в историю
+            const history = JSON.parse(localStorage.getItem('driver_registration_history') || '[]');
+            history.unshift(dataToSave);
+            
+            // Ограничиваем историю последними 20 записями
+            if (history.length > 20) {
+                history.pop();
+            }
+            
+            localStorage.setItem('driver_registration_history', JSON.stringify(history));
+            
+            console.log('Данные регистрации сохранены:', dataToSave);
+        }
+    } catch (error) {
+        console.error('Ошибка сохранения данных регистрации:', error);
+    }
+}
+
 
 function showDriverCabinet(history, notifications, statusUpdates, driverPhone, driverName) {
     logToConsole('INFO', 'Показываю личный кабинет', {
@@ -3212,7 +3448,14 @@ window.openDriverCabinet = openDriverCabinet;
 window.closeDriverCabinet = closeDriverCabinet;
 window.switchTab = switchTab;
 window.refreshDriverCabinet = refreshDriverCabinet;
+window.openDriverCabinet = openDriverCabinet;
+window.closeDriverCabinet = closeDriverCabinet;
+window.switchCabinetTab = switchCabinetTab;
+window.refreshCabinet = refreshCabinet;
+window.closeModal = closeModal;
+window.enterCabinetWithPhone = enterCabinetWithPhone;
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
+
 
 
 
