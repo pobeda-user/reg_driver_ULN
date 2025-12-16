@@ -2603,7 +2603,6 @@ function setupNotificationListener() {
 }
 
 // Проверка обновлений статуса на сервере
-// Проверка обновлений статуса на сервере
 async function checkForStatusUpdates() {
   try {
     if (!registrationState.data.phone) return;
@@ -2617,8 +2616,9 @@ async function checkForStatusUpdates() {
       lastCheckTime: new Date(parseInt(lastCheckTime)).toISOString()
     });
     
+    // ИСПРАВЛЕНИЕ: используем новый action для PWA уведомлений
     const response = await sendAPIRequest({
-      action: 'get_pwa_notifications',
+      action: 'get_pwa_notifications', // ← ДОЛЖНО БЫТЬ get_pwa_notifications, а не get_status_updates
       phone: registrationState.data.phone,
       since: lastCheckTime
     });
@@ -2642,9 +2642,39 @@ async function checkForStatusUpdates() {
       // Сохраняем время последней проверки
       localStorage.setItem('last_notification_check', Date.now().toString());
       
+    } else {
+      logToConsole('INFO', 'Нет новых уведомлений', {
+        phone: registrationState.data.phone,
+        count: response?.notifications?.length || 0
+      });
     }
   } catch (error) {
     logToConsole('ERROR', 'Ошибка проверки обновлений статуса', error);
+  }
+}
+
+// Функция пометки уведомления как прочитанного на сервере
+async function markNotificationAsReadOnServer(notificationId) {
+  try {
+    const response = await sendAPIRequest({
+      action: 'mark_notification_read',
+      notificationId: notificationId
+    });
+    
+    if (response && response.success) {
+      logToConsole('INFO', 'Уведомление помечено как прочитанное на сервере', {
+        notificationId: notificationId,
+        response: response
+      });
+    } else {
+      logToConsole('WARN', 'Не удалось пометить уведомление как прочитанное', {
+        notificationId: notificationId,
+        error: response?.message || 'Неизвестная ошибка'
+      });
+    }
+    
+  } catch (error) {
+    logToConsole('ERROR', 'Ошибка пометки уведомления как прочитанного на сервере', error);
   }
 }
 
@@ -3212,5 +3242,6 @@ window.closeStickyNotification = closeStickyNotification;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
 logToConsole('INFO', 'Модуль уведомлений о статусе загружен');
+
 
 
