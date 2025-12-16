@@ -1,4 +1,4 @@
-// app.js v1.4 - ПОЛНАЯ ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ТОП-ДАННЫМИ
+// app.js v1.5 - ПОЛНАЯ ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ТОП-ДАННЫМИ
 
 // Конфигурация
 let CONFIG = {
@@ -246,18 +246,8 @@ document.addEventListener('DOMContentLoaded', function() {
     updateNotificationBadge();
     
     logToConsole('INFO', 'Приложение инициализировано');
-});  
-    
-    // Показываем текущий шаг
-    showStep(registrationState.step);
-    
-    // Показываем оффлайн данные
-    showOfflineDataCount();
-    
-    // Тестируем соединение
-    setTimeout(() => {
-        testAPIConnection();
-    
+});
+
 /// ==================== ОБРАБОТЧИКИ СОБЫТИЙ ====================
 
 function setupEventListeners() {
@@ -2527,27 +2517,30 @@ function showSuccessMessage(serverData = null) {
 // ==================== ОЧИСТКА КЭША ====================
 
 async function clearCache() {
-  try {
-    showLoader(true);
-    
-    const response = await fetch(`${CONFIG.APP_SCRIPT_URL}?action=clear_cache&_t=${Date.now()}`);
-    const data = await response.json();
-    
-    showLoader(false);
-    
-    if (data.success) {
-      showNotification('✅ Кэш поставщиков очищен', 'success');
-      logToConsole('INFO', 'Кэш очищен', data);
-    } else {
-      showNotification('❌ Ошибка очистки кэша', 'error');
-      logToConsole('ERROR', 'Ошибка очистки кэша', data);
+    try {
+        showLoader(true);
+        
+        // Очищаем локальный кэш ТОП-данных
+        localStorage.removeItem(TOP_DATA_CACHE_KEY);
+        
+        // Также можно очистить другие кэши
+        localStorage.removeItem('driver_registration_state');
+        
+        showLoader(false);
+        showNotification('✅ Локальный кэш очищен', 'success');
+        logToConsole('INFO', 'Локальный кэш очищен');
+        
+        // Обновляем счетчик оффлайн данных
+        showOfflineDataCount();
+        
+    } catch (error) {
+        showLoader(false);
+        showNotification('❌ Ошибка очистки кэша', 'error');
+        logToConsole('ERROR', 'Ошибка очистки кэша', error);
     }
-  } catch (error) {
-    showLoader(false);
-    showNotification('❌ Ошибка сети при очистке кэша', 'error');
-    logToConsole('ERROR', 'Ошибка сети при очистке кэша', error);
-  }
-    // ==================== ВЕБ-УВЕДОМЛЕНИЯ О СМЕНЕ СТАТУСА ====================
+}
+
+// ==================== ВЕБ-УВЕДОМЛЕНИЯ О СМЕНЕ СТАТУСА ====================
 
 // Инициализация веб-уведомлений
 async function initWebNotifications() {
@@ -3095,17 +3088,8 @@ function updateSuccessStepWithStatus(update) {
     // Обновляем существующий блок
     const statusBlock = container.querySelector('.current-status');
     statusBlock.outerHTML = statusHtml;
+  }
   
-  // Добавляем кнопку для просмотра истории уведомлений
-  const buttonGroup = document.querySelector('.button-group');
-  if (buttonGroup && !buttonGroup.querySelector('#notification-history-btn')) {
-    const historyBtn = document.createElement('button');
-    historyBtn.id = 'notification-history-btn';
-    historyBtn.className = 'btn btn-secondary';
-    historyBtn.innerHTML = '📋 История статусов';
-    historyBtn.onclick = showNotificationHistory;
-    buttonGroup.appendChild(historyBtn);
-  }  
   // Добавляем кнопку для просмотра истории уведомлений
   const buttonGroup = document.querySelector('.button-group');
   if (buttonGroup && !buttonGroup.querySelector('#notification-history-btn')) {
@@ -3117,30 +3101,7 @@ function updateSuccessStepWithStatus(update) {
     buttonGroup.appendChild(historyBtn);
   }
 }
-    // ==================== ОЧИСТКА КЭША ====================
-async function clearCache() {
-    try {
-        showLoader(true);
-        
-        // Очищаем локальный кэш ТОП-данных
-        localStorage.removeItem(TOP_DATA_CACHE_KEY);
-        
-        // Также можно очистить другие кэши
-        localStorage.removeItem('driver_registration_state');
-        
-        showLoader(false);
-        showNotification('✅ Локальный кэш очищен', 'success');
-        logToConsole('INFO', 'Локальный кэш очищен');
-        
-        // Обновляем счетчик оффлайн данных
-        showOfflineDataCount();
-        
-    } catch (error) {
-        showLoader(false);
-        showNotification('❌ Ошибка очистки кэша', 'error');
-        logToConsole('ERROR', 'Ошибка очистки кэша', error);
-    }
-}
+
 // ==================== ЭКСПОРТ ФУНКЦИЙ ====================
 window.handlePhoneSubmit = handlePhoneSubmit;
 window.handleFioSubmit = handleFioSubmit;
@@ -3177,18 +3138,4 @@ window.clearNotificationHistory = clearNotificationHistory;
 window.closeStickyNotification = closeStickyNotification;    
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
-logToConsole('INFO', 'Модуль уведомлений о статусе загружен'); 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+logToConsole('INFO', 'Модуль уведомлений о статусе загружен');
