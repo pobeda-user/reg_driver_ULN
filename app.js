@@ -3125,6 +3125,30 @@ function updateSuccessStepWithStatus(update) {
     buttonGroup.appendChild(historyBtn);
   }
 }
+    // ==================== ОЧИСТКА КЭША ====================
+async function clearCache() {
+    try {
+        showLoader(true);
+        
+        // Очищаем локальный кэш ТОП-данных
+        localStorage.removeItem(TOP_DATA_CACHE_KEY);
+        
+        // Также можно очистить другие кэши
+        localStorage.removeItem('driver_registration_state');
+        
+        showLoader(false);
+        showNotification('✅ Локальный кэш очищен', 'success');
+        logToConsole('INFO', 'Локальный кэш очищен');
+        
+        // Обновляем счетчик оффлайн данных
+        showOfflineDataCount();
+        
+    } catch (error) {
+        showLoader(false);
+        showNotification('❌ Ошибка очистки кэша', 'error');
+        logToConsole('ERROR', 'Ошибка очистки кэша', error);
+    }
+}
 // ==================== ЭКСПОРТ ФУНКЦИЙ ====================
 window.handlePhoneSubmit = handlePhoneSubmit;
 window.handleFioSubmit = handleFioSubmit;
@@ -3162,6 +3186,7 @@ window.closeStickyNotification = closeStickyNotification;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
 logToConsole('INFO', 'Модуль уведомлений о статусе загружен'); 
+
 
 
 
