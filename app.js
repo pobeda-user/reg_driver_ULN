@@ -3064,6 +3064,24 @@ function clearNotificationHistory() {
   }
 }
 
+function markAllNotificationsAsRead() {
+    try {
+        const history = JSON.parse(localStorage.getItem('notification_history') || '[]');
+        
+        history.forEach(notification => {
+            notification.read = true;
+        });
+        
+        localStorage.setItem('notification_history', JSON.stringify(history));
+        updateNotificationBadge();
+        
+        showNotification('Все уведомления отмечены как прочитанные', 'success');
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка пометки всех уведомлений как прочитанных', error);
+    }
+}
+
 // Обновление шага успешной регистрации с актуальным статусом
 function updateSuccessStepWithStatus(update) {
   const container = document.getElementById('success-message');
@@ -3139,3 +3157,4 @@ window.closeStickyNotification = closeStickyNotification;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
 logToConsole('INFO', 'Модуль уведомлений о статусе загружен');
+
