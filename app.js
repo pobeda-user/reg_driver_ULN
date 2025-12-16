@@ -3205,6 +3205,77 @@ function updateSuccessStepWithStatus(update) {
   }
 }
 
+// ==================== ИНТЕГРАЦИЯ С SERVICE WORKER ====================
+
+// Регистрация Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('/reg_driver_ULN/service-worker.js?v=1.6')
+      .then(registration => {
+        logToConsole('SUCCESS', 'Service Worker зарегистрирован', {
+          scope: registration.scope,
+          active: registration.active ? 'да' : 'нет'
+        });
+        
+        // Отправляем телефон водителя в Service Worker
+        if (registration.active && registration.active.state === 'activated') {
+          if (registrationState.data.phone) {
+            registration.active.postMessage({
+              type: 'SET_DRIVER_ID',
+              driverId: registrationState.data.phone
+            });
+          }
+        }
+      })
+      .catch(error => {
+        logToConsole('ERROR', 'Ошибка регистрации Service Worker', error);
+      });
+  });
+}
+
+// Обработка сообщений от Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', event => {
+    if (event.data && event.data.type === 'NOTIFICATION_CLICKED') {
+      logToConsole('INFO', 'Получено уведомление от Service Worker', event.data);
+      
+      const notification = event.data.notification;
+      
+      // Показываем детали уведомления в приложении
+      showStatusDetailsModalFromNotification(notification);
+    }
+  });
+}
+
+// Функция для принудительной проверки уведомлений
+function forceCheckNotifications() {
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({
+      type: 'CHECK_NOTIFICATIONS_NOW'
+    });
+    showNotification('🔍 Проверяю уведомления...', 'info');
+  }
+}
+
+// Функция для показа деталей уведомления
+function showStatusDetailsModalFromNotification(notificationData) {
+  const update = {
+    registrationId: notificationData.notificationId || 'unknown',
+    newStatus: notificationData.data?.status || 'unknown',
+    assignedGate: notificationData.data?.gate || '',
+    supplier: notificationData.data?.supplier || '',
+    fio: notificationData.data?.driverName || '',
+    phone: notificationData.phone || '',
+    problemType: notificationData.data?.problemType || '',
+    timestamp: new Date(notificationData.timestamp).toISOString()
+  };
+  
+  showStatusDetailsModal(update);
+}
+
+// Добавьте эту функцию к экспортируемым функциям
+window.forceCheckNotifications = forceCheckNotifications;
+
 // ==================== ЭКСПОРТ ФУНКЦИЙ ====================
 window.handlePhoneSubmit = handlePhoneSubmit;
 window.handleFioSubmit = handleFioSubmit;
@@ -3242,6 +3313,7 @@ window.closeStickyNotification = closeStickyNotification;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
 logToConsole('INFO', 'Модуль уведомлений о статусе загружен');
+
 
 
 
