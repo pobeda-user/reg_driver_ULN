@@ -1254,177 +1254,101 @@ async function sendViaAlternativeMethodForRegistration(data) {
 
 // ==================== API ФУНКЦИИ ====================
 
+// ==================== ИСПРАВЛЕННАЯ ФУНКЦИЯ API ====================
 async function sendAPIRequest(requestData) {
   try {
-    logToConsole('INFO', 'Отправляю API запрос', {
+    logToConsole('INFO', 'Отправляю API запрос (исправленная версия)', {
       action: requestData.action,
-      data: requestData
+      method: 'GET'
     });
     
     const action = requestData.action || 'unknown';
     
-    // Для GET запросов используем GET метод с параметрами URL
-    if (action === 'get_suppliers_optimized' || action === 'get_brands_optimized' || 
-        action === 'get_top_data' || action === 'get_suppliers' || action === 'get_popular_brands' || 
-        action === 'ping' || action === 'clear_cache' || action === 'test_cache') {
-      const url = new URL(CONFIG.APP_SCRIPT_URL);
-      
-      // Добавляем параметры в URL
-      Object.keys(requestData).forEach(key => {
-        if (requestData[key] !== undefined && requestData[key] !== null) {
-          if (typeof requestData[key] === 'object') {
-            url.searchParams.append(key, JSON.stringify(requestData[key]));
-          } else {
-            url.searchParams.append(key, requestData[key]);
-          }
+    // ВСЕ запросы делаем через GET для избежания CORS проблем
+    const url = new URL(CONFIG.APP_SCRIPT_URL);
+    
+    // Добавляем параметры в URL
+    Object.keys(requestData).forEach(key => {
+      if (requestData[key] !== undefined && requestData[key] !== null) {
+        if (typeof requestData[key] === 'object') {
+          url.searchParams.append(key, JSON.stringify(requestData[key]));
+        } else {
+          url.searchParams.append(key, requestData[key]);
         }
-      });
-      
-      url.searchParams.append('_t', Date.now());
-      
-      logToConsole('INFO', 'GET запрос URL', url.toString());
-      
-      const startTime = Date.now();
-      
-      const response = await fetch(url.toString(), {
-        method: 'GET',
-        mode: 'cors',
-        cache: 'no-cache',
-        headers: {
-          'Accept': 'application/json',
-        }
-      });
-      
-      const endTime = Date.now();
-      const duration = endTime - startTime;
-      
-      logToConsole('INFO', 'GET статус ответа', {
-        status: response.status,
-        ok: response.ok,
-        duration: `${duration}ms`,
-        url: url.toString()
-      });
-      
-      if (!response.ok) {
-        let errorText = '';
-        try {
-          errorText = await response.text();
-        } catch (e) {
-          errorText = 'Не удалось прочитать текст ошибки';
-        }
-        
-        logToConsole('ERROR', 'HTTP ошибка', {
-          status: response.status,
-          statusText: response.statusText,
-          errorText: errorText.substring(0, 200)
-        });
-        
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      
-      const text = await response.text();
-      
+    });
+    
+    url.searchParams.append('_t', Date.now());
+    
+    logToConsole('INFO', 'GET запрос URL', url.toString());
+    
+    const startTime = Date.now();
+    
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      mode: 'cors',
+      cache: 'no-cache',
+      headers: {
+        'Accept': 'application/json',
+      },
+      credentials: 'omit'
+    });
+    
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    
+    logToConsole('INFO', 'GET статус ответа', {
+      status: response.status,
+      ok: response.ok,
+      duration: `${duration}ms`,
+      action: action
+    });
+    
+    if (!response.ok) {
+      let errorText = '';
       try {
-        const result = JSON.parse(text);
-        
-        logToConsole('INFO', 'GET ответ получен', {
-          success: result.success,
-          action: action,
-          duration: duration,
-          fromCache: result.fromCache || false,
-          suppliersCount: result.suppliers ? result.suppliers.length : 0
-        });
-        
-        return result;
-      } catch (parseError) {
-        logToConsole('ERROR', 'Ошибка парсинга JSON', {
-          error: parseError.message,
-          rawText: text.substring(0, 200),
-          url: url.toString()
-        });
-        
-        if (text.includes('success') || text.includes('suppliers')) {
-          return {
-            success: true,
-            message: 'Запрос обработан (парсинг не удался)',
-            rawResponse: text,
-            fromCache: text.includes('fromCache') || false
-          };
-        }
-        
-        throw new Error('Неверный формат ответа сервера');
+        errorText = await response.text();
+      } catch (e) {
+        errorText = 'Не удалось прочитать текст ошибки';
       }
       
-    } else {
-      // Для POST запросов (register_driver и другие)
-      logToConsole('INFO', 'Отправляю POST запрос', {
-        url: CONFIG.APP_SCRIPT_URL,
-        action: action,
-        dataSize: JSON.stringify(requestData).length
-      });
-      
-      const startTime = Date.now();
-      
-      const response = await fetch(CONFIG.APP_SCRIPT_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: JSON.stringify(requestData),
-        mode: 'cors'
-      });
-      
-      const endTime = Date.now();
-      const duration = endTime - startTime;
-      
-      logToConsole('INFO', 'POST статус ответа', {
+      logToConsole('ERROR', 'HTTP ошибка', {
         status: response.status,
-        ok: response.ok,
-        duration: `${duration}ms`,
+        statusText: response.statusText,
+        errorText: errorText.substring(0, 200)
+      });
+      
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const text = await response.text();
+    
+    try {
+      const result = JSON.parse(text);
+      
+      logToConsole('INFO', 'Ответ получен', {
+        success: result.success,
+        action: action,
+        duration: duration
+      });
+      
+      return result;
+    } catch (parseError) {
+      logToConsole('ERROR', 'Ошибка парсинга JSON', {
+        error: parseError.message,
+        rawText: text.substring(0, 200),
         action: action
       });
       
-      if (response.ok) {
-        const text = await response.text();
-        try {
-          const result = JSON.parse(text);
-          
-          logToConsole('INFO', 'POST ответ получен', {
-            success: result.success,
-            action: action,
-            duration: duration
-          });
-          
-          return result;
-        } catch (parseError) {
-          logToConsole('ERROR', 'Ошибка парсинга JSON', {
-            error: parseError.message,
-            rawText: text.substring(0, 200),
-            action: action
-          });
-          
-          if (text.includes('success')) {
-            return {
-              success: true,
-              message: 'Запрос обработан',
-              rawResponse: text
-            };
-          }
-          
-          throw new Error('Неверный формат ответа сервера');
-        }
-      } else {
-        const errorText = await response.text().catch(() => 'Не удалось прочитать ошибку');
-        
-        logToConsole('ERROR', 'POST HTTP ошибка', {
-          status: response.status,
-          errorText: errorText.substring(0, 200),
-          action: action
-        });
-        
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      if (text.includes('success') || text.includes('suppliers') || text.includes('registrations')) {
+        return {
+          success: true,
+          message: 'Запрос обработан (парсинг не удался)',
+          rawResponse: text
+        };
       }
+      
+      throw new Error('Неверный формат ответа сервера');
     }
     
   } catch (error) {
@@ -1432,20 +1356,14 @@ async function sendAPIRequest(requestData) {
       error: error.message,
       stack: error.stack,
       action: requestData.action,
-      url: CONFIG.APP_SCRIPT_URL,
       timestamp: new Date().toISOString()
     });
     
-    try {
-      return await sendViaAlternativeMethod(requestData);
-    } catch (altError) {
-      logToConsole('ERROR', 'Альтернативный метод тоже не сработал', {
-        error: altError.message,
-        action: requestData.action
-      });
-      
-      throw new Error(`Не удалось отправить запрос: ${error.message}`);
-    }
+    return {
+      success: false,
+      message: 'Не удалось отправить запрос: ' + error.message,
+      error: error.message
+    };
   }
 }
 
@@ -1917,45 +1835,82 @@ function clearOfflineData() {
 // ==================== ЛИЧНЫЙ КАБИНЕТ ВОДИТЕЛЯ ====================
 async function openDriverCabinet() {
     try {
-        logToConsole('INFO', 'Открываю личный кабинет водителя');
+        logToConsole('INFO', 'Открываю личный кабинет водителя (исправленная)');
         
-        if (!registrationState.data.phone) {
-            showNotification('Сначала введите номер телефона', 'error');
+        // Пробуем получить телефон из разных источников
+        let driverPhone = '';
+        let driverName = '';
+        
+        // 1. Из текущего состояния регистрации
+        if (registrationState.data && registrationState.data.phone) {
+            driverPhone = registrationState.data.phone;
+            driverName = registrationState.data.fio || '';
+        }
+        
+        // 2. Из localStorage (последняя успешная регистрация)
+        if (!driverPhone) {
+            const lastRegistration = localStorage.getItem('last_registration');
+            if (lastRegistration) {
+                try {
+                    const lastRegData = JSON.parse(lastRegistration);
+                    driverPhone = lastRegData.phone || '';
+                    driverName = lastRegData.fio || '';
+                } catch (e) {
+                    console.log('Ошибка парсинга последней регистрации:', e);
+                }
+            }
+        }
+        
+        // 3. Если телефон все еще не найден, показываем шаг 1
+        if (!driverPhone) {
+            showNotification('Сначала пройдите регистрацию или введите номер телефона', 'error');
             showStep(1);
+            
+            // Фокус на поле ввода телефона
+            setTimeout(() => {
+                const phoneInput = document.getElementById('phone-input');
+                if (phoneInput) phoneInput.focus();
+            }, 300);
+            
             return;
         }
         
         showLoader(true);
         
         // Получаем историю регистраций
-        const history = await getDriverHistory();
+        const history = await getDriverHistory(driverPhone);
         
         // Получаем текущие уведомления
-        const notifications = await getPWANotifications();
+        const notifications = await getPWANotifications(driverPhone);
         
         // Получаем статусы из таблицы
-        const statusUpdates = await getDriverStatusUpdates();
+        const statusUpdates = await getDriverStatusUpdates(driverPhone);
         
         showLoader(false);
         
         // Показываем личный кабинет
-        showDriverCabinet(history, notifications, statusUpdates);
+        showDriverCabinet(history, notifications, statusUpdates, driverPhone, driverName);
         
     } catch (error) {
         logToConsole('ERROR', 'Ошибка открытия личного кабинета', error);
         showLoader(false);
-        showNotification('Ошибка загрузки личного кабинета', 'error');
+        showNotification('Ошибка загрузки личного кабинета: ' + error.message, 'error');
     }
 }
 
-async function getDriverHistory() {
+async function getDriverHistory(phone) {
     try {
-        const phone = registrationState.data.phone;
+        if (!phone) {
+            console.log('Нет телефона для получения истории');
+            return [];
+        }
         
         const response = await sendAPIRequest({
             action: 'get_driver_history',
             phone: phone
         });
+        
+        console.log('Ответ истории:', response);
         
         if (response && response.success && response.registrations) {
             return response.registrations;
@@ -1969,21 +1924,25 @@ async function getDriverHistory() {
     }
 }
 
-async function getPWANotifications() {
+async function getPWANotifications(phone) {
     try {
-        const phone = registrationState.data.phone;
-        const lastUpdate = localStorage.getItem('last_notification_update');
+        if (!phone) {
+            console.log('Нет телефона для получения уведомлений');
+            return [];
+        }
+        
+        const lastUpdate = localStorage.getItem('last_notification_update_' + phone);
         
         const response = await sendAPIRequest({
             action: 'get_pwa_updates',
             phone: phone,
-            lastUpdate: lastUpdate
+            lastUpdate: lastUpdate || null
         });
         
         if (response && response.success && response.updates) {
             // Сохраняем время последнего обновления
             if (response.updates.length > 0) {
-                localStorage.setItem('last_notification_update', response.updates[0].timestamp);
+                localStorage.setItem('last_notification_update_' + phone, response.updates[0].timestamp);
             }
             
             // Показываем новые уведомления
@@ -2002,21 +1961,27 @@ async function getPWANotifications() {
     }
 }
 
-async function getDriverStatusUpdates() {
+async function getDriverStatusUpdates(phone) {
     try {
-        const phone = registrationState.data.phone;
-        const lastUpdate = localStorage.getItem('last_status_update');
+        if (!phone) {
+            console.log('Нет телефона для получения обновлений статуса');
+            return [];
+        }
+        
+        const lastUpdate = localStorage.getItem('last_status_update_' + phone);
         
         const response = await sendAPIRequest({
             action: 'get_status_updates',
             phone: phone,
-            timestamp: lastUpdate
+            timestamp: lastUpdate || null
         });
+        
+        console.log('Ответ обновлений статуса:', response);
         
         if (response && response.success && response.updates) {
             // Сохраняем время последнего обновления
             if (response.updates.length > 0) {
-                localStorage.setItem('last_status_update', response.updates[0].rowNumber);
+                localStorage.setItem('last_status_update_' + phone, response.updates[0].rowNumber);
             }
             
             return response.updates;
@@ -2030,29 +1995,31 @@ async function getDriverStatusUpdates() {
     }
 }
 
-function showDriverCabinet(history, notifications, statusUpdates) {
+function showDriverCabinet(history, notifications, statusUpdates, driverPhone, driverName) {
     logToConsole('INFO', 'Показываю личный кабинет', {
         historyCount: history.length,
         notificationsCount: notifications.length,
-        updatesCount: statusUpdates.length
+        updatesCount: statusUpdates.length,
+        driverPhone: driverPhone
     });
     
     // Создаем модальное окно личного кабинета
     const modalHtml = `
         <div class="modal-overlay" onclick="closeDriverCabinet()">
-            <div class="modal" onclick="event.stopPropagation()" style="max-width: 800px;">
+            <div class="modal" onclick="event.stopPropagation()" style="max-width: 800px; max-height: 90vh;">
                 <div class="modal-header">
                     <h3 class="modal-title">👤 Личный кабинет водителя</h3>
                     <button class="modal-close" onclick="closeDriverCabinet()">✕</button>
                 </div>
                 <div class="modal-body">
                     <div class="info-box" style="margin-bottom: 20px;">
-                        <p><strong>👤 Водитель:</strong> ${registrationState.data.fio || 'Не указано'}</p>
-                        <p><strong>📱 Телефон:</strong> ${formatPhoneDisplay(registrationState.data.phone)}</p>
+                        <p><strong>👤 Водитель:</strong> ${driverName || 'Не указано'}</p>
+                        <p><strong>📱 Телефон:</strong> ${formatPhoneDisplay(driverPhone)}</p>
+                        <p><strong>📊 Всего регистраций:</strong> ${history.length}</p>
                     </div>
                     
                     <div class="tabs" style="margin-bottom: 20px;">
-                        <button class="tab-btn active" onclick="switchTab('history')">📋 История регистраций</button>
+                        <button class="tab-btn active" onclick="switchTab('history')">📋 История (${history.length})</button>
                         <button class="tab-btn" onclick="switchTab('notifications')">🔔 Уведомления (${notifications.length})</button>
                         <button class="tab-btn" onclick="switchTab('status')">📊 Текущий статус</button>
                     </div>
@@ -2077,6 +2044,12 @@ function showDriverCabinet(history, notifications, statusUpdates) {
         </div>
     `;
     
+    // Удаляем старый модальный окно если есть
+    const oldModal = document.getElementById('driver-cabinet-modal');
+    if (oldModal) {
+        oldModal.remove();
+    }
+    
     const modalContainer = document.createElement('div');
     modalContainer.innerHTML = modalHtml;
     modalContainer.id = 'driver-cabinet-modal';
@@ -2084,6 +2057,8 @@ function showDriverCabinet(history, notifications, statusUpdates) {
     
     // Сохраняем данные для обновления
     modalContainer._cabinetData = {
+        driverPhone,
+        driverName,
         history,
         notifications,
         statusUpdates
@@ -3238,6 +3213,7 @@ window.closeDriverCabinet = closeDriverCabinet;
 window.switchTab = switchTab;
 window.refreshDriverCabinet = refreshDriverCabinet;
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
+
 
 
 
