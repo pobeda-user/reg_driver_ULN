@@ -1,11 +1,12 @@
-// service-worker.js - ВЕРСИЯ С ВЕБ-ПУШ УВЕДОМЛЕНИЯМИ
+// service-worker.js - ОБНОВЛЕННАЯ ВЕРСИЯ
 
-const CACHE_NAME = 'driver-registration-v1.5';
+const CACHE_NAME = 'driver-registration-v1.6';
+const APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzt-xQk-DSNfofBV5ewoioKNHJ8p7Idn3GDSu9PY6Dq-MSpl8NpgHiONiQgAcCfGwD0/exec';
 const urlsToCache = [
   '/reg_driver_ULN/',
-  '/reg_driver_ULN/index.html?v=1.5',
-  '/reg_driver_ULN/app.js?v=1.5',
-  '/reg_driver_ULN/styles.css?v=1.5',
+  '/reg_driver_ULN/index.html?v=1.6',
+  '/reg_driver_ULN/app.js?v=1.6',
+  '/reg_driver_ULN/styles.css?v=1.6',
   '/reg_driver_ULN/manifest.json',
   '/reg_driver_ULN/icons/icon-72x72.png',
   '/reg_driver_ULN/icons/icon-192x192.png',
@@ -14,166 +15,82 @@ const urlsToCache = [
 
 // ==================== ОБРАБОТКА УВЕДОМЛЕНИЙ ====================
 
-// Храним ID текущего водителя для фильтрации уведомлений
-let currentDriverId = null;
+let currentDriverPhone = null;
 
-// Получаем текущий ID водителя из приложения
+// Получаем текущий телефон водителя из приложения
 self.addEventListener('message', event => {
   if (event.data && event.data.type === 'SET_DRIVER_ID') {
-    currentDriverId = event.data.driverId;
-    console.log('Service Worker: Сохранен ID водителя:', currentDriverId);
+    currentDriverPhone = event.data.driverId;
+    console.log('Service Worker: Сохранен телефон водителя:', currentDriverPhone);
+    
+    // Запускаем немедленную проверку уведомлений при установке ID
+    checkPwaNotifications();
   }
 });
 
-// ==================== ОБРАБОТКА ВЕБ-ПУШ УВЕДОМЛЕНИЙ ====================
+// ==================== ПОЛЛИНГ СЕРВЕРА ДЛЯ PWA УВЕДОМЛЕНИЙ ====================
 
-self.addEventListener('push', event => {
-  console.log('Service Worker: Получено push-уведомление');
-  
+// Функция для периодической проверки PWA уведомлений
+async function checkPwaNotifications() {
   try {
-    let data = {};
-    if (event.data) {
-      data = event.data.json();
-    }
-    
-    const options = {
-      body: data.body || 'Уведомление от системы регистрации',
-      icon: '/reg_driver_ULN/icons/icon-192x192.png',
-      badge: '/reg_driver_ULN/icons/icon-72x72.png',
-      vibrate: [200, 100, 200],
-      data: {
-        url: data.url || '/reg_driver_ULN/',
-        driverId: data.driverId,
-        timestamp: Date.now()
-      },
-      actions: [
-        {
-          action: 'open',
-          title: 'Открыть',
-          icon: '/reg_driver_ULN/icons/icon-72x72.png'
-        },
-        {
-          action: 'close',
-          title: 'Закрыть',
-          icon: '/reg_driver_ULN/icons/icon-72x72.png'
-        }
-      ]
-    };
-    
-    // Проверяем, относится ли уведомление к текущему водителю
-    if (data.driverId && currentDriverId && data.driverId !== currentDriverId) {
-      console.log('Service Worker: Уведомление для другого водителя, игнорируем');
+    if (!currentDriverPhone) {
+      console.log('Service Worker: Нет телефона водителя для проверки уведомлений');
       return;
     }
     
-    // Добавляем изображение если есть
-    if (data.image) {
-      options.image = data.image;
-    }
+    console.log('Service Worker: Проверяю PWA уведомления для:', currentDriverPhone);
     
-    // Добавляем теги для группировки
-    if (data.tag) {
-      options.tag = data.tag;
-    }
+    // Получаем последние уведомления с сервера
+    const url = `${APP_SCRIPT_URL}?action=get_pwa_notifications&phone=${encodeURIComponent(currentDriverPhone)}&_t=${Date.now()}`;
     
-    // Показываем уведомление
-    event.waitUntil(
-      self.registration.showNotification(data.title || 'Система регистрации', options)
-    );
-    
-  } catch (error) {
-    console.error('Service Worker: Ошибка обработки push-уведомления:', error);
-    
-    // Простое уведомление в случае ошибки
-    const options = {
-      body: 'Новое уведомление от системы регистрации',
-      icon: '/reg_driver_ULN/icons/icon-192x192.png',
-      badge: '/reg_driver_ULN/icons/icon-72x72.png'
-    };
-    
-    event.waitUntil(
-      self.registration.showNotification('Система регистрации', options)
-    );
-  }
-});
-
-self.addEventListener('notificationclick', event => {
-  console.log('Service Worker: Клик по уведомлению');
-  
-  event.notification.close();
-  
-  const action = event.action;
-  const notificationData = event.notification.data;
-  
-  if (action === 'close') {
-    console.log('Пользователь закрыл уведомление');
-    return;
-  }
-  
-  // Открываем приложение
-  event.waitUntil(
-    clients.matchAll({
-      type: 'window',
-      includeUncontrolled: true
-    }).then(windowClients => {
-      // Проверяем, открыто ли уже приложение
-      for (let client of windowClients) {
-        if (client.url === notificationData.url && 'focus' in client) {
-          return client.focus();
-        }
-      }
-      
-      // Если приложение не открыто, открываем его
-      if (clients.openWindow) {
-        return clients.openWindow(notificationData.url);
-      }
-    })
-  );
-});
-
-self.addEventListener('notificationclose', event => {
-  console.log('Service Worker: Уведомление закрыто пользователем');
-});
-
-// ==================== ПОЛЛИНГ СЕРВЕРА ДЛЯ ОБНОВЛЕНИЙ СТАТУСА ====================
-
-// Функция для периодической проверки статуса
-async function checkStatusUpdates() {
-  try {
-    const driverId = currentDriverId;
-    if (!driverId) return;
-    
-    // Получаем последний статус с сервера
-    const response = await fetch(`${CONFIG.APP_SCRIPT_URL}?action=get_status_updates&driverId=${driverId}&_t=${Date.now()}`, {
+    const response = await fetch(url, {
       method: 'GET',
+      mode: 'cors',
       cache: 'no-cache'
     });
     
     if (response.ok) {
-      const updates = await response.json();
+      const result = await response.json();
       
-      if (updates.success && updates.updates && updates.updates.length > 0) {
-        console.log('Service Worker: Получены обновления статуса:', updates.updates);
+      if (result.success && result.notifications && result.notifications.length > 0) {
+        console.log('Service Worker: Получены PWA уведомления:', result.notifications.length);
         
         // Показываем уведомления для новых статусов
-        updates.updates.forEach(update => {
-          showStatusNotification(update);
+        result.notifications.forEach(notification => {
+          showPwaNotification(notification);
+          
+          // Помечаем как прочитанное на сервере
+          markNotificationAsRead(notification.id);
         });
+      } else {
+        console.log('Service Worker: Нет новых PWA уведомлений');
       }
+    } else {
+      console.error('Service Worker: Ошибка HTTP при получении уведомлений:', response.status);
     }
   } catch (error) {
-    console.error('Service Worker: Ошибка проверки обновлений:', error);
+    console.error('Service Worker: Ошибка проверки PWA уведомлений:', error);
   }
 }
 
-// Функция показа уведомления о смене статуса
-function showStatusNotification(update) {
-  const title = getStatusTitle(update.newStatus);
-  const body = getStatusBody(update);
-  const tag = `status-${update.registrationId}`;
+// Функция показа уведомления из PWA системы
+function showPwaNotification(notification) {
+  if (!notification || !notification.title || !notification.message) {
+    console.error('Service Worker: Неверный формат уведомления:', notification);
+    return;
+  }
+  
+  const tag = `pwa-${notification.id || Date.now()}`;
+  const driverId = notification.data?.driverId || notification.phone;
+  
+  // Проверяем, относится ли уведомление к текущему водителю
+  if (currentDriverPhone && driverId && driverId !== currentDriverPhone) {
+    console.log('Service Worker: Уведомление для другого водителя, игнорируем');
+    return;
+  }
   
   const options = {
-    body: body,
+    body: notification.message,
     icon: '/reg_driver_ULN/icons/icon-192x192.png',
     badge: '/reg_driver_ULN/icons/icon-72x72.png',
     tag: tag,
@@ -181,72 +98,146 @@ function showStatusNotification(update) {
     vibrate: [200, 100, 200],
     data: {
       url: '/reg_driver_ULN/',
-      registrationId: update.registrationId,
-      driverId: update.driverId,
-      timestamp: update.timestamp
+      notificationId: notification.id,
+      phone: notification.phone,
+      type: notification.type,
+      data: notification.data,
+      timestamp: notification.serverTime || notification.timestamp || Date.now()
     },
     actions: [
       {
         action: 'view',
         title: 'Просмотр',
         icon: '/reg_driver_ULN/icons/icon-72x72.png'
+      },
+      {
+        action: 'mark_read',
+        title: 'Прочитано',
+        icon: '/reg_driver_ULN/icons/icon-72x72.png'
       }
     ]
   };
   
-  self.registration.showNotification(title, options);
+  // Добавляем изображение если есть
+  if (notification.data?.image) {
+    options.image = notification.data.image;
+  }
+  
+  console.log('Service Worker: Показываю PWA уведомление:', notification.title);
+  
+  self.registration.showNotification(notification.title, options)
+    .then(() => {
+      console.log('Service Worker: Уведомление показано успешно');
+    })
+    .catch(error => {
+      console.error('Service Worker: Ошибка показа уведомления:', error);
+    });
 }
 
-function getStatusTitle(status) {
-  const titles = {
-    'Назначены ворота': '🚪 Назначены ворота',
-    'Документы готовы к выдаче': '📄 Документы готовы',
-    'Отказ в приемке': '❌ Отказ в приемке',
-    'Нет в графике': '⏰ Вне графика',
-    'Проблема с товаром': '⚠️ Проблема с товаром',
-    'Проблема с документами': '⚠️ Проблема с документами'
-  };
+// Функция пометки уведомления как прочитанного на сервере
+async function markNotificationAsRead(notificationId) {
+  if (!notificationId) return;
   
-  return titles[status] || '📋 Обновление статуса';
+  try {
+    const url = `${APP_SCRIPT_URL}?action=mark_notification_read&notificationId=${encodeURIComponent(notificationId)}&_t=${Date.now()}`;
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      mode: 'cors',
+      cache: 'no-cache'
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      if (result.success) {
+        console.log('Service Worker: Уведомление помечено как прочитанное:', notificationId);
+      } else {
+        console.warn('Service Worker: Не удалось пометить уведомление как прочитанное:', result);
+      }
+    }
+  } catch (error) {
+    console.error('Service Worker: Ошибка пометки уведомления как прочитанного:', error);
+  }
 }
 
-function getStatusBody(update) {
-  let body = `Статус: ${update.newStatus}`;
+// Обработка клика по уведомлению
+self.addEventListener('notificationclick', event => {
+  console.log('Service Worker: Клик по PWA уведомлению', event.notification.data);
   
-  if (update.assignedGate && update.newStatus === 'Назначены ворота') {
-    body = `Вам назначены ворота №${update.assignedGate}`;
+  const notification = event.notification;
+  const action = event.action;
+  const notificationData = notification.data;
+  
+  notification.close();
+  
+  if (action === 'mark_read') {
+    console.log('Service Worker: Пользователь пометил уведомление как прочитанное');
+    return;
   }
   
-  if (update.supplier) {
-    body += `\nПоставщик: ${update.supplier}`;
+  if (action === 'close') {
+    console.log('Service Worker: Пользователь закрыл уведомление');
+    return;
   }
   
-  if (update.problemType && (update.newStatus === 'Проблема с товаром' || update.newStatus === 'Проблема с документами' || update.newStatus === 'Отказ в приемке')) {
-    body += `\nПричина: ${update.problemType}`;
-  }
-  
-  return body;
-}
+  // Отправляем сообщение в открытое приложение
+  event.waitUntil(
+    clients.matchAll({
+      type: 'window',
+      includeUncontrolled: true
+    }).then(windowClients => {
+      // Открываем или фокусируем приложение
+      for (let client of windowClients) {
+        if (client.url.includes('/reg_driver_ULN/')) {
+          client.focus();
+          
+          // Отправляем данные уведомления в приложение
+          client.postMessage({
+            type: 'NOTIFICATION_CLICKED',
+            notification: notificationData
+          });
+          
+          return;
+        }
+      }
+      
+      // Если приложение не открыто, открываем его
+      if (clients.openWindow) {
+        return clients.openWindow('/reg_driver_ULN/').then(newClient => {
+          // Даем время приложению загрузиться
+          setTimeout(() => {
+            if (newClient) {
+              newClient.postMessage({
+                type: 'NOTIFICATION_CLICKED',
+                notification: notificationData
+              });
+            }
+          }, 1000);
+        });
+      }
+    })
+  );
+});
 
 // ==================== СТАНДАРТНЫЕ СЛУЖАЩИЕ ФУНКЦИИ ====================
 
 self.addEventListener('install', event => {
-  console.log('Service Worker: Установка v1.5');
+  console.log('Service Worker: Установка v1.6 с PWA уведомлениями');
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('Service Worker: Кэширование файлов v1.5');
+        console.log('Service Worker: Кэширование файлов v1.6');
         return cache.addAll(urlsToCache);
       })
       .then(() => {
-        console.log('Service Worker: Установка завершена v1.5');
+        console.log('Service Worker: Установка завершена v1.6');
         return self.skipWaiting();
       })
   );
 });
 
 self.addEventListener('activate', event => {
-  console.log('Service Worker: Активация v1.5');
+  console.log('Service Worker: Активация v1.6 с PWA уведомлениями');
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
@@ -260,8 +251,11 @@ self.addEventListener('activate', event => {
     }).then(() => {
       console.log('Service Worker: Все старые кэши удалены');
       
-      // Запускаем периодическую проверку статуса (каждые 5 минут)
-      setInterval(checkStatusUpdates, 5 * 60 * 1000);
+      // Запускаем периодическую проверку PWA уведомлений (каждые 2 минуты)
+      setInterval(checkPwaNotifications, 2 * 60 * 1000);
+      
+      // Также запускаем немедленную проверку при активации
+      setTimeout(checkPwaNotifications, 3000);
       
       return self.clients.claim();
     })
@@ -269,6 +263,7 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+  // Не кэшируем запросы к Google Apps Script
   if (event.request.url.includes('script.google.com')) {
     return fetch(event.request);
   }
@@ -297,4 +292,12 @@ self.addEventListener('fetch', event => {
         return response || fetch(event.request);
       })
   );
+});
+
+// Обработка сообщений от приложения
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'CHECK_NOTIFICATIONS_NOW') {
+    console.log('Service Worker: Принудительная проверка уведомлений по запросу приложения');
+    checkPwaNotifications();
+  }
 });
