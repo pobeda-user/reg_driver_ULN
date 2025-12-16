@@ -2603,30 +2603,44 @@ function setupNotificationListener() {
 }
 
 // Проверка обновлений статуса на сервере
+// Проверка обновлений статуса на сервере
 async function checkForStatusUpdates() {
   try {
     if (!registrationState.data.phone) return;
     
+    // Получаем последнее время проверки
+    const lastCheckTime = localStorage.getItem('last_notification_check') || 
+                         Date.now() - 10 * 60 * 1000; // 10 минут назад по умолчанию
+    
     logToConsole('INFO', 'Проверка обновлений статуса', {
-      phone: registrationState.data.phone
+      phone: registrationState.data.phone,
+      lastCheckTime: new Date(parseInt(lastCheckTime)).toISOString()
     });
     
     const response = await sendAPIRequest({
-      action: 'get_status_updates',
+      action: 'get_pwa_notifications',
       phone: registrationState.data.phone,
-      timestamp: Date.now() - 10 * 60 * 1000 // Последние 10 минут
+      since: lastCheckTime
     });
     
-    if (response && response.success && response.updates && response.updates.length > 0) {
-      logToConsole('INFO', 'Получены обновления статуса', {
-        count: response.updates.length,
-        updates: response.updates
+    if (response && response.success && response.notifications && response.notifications.length > 0) {
+      logToConsole('INFO', 'Получены уведомления из PWA системы', {
+        count: response.notifications.length,
+        serverTime: response.serverTime
       });
       
-      // Обрабатываем каждое обновление
-      response.updates.forEach(update => {
-        handleStatusUpdate(update);
+      // Обрабатываем каждое уведомление
+      response.notifications.forEach(notification => {
+        handleStatusUpdate(notification);
+        
+        // Помечаем как прочитанное на сервере
+        if (notification.id) {
+          markNotificationAsReadOnServer(notification.id);
+        }
       });
+      
+      // Сохраняем время последней проверки
+      localStorage.setItem('last_notification_check', Date.now().toString());
       
     }
   } catch (error) {
@@ -2634,9 +2648,47 @@ async function checkForStatusUpdates() {
   }
 }
 
+// Функция пометки уведомления как прочитанного на сервере
+async function markNotificationAsReadOnServer(notificationId) {
+  try {
+    await sendAPIRequest({
+      action: 'mark_notification_read',
+      notificationId: notificationId
+    });
+    
+    logToConsole('INFO', 'Уведомление помечено как прочитанное на сервере', {
+      notificationId: notificationId
+    });
+    
+  } catch (error) {
+    logToConsole('ERROR', 'Ошибка пометки уведомления как прочитанного на сервере', error);
+  }
+}
+
 // Обработка обновления статуса
-function handleStatusUpdate(update) {
-  logToConsole('INFO', 'Обработка обновления статуса', update);
+// Обновите функцию handleStatusUpdate для обработки данных из PWA уведомлений:
+function handleStatusUpdate(notification) {
+  logToConsole('INFO', 'Обработка уведомления из PWA системы', notification);
+  
+  // Формируем update объект для совместимости с существующим кодом
+  const update = {
+    registrationId: notification.registrationId || notification.id,
+    driverId: notification.phone,
+    rowNumber: notification.rowNumber || 0,
+    timestamp: notification.serverTime || notification.timestamp,
+    newStatus: notification.data?.status || 'unknown',
+    oldStatus: '',
+    assignedGate: notification.data?.gate || '',
+    supplier: notification.data?.supplier || '',
+    fio: notification.data?.driverName || '',
+    phone: notification.phone || '',
+    problemType: notification.data?.problemType || '',
+    productType: notification.data?.productType || '',
+    legalEntity: notification.data?.legalEntity || '',
+    transit: notification.data?.transit || '',
+    vehicleNumber: notification.data?.vehicleNumber || '',
+    orderNumber: notification.data?.orderNumber || ''
+  };
   
   // Показываем системное уведомление
   showBrowserNotification(update);
@@ -2648,6 +2700,9 @@ function handleStatusUpdate(update) {
   if (registrationState.step === 13) { // На шаге успешной регистрации
     updateSuccessStepWithStatus(update);
   }
+  
+  // Добавляем в историю уведомлений
+  addToNotificationHistory(update);
 }
 
 // Показ браузерного уведомления
@@ -3157,4 +3212,5 @@ window.closeStickyNotification = closeStickyNotification;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
 logToConsole('INFO', 'Модуль уведомлений о статусе загружен');
+
 
