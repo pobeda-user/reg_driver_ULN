@@ -1912,6 +1912,683 @@ function clearOfflineData() {
     }
 }
 
+// ==================== ЛИЧНЫЙ КАБИНЕТ ВОДИТЕЛЯ ====================
+async function openDriverCabinet() {
+    try {
+        logToConsole('INFO', 'Открываю личный кабинет водителя');
+        
+        if (!registrationState.data.phone) {
+            showNotification('Сначала введите номер телефона', 'error');
+            showStep(1);
+            return;
+        }
+        
+        showLoader(true);
+        
+        // Получаем историю регистраций
+        const history = await getDriverHistory();
+        
+        // Получаем текущие уведомления
+        const notifications = await getPWANotifications();
+        
+        // Получаем статусы из таблицы
+        const statusUpdates = await getDriverStatusUpdates();
+        
+        showLoader(false);
+        
+        // Показываем личный кабинет
+        showDriverCabinet(history, notifications, statusUpdates);
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка открытия личного кабинета', error);
+        showLoader(false);
+        showNotification('Ошибка загрузки личного кабинета', 'error');
+    }
+}
+
+async function getDriverHistory() {
+    try {
+        const phone = registrationState.data.phone;
+        
+        const response = await sendAPIRequest({
+            action: 'get_driver_history',
+            phone: phone
+        });
+        
+        if (response && response.success && response.registrations) {
+            return response.registrations;
+        }
+        
+        return [];
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка получения истории', error);
+        return [];
+    }
+}
+
+async function getPWANotifications() {
+    try {
+        const phone = registrationState.data.phone;
+        const lastUpdate = localStorage.getItem('last_notification_update');
+        
+        const response = await sendAPIRequest({
+            action: 'get_pwa_updates',
+            phone: phone,
+            lastUpdate: lastUpdate
+        });
+        
+        if (response && response.success && response.updates) {
+            // Сохраняем время последнего обновления
+            if (response.updates.length > 0) {
+                localStorage.setItem('last_notification_update', response.updates[0].timestamp);
+            }
+            
+            // Показываем новые уведомления
+            response.updates.forEach(notification => {
+                showPushNotification(notification);
+            });
+            
+            return response.updates;
+        }
+        
+        return [];
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка получения уведомлений', error);
+        return [];
+    }
+}
+
+async function getDriverStatusUpdates() {
+    try {
+        const phone = registrationState.data.phone;
+        const lastUpdate = localStorage.getItem('last_status_update');
+        
+        const response = await sendAPIRequest({
+            action: 'get_status_updates',
+            phone: phone,
+            timestamp: lastUpdate
+        });
+        
+        if (response && response.success && response.updates) {
+            // Сохраняем время последнего обновления
+            if (response.updates.length > 0) {
+                localStorage.setItem('last_status_update', response.updates[0].rowNumber);
+            }
+            
+            return response.updates;
+        }
+        
+        return [];
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка получения обновлений статуса', error);
+        return [];
+    }
+}
+
+function showDriverCabinet(history, notifications, statusUpdates) {
+    logToConsole('INFO', 'Показываю личный кабинет', {
+        historyCount: history.length,
+        notificationsCount: notifications.length,
+        updatesCount: statusUpdates.length
+    });
+    
+    // Создаем модальное окно личного кабинета
+    const modalHtml = `
+        <div class="modal-overlay" onclick="closeDriverCabinet()">
+            <div class="modal" onclick="event.stopPropagation()" style="max-width: 800px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">👤 Личный кабинет водителя</h3>
+                    <button class="modal-close" onclick="closeDriverCabinet()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="info-box" style="margin-bottom: 20px;">
+                        <p><strong>👤 Водитель:</strong> ${registrationState.data.fio || 'Не указано'}</p>
+                        <p><strong>📱 Телефон:</strong> ${formatPhoneDisplay(registrationState.data.phone)}</p>
+                    </div>
+                    
+                    <div class="tabs" style="margin-bottom: 20px;">
+                        <button class="tab-btn active" onclick="switchTab('history')">📋 История регистраций</button>
+                        <button class="tab-btn" onclick="switchTab('notifications')">🔔 Уведомления (${notifications.length})</button>
+                        <button class="tab-btn" onclick="switchTab('status')">📊 Текущий статус</button>
+                    </div>
+                    
+                    <div id="history-tab" class="tab-content active">
+                        ${renderHistoryTab(history)}
+                    </div>
+                    
+                    <div id="notifications-tab" class="tab-content">
+                        ${renderNotificationsTab(notifications)}
+                    </div>
+                    
+                    <div id="status-tab" class="tab-content">
+                        ${renderStatusTab(statusUpdates)}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeDriverCabinet()">Закрыть</button>
+                    <button class="btn btn-primary" onclick="refreshDriverCabinet()">🔄 Обновить</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    const modalContainer = document.createElement('div');
+    modalContainer.innerHTML = modalHtml;
+    modalContainer.id = 'driver-cabinet-modal';
+    document.body.appendChild(modalContainer);
+    
+    // Сохраняем данные для обновления
+    modalContainer._cabinetData = {
+        history,
+        notifications,
+        statusUpdates
+    };
+}
+
+function renderHistoryTab(history) {
+    if (history.length === 0) {
+        return '<div class="empty-state">📭 История регистраций отсутствует</div>';
+    }
+    
+    let html = '<div style="max-height: 400px; overflow-y: auto;">';
+    
+    history.forEach((item, index) => {
+        html += `
+            <div class="card" style="margin-bottom: 10px;">
+                <div class="card-header">
+                    <div class="card-title">Регистрация #${index + 1}</div>
+                    <div class="badge ${getStatusBadgeClass(item.status)}">${item.status || 'Зарегистрирован'}</div>
+                </div>
+                <div class="card-body">
+                    <p><strong>Дата:</strong> ${item.date || ''} ${item.time || ''}</p>
+                    <p><strong>Поставщик:</strong> ${item.supplier || ''}</p>
+                    <p><strong>Юрлицо:</strong> ${item.legalEntity || ''}</p>
+                    <p><strong>Тип товара:</strong> ${item.productType || ''}</p>
+                    <p><strong>Ворота:</strong> ${item.defaultGate || 'Не назначены'}</p>
+                    ${item.assignedGate ? `<p><strong>Назначенные ворота:</strong> ${item.assignedGate}</p>` : ''}
+                    ${item.problemType ? `<p><strong>Проблема:</strong> <span style="color: #f44336;">${item.problemType}</span></p>` : ''}
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+function renderNotificationsTab(notifications) {
+    if (notifications.length === 0) {
+        return '<div class="empty-state">📭 Нет новых уведомлений</div>';
+    }
+    
+    let html = '<div style="max-height: 400px; overflow-y: auto;">';
+    
+    notifications.forEach((notification, index) => {
+        const icon = getNotificationIcon(notification.type);
+        
+        html += `
+            <div class="notification-item" style="
+                background: ${getNotificationColor(notification.type)};
+                border-left: 4px solid ${getNotificationBorderColor(notification.type)};
+                padding: 12px 15px;
+                margin-bottom: 10px;
+                border-radius: 8px;
+                color: #333;
+            ">
+                <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                    <div style="font-size: 20px; margin-right: 10px;">${icon}</div>
+                    <div style="font-weight: 600; flex: 1;">${notification.title || 'Уведомление'}</div>
+                    <div style="font-size: 11px; color: #666;">${formatNotificationTime(notification.timestamp)}</div>
+                </div>
+                <div style="font-size: 14px; line-height: 1.4;">${notification.message || ''}</div>
+                ${notification.data ? `<div style="font-size: 12px; color: #666; margin-top: 5px;">${JSON.stringify(notification.data)}</div>` : ''}
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+function renderStatusTab(statusUpdates) {
+    if (statusUpdates.length === 0) {
+        return '<div class="empty-state">📭 Нет информации о текущем статусе</div>';
+    }
+    
+    const latestUpdate = statusUpdates[0];
+    
+    let html = `
+        <div class="status-overview" style="margin-bottom: 20px;">
+            <div class="info-box ${getStatusBoxClass(latestUpdate.newStatus)}">
+                <p><strong>Текущий статус:</strong> <span style="font-size: 18px;">${latestUpdate.newStatus || 'Зарегистрирован'}</span></p>
+                ${latestUpdate.assignedGate ? `<p><strong>Назначенные ворота:</strong> ${latestUpdate.assignedGate}</p>` : ''}
+                ${latestUpdate.problemType ? `<p><strong>Тип проблемы:</strong> ${latestUpdate.problemType}</p>` : ''}
+                <p><strong>Последнее обновление:</strong> ${formatNotificationTime(latestUpdate.timestamp)}</p>
+            </div>
+        </div>
+        
+        <h4>История изменений статуса:</h4>
+        <div style="max-height: 300px; overflow-y: auto;">
+    `;
+    
+    statusUpdates.slice(0, 10).forEach((update, index) => {
+        html += `
+            <div class="history-item" style="padding: 10px; border-bottom: 1px solid #f0f0f0;">
+                <div style="display: flex; justify-content: space-between;">
+                    <div>
+                        <strong>${update.newStatus || 'Изменение статуса'}</strong>
+                        ${update.oldStatus ? ` (с ${update.oldStatus})` : ''}
+                    </div>
+                    <div style="font-size: 11px; color: #666;">${formatNotificationTime(update.timestamp)}</div>
+                </div>
+                ${update.problemType ? `<div style="font-size: 12px; color: #f44336; margin-top: 3px;">Проблема: ${update.problemType}</div>` : ''}
+                ${update.assignedGate ? `<div style="font-size: 12px; color: #4caf50; margin-top: 3px;">Ворота: ${update.assignedGate}</div>` : ''}
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+// Вспомогательные функции
+function getStatusBadgeClass(status) {
+    const statusMap = {
+        'Зарегистрирован': 'badge-info',
+        'Назначены ворота': 'badge-success',
+        'Проблема с товаром': 'badge-warning',
+        'Проблема с документами': 'badge-warning',
+        'Отказ в приемке': 'badge-danger',
+        'Нет в графике': 'badge-danger',
+        'Документы готовы к выдаче': 'badge-success'
+    };
+    
+    return statusMap[status] || 'badge-info';
+}
+
+function getNotificationIcon(type) {
+    const iconMap = {
+        'gate_assigned': '🚪',
+        'documents_ready': '📄',
+        'rejection': '❌',
+        'rejection_detail': '❌',
+        'out_of_schedule': '⏰',
+        'problem_initial': '⚠️',
+        'problem_detail': '⚠️',
+        'status_change': '📋'
+    };
+    
+    return iconMap[type] || '🔔';
+}
+
+function getNotificationColor(type) {
+    const colorMap = {
+        'gate_assigned': '#e8f5e9',
+        'documents_ready': '#e8f5e9',
+        'rejection': '#ffebee',
+        'rejection_detail': '#ffebee',
+        'out_of_schedule': '#fff3e0',
+        'problem_initial': '#fff3e0',
+        'problem_detail': '#fff3e0',
+        'status_change': '#e3f2fd'
+    };
+    
+    return colorMap[type] || '#f5f5f5';
+}
+
+function getNotificationBorderColor(type) {
+    const colorMap = {
+        'gate_assigned': '#4caf50',
+        'documents_ready': '#4caf50',
+        'rejection': '#f44336',
+        'rejection_detail': '#f44336',
+        'out_of_schedule': '#ff9800',
+        'problem_initial': '#ff9800',
+        'problem_detail': '#ff9800',
+        'status_change': '#2196f3'
+    };
+    
+    return colorMap[type] || '#666';
+}
+
+function getStatusBoxClass(status) {
+    const classMap = {
+        'Назначены ворота': '',
+        'Документы готовы к выдаче': '',
+        'Проблема с товаром': 'warning',
+        'Проблема с документами': 'warning',
+        'Отказ в приемке': 'warning',
+        'Нет в графике': 'warning'
+    };
+    
+    return classMap[status] || '';
+}
+
+function formatNotificationTime(timestamp) {
+    if (!timestamp) return '';
+    
+    try {
+        const date = new Date(timestamp);
+        return date.toLocaleString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    } catch (e) {
+        return timestamp;
+    }
+}
+
+function closeDriverCabinet() {
+    const modal = document.getElementById('driver-cabinet-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+function switchTab(tabName) {
+    // Скрыть все вкладки
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Убрать активный класс со всех кнопок
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Показать выбранную вкладку
+    const tabElement = document.getElementById(`${tabName}-tab`);
+    if (tabElement) {
+        tabElement.classList.add('active');
+    }
+    
+    // Активировать кнопку
+    const buttons = document.querySelectorAll('.tab-btn');
+    buttons.forEach(btn => {
+        if (btn.textContent.includes(getTabDisplayName(tabName))) {
+            btn.classList.add('active');
+        }
+    });
+}
+
+function getTabDisplayName(tabName) {
+    const map = {
+        'history': 'История регистраций',
+        'notifications': 'Уведомления',
+        'status': 'Текущий статус'
+    };
+    return map[tabName] || tabName;
+}
+
+async function refreshDriverCabinet() {
+    const modal = document.getElementById('driver-cabinet-modal');
+    if (modal) {
+        showLoader(true);
+        
+        try {
+            // Обновляем данные
+            const history = await getDriverHistory();
+            const notifications = await getPWANotifications();
+            const statusUpdates = await getDriverStatusUpdates();
+            
+            // Обновляем отображение
+            document.getElementById('history-tab').innerHTML = renderHistoryTab(history);
+            document.getElementById('notifications-tab').innerHTML = renderNotificationsTab(notifications);
+            document.getElementById('status-tab').innerHTML = renderStatusTab(statusUpdates);
+            
+            // Обновляем счетчик уведомлений
+            const notificationBtn = document.querySelector('.tab-btn[onclick*="notifications"]');
+            if (notificationBtn) {
+                notificationBtn.innerHTML = `🔔 Уведомления (${notifications.length})`;
+            }
+            
+            showNotification('✅ Данные обновлены', 'success');
+            
+        } catch (error) {
+            logToConsole('ERROR', 'Ошибка обновления личного кабинета', error);
+            showNotification('❌ Ошибка обновления данных', 'error');
+        } finally {
+            showLoader(false);
+        }
+    }
+}
+
+// ==================== PUSH УВЕДОМЛЕНИЯ ====================
+function showPushNotification(notification) {
+    // Проверяем разрешение на уведомления
+    if (!("Notification" in window)) {
+        logToConsole('WARN', 'Браузер не поддерживает уведомления');
+        return;
+    }
+    
+    if (Notification.permission === "granted") {
+        createNotification(notification);
+    } else if (Notification.permission !== "denied") {
+        Notification.requestPermission().then(permission => {
+            if (permission === "granted") {
+                createNotification(notification);
+            }
+        });
+    }
+}
+
+function createNotification(notification) {
+    try {
+        const options = {
+            body: notification.message,
+            icon: '/reg_driver_ULN/icons/icon-192x192.png',
+            badge: '/reg_driver_ULN/icons/icon-72x72.png',
+            vibrate: [200, 100, 200],
+            tag: notification.id || 'driver_notification',
+            renotify: true,
+            requireInteraction: true,
+            data: notification.data || {}
+        };
+        
+        const n = new Notification(notification.title || 'Уведомление для водителя', options);
+        
+        n.onclick = function(event) {
+            event.preventDefault();
+            window.focus();
+            
+            // Показываем личный кабинет при клике на уведомление
+            openDriverCabinet();
+            
+            // Переходим на вкладку уведомлений
+            setTimeout(() => {
+                const notificationsTab = document.querySelector('.tab-btn[onclick*="notifications"]');
+                if (notificationsTab) {
+                    notificationsTab.click();
+                }
+            }, 500);
+            
+            n.close();
+        };
+        
+        // Автоматически закрыть через 10 секунд
+        setTimeout(() => n.close(), 10000);
+        
+        logToConsole('INFO', 'Push уведомление показано', notification);
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка создания push уведомления', error);
+    }
+}
+
+// ==================== ПЕРИОДИЧЕСКАЯ ПРОВЕРКА ОБНОВЛЕНИЙ ====================
+let notificationCheckInterval = null;
+
+function startNotificationChecking() {
+    // Проверяем каждые 30 секунд если пользователь онлайн
+    notificationCheckInterval = setInterval(async () => {
+        if (navigator.onLine && registrationState.data.phone) {
+            try {
+                const notifications = await getPWANotifications();
+                const statusUpdates = await getDriverStatusUpdates();
+                
+                // Если есть новые уведомления, показываем их
+                if (notifications.length > 0) {
+                    logToConsole('INFO', 'Получены новые уведомления', { count: notifications.length });
+                    
+                    // Показываем встроенное уведомление
+                    if (notifications.length === 1) {
+                        showNotification(`🔔 ${notifications[0].title}`, 'info');
+                    } else {
+                        showNotification(`🔔 ${notifications.length} новых уведомлений`, 'info');
+                    }
+                    
+                    // Обновляем иконку вкладки
+                    updateTabNotificationBadge(notifications.length);
+                }
+                
+            } catch (error) {
+                logToConsole('ERROR', 'Ошибка проверки уведомлений', error);
+            }
+        }
+    }, 30000); // 30 секунд
+}
+
+function stopNotificationChecking() {
+    if (notificationCheckInterval) {
+        clearInterval(notificationCheckInterval);
+        notificationCheckInterval = null;
+    }
+}
+
+function updateTabNotificationBadge(count) {
+    // Обновляем favicon или title
+    if (count > 0) {
+        document.title = `(${count}) УЛН. Регистрация водителей`;
+    } else {
+        document.title = 'УЛН. Регистрация водителей';
+    }
+}
+
+// ==================== ИНИЦИАЛИЗАЦИЯ PUSH УВЕДОМЛЕНИЙ ====================
+function initializePushNotifications() {
+    // Запрашиваем разрешение при загрузке приложения
+    if ("Notification" in window && Notification.permission === "default") {
+        // Можно показать кнопку для запроса разрешения
+        logToConsole('INFO', 'Push уведомления доступны, разрешение не запрошено');
+    }
+    
+    // Начинаем проверку обновлений
+    startNotificationChecking();
+}
+
+// ==================== ФУНКЦИЯ ДЛЯ ЗАПРОСА ИСТОРИИ В GAS ====================
+function handleGetDriverHistory(phone) {
+    try {
+        const spreadsheet = SpreadsheetApp.openById(SHEET_ID);
+        const sheet = spreadsheet.getSheetByName(SHEET_NAME);
+        
+        if (!sheet || sheet.getLastRow() <= 1) {
+            return {
+                success: true,
+                registrations: []
+            };
+        }
+        
+        const cleanPhone = normalizePhone(phone);
+        const lastRow = sheet.getLastRow();
+        
+        // Получаем все записи с этим телефоном
+        const dataRange = sheet.getRange(2, 1, lastRow - 1, 19);
+        const data = dataRange.getValues();
+        
+        const registrations = [];
+        
+        for (let i = 0; i < data.length; i++) {
+            const rowData = data[i];
+            const rowPhone = rowData[2] ? rowData[2].toString() : '';
+            
+            if (normalizePhone(rowPhone) === cleanPhone) {
+                registrations.push({
+                    rowNumber: i + 2,
+                    date: rowData[0] || '',
+                    time: rowData[1] || '',
+                    phone: rowData[2] || '',
+                    fio: rowData[3] || '',
+                    supplier: rowData[4] || '',
+                    legalEntity: rowData[5] || '',
+                    productType: rowData[6] || '',
+                    vehicleType: rowData[7] || '',
+                    vehicleNumber: rowData[8] || '',
+                    pallets: rowData[9] || 0,
+                    orderNumber: rowData[10] || '',
+                    etrn: rowData[11] || '',
+                    transit: rowData[12] || '',
+                    defaultGate: rowData[13] || '',
+                    assignedGate: rowData[14] || '',
+                    status: rowData[15] || 'Зарегистрирован',
+                    problemType: rowData[16] || '',
+                    chatId: rowData[17] || '',
+                    scheduleViolation: rowData[18] || 'Нет'
+                });
+            }
+        }
+        
+        // Сортируем по дате (новые сначала)
+        registrations.sort((a, b) => {
+            const dateA = parseDate(a.date, a.time);
+            const dateB = parseDate(b.date, b.time);
+            return dateB - dateA;
+        });
+        
+        return {
+            success: true,
+            registrations: registrations,
+            count: registrations.length,
+            driverPhone: cleanPhone,
+            driverName: registrations.length > 0 ? registrations[0].fio : ''
+        };
+        
+    } catch (error) {
+        Logger.log('Ошибка получения истории водителя:', error.toString());
+        return {
+            success: false,
+            error: error.toString(),
+            registrations: []
+        };
+    }
+}
+
+function parseDate(dateStr, timeStr) {
+    try {
+        if (!dateStr) return new Date(0);
+        
+        // Формат dd.MM.yyyy
+        const parts = dateStr.split('.');
+        if (parts.length !== 3) return new Date(0);
+        
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        
+        let hours = 0, minutes = 0, seconds = 0;
+        
+        if (timeStr) {
+            const timeParts = timeStr.split(':');
+            if (timeParts.length >= 2) {
+                hours = parseInt(timeParts[0], 10);
+                minutes = parseInt(timeParts[1], 10);
+                seconds = timeParts.length >= 3 ? parseInt(timeParts[2], 10) : 0;
+            }
+        }
+        
+        return new Date(year, month, day, hours, minutes, seconds);
+        
+    } catch (e) {
+        return new Date(0);
+    }
+                    }
+
 function cleanupOldOfflineRecords() {
     try {
         const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
@@ -2556,6 +3233,7 @@ window.clearCache = clearCache;
 window.refreshTopData = refreshTopData;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
+
 
 
 
