@@ -2146,8 +2146,6 @@ function enterCabinetWithPhone() {
     openDriverCabinet();
 }
 
-// ==================== ПОЛУЧЕНИЕ ИСТОРИИ РЕГИСТРАЦИЙ ====================
-// ==================== ФУНКЦИЯ ПОЛУЧЕНИЯ ИСТОРИИ (С ИСПРАВЛЕННЫМИ ДАТАМИ) ====================
 async function getDriverHistory(phone) {
     try {
         if (!phone) {
@@ -2224,44 +2222,8 @@ async function getDriverHistory(phone) {
         return [];
     }
 }
-        
-        // Пробуем получить из кэша
-        const cached = localStorage.getItem('driver_history_cache_' + phone);
-        if (cached) {
-            try {
-                const cacheData = JSON.parse(cached);
-                const age = Date.now() - cacheData.timestamp;
-                if (age < 24 * 60 * 60 * 1000) { // 24 часа
-                    console.log('Использую кэшированную историю');
-                    return cacheData.data || [];
-                }
-            } catch (e) {
-                console.log('Ошибка парсинга кэша:', e);
-            }
-        }
-        
-        return [];
-        
-    } catch (error) {
-        logToConsole('ERROR', 'Ошибка получения истории', error);
-        
-        // Пробуем получить из кэша при ошибке
-        const cached = localStorage.getItem('driver_history_cache_' + phone);
-        if (cached) {
-            try {
-                const cacheData = JSON.parse(cached);
-                console.log('Использую кэш истории при ошибке');
-                return cacheData.data || [];
-            } catch (e) {
-                console.log('Ошибка парсинга кэша при ошибке:', e);
-            }
-        }
-        
-        return [];
-    }
-}
 
-// ==================== ПОЛУЧЕНИЕ PWA УВЕДОМЛЕНИЙ ====================
+
 // ==================== ФУНКЦИЯ ПОЛУЧЕНИЯ УВЕДОМЛЕНИЙ (С ИСПРАВЛЕННЫМИ ДАТАМИ) ====================
 async function getPWANotifications(phone) {
     try {
@@ -2350,6 +2312,55 @@ async function getPWANotifications(phone) {
         }
         
         return [];
+    }
+}
+
+// ==================== ФУНКЦИЯ ДЛЯ ОТКРЫТИЯ ЛИЧНОГО КАБИНЕТА ИЗ ШАГА 1 ====================
+function openDriverCabinetFromStep1() {
+    try {
+        const phoneInput = document.getElementById('phone-input');
+        const phone = phoneInput.value.replace(/\s/g, '');
+        
+        if (!phone || phone.length < 10) {
+            showNotification('Пожалуйста, введите номер телефона для доступа к личному кабинету', 'error');
+            phoneInput.focus();
+            return;
+        }
+        
+        const normalizedPhone = normalizePhone(phone);
+        
+        // Сохраняем телефон в registrationState
+        if (registrationState && registrationState.data) {
+            registrationState.data.phone = normalizedPhone;
+        } else {
+            registrationState = {
+                step: 1,
+                data: {
+                    phone: normalizedPhone,
+                    fio: '',
+                    supplier: '',
+                    legalEntity: '',
+                    productType: '',
+                    vehicleType: '',
+                    vehicleNumber: '',
+                    pallets: 0,
+                    orderNumber: '',
+                    etrn: '',
+                    transit: '',
+                    gate: '',
+                    date: '',
+                    time: '',
+                    scheduleViolation: 'Нет'
+                }
+            };
+        }
+        
+        // Открываем личный кабинет
+        openDriverCabinet();
+        
+    } catch (error) {
+        console.error('Ошибка открытия личного кабинета:', error);
+        showNotification('Ошибка открытия личного кабинета: ' + error.message, 'error');
     }
 }
 
@@ -4027,9 +4038,13 @@ window.enterCabinetWithPhone = enterCabinetWithPhone;
 window.openDriverCabinetFromStep1 = openDriverCabinetFromStep1;
 window.formatDateUniversal = formatDateUniversal;
 window.refreshCabinet = refreshCabinet;
+window.openDriverCabinetFromStep1 = openDriverCabinetFromStep1;
+window.openDriverCabinet = openDriverCabinet;
+window.refreshCabinet = refreshCabinet;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
                             
+
 
 
 
