@@ -111,17 +111,6 @@ function openModal(modalId) {
     }
 }
 
-// Функция для закрытия конкретного модального окна
-function closeModalById(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.style.display = 'none';
-        if (currentActiveModal === modalId) {
-            currentActiveModal = null;
-        }
-    }
-}
-
 // Функция для закрытия активного модального окна
 function closeCurrentModal() {
     if (currentActiveModal) {
@@ -2287,8 +2276,11 @@ function openRegistrationDetails(registration, index) {
     
     const modalId = `registration-details-${Date.now()}`;
     
+    // Сохраняем предыдущее окно (личный кабинет)
+    const previousModalId = currentActiveModal;
+    
     const modalHtml = `
-        <div class="modal-overlay" id="${modalId}" onclick="if(event.target === this) closeModalById('${modalId}')">
+        <div class="modal-overlay" id="${modalId}" onclick="if(event.target === this) closeModalById('${modalId}'); restorePreviousModal('${previousModalId}')">
             <div class="modal" onclick="event.stopPropagation()" style="max-width: 750px; max-height: 85vh; display: flex; flex-direction: column;">
                 <div class="modal-header" style="position: sticky; top: 0; background: white; z-index: 10;">
                     <div style="display: flex; align-items: center; gap: 10px;">
@@ -2300,7 +2292,7 @@ function openRegistrationDetails(registration, index) {
                             </div>
                         </div>
                     </div>
-                    <button class="modal-close" onclick="closeModalById('${modalId}')" style="font-size: 20px; padding: 5px 10px;">✕</button>
+                    <button class="modal-close" onclick="closeDetailsAndRestore('${modalId}', '${previousModalId}')" style="font-size: 20px; padding: 5px 10px;">✕</button>
                 </div>
                 
                 <div class="modal-body" style="flex: 1; overflow-y: auto; padding: 20px;">
@@ -2522,7 +2514,7 @@ function openRegistrationDetails(registration, index) {
                 
                 <!-- Закрепленная панель кнопок -->
                 <div class="modal-footer" style="position: sticky; bottom: 0; background: white; border-top: 1px solid #f0f0f0; padding: 15px 20px; margin-top: auto; display: flex; justify-content: space-between; align-items: center;">
-                    <button class="btn btn-secondary" onclick="closeModalById('${modalId}')" style="padding: 10px 20px; font-size: 14px;">
+                    <button class="btn btn-secondary" onclick="closeDetailsAndRestore('${modalId}', '${previousModalId}')" style="padding: 10px 20px; font-size: 14px;">
                         ← Назад к истории
                     </button>
                     <div style="display: flex; gap: 10px;">
@@ -2542,39 +2534,80 @@ function openRegistrationDetails(registration, index) {
         </div>
     `;
     
-    // Удаляем старые модальные окна с деталями
-    document.querySelectorAll('.modal-overlay[id^="registration-details-"]').forEach(modal => {
-        modal.remove();
-    });
+    // Скрываем предыдущее модальное окно (личный кабинет)
+    if (previousModalId) {
+        const prevModal = document.getElementById(previousModalId);
+        if (prevModal) {
+            prevModal.style.display = 'none';
+        }
+    }
     
     // Создаем новое модальное окно
     const modalContainer = document.createElement('div');
     modalContainer.innerHTML = modalHtml;
     document.body.appendChild(modalContainer);
     
-    // Запоминаем предыдущее активное окно (личный кабинет)
-    const previousModal = currentActiveModal;
+    // Устанавливаем текущее активное окно
     currentActiveModal = modalId;
+}
+
+// ==================== ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ МОДАЛЬНЫМИ ОКНАМИ ====================
+
+// Функция для закрытия деталей и восстановления предыдущего окна
+function closeDetailsAndRestore(currentModalId, previousModalId) {
+    // Закрываем текущее окно с деталями
+    closeModalById(currentModalId);
     
-    // Скрываем предыдущее модальное окно (личный кабинет)
-    if (previousModal && previousModal !== modalId) {
-        const prevModal = document.getElementById(previousModal);
+    // Восстанавливаем предыдущее окно (личный кабинет)
+    if (previousModalId && previousModalId !== 'null' && previousModalId !== 'undefined') {
+        const prevModal = document.getElementById(previousModalId);
         if (prevModal) {
-            prevModal.style.display = 'none';
+            prevModal.style.display = 'flex';
+            currentActiveModal = previousModalId;
         }
     }
-    
-    // Добавляем функцию для возврата к предыдущему окну
-    window.returnToPreviousModal = function() {
-        closeModalById(modalId);
-        if (previousModal) {
-            const prevModal = document.getElementById(previousModal);
-            if (prevModal) {
-                prevModal.style.display = 'flex';
-                currentActiveModal = previousModal;
-            }
+}
+
+// Функция для восстановления предыдущего модального окна
+function restorePreviousModal(previousModalId) {
+    if (previousModalId && previousModalId !== 'null' && previousModalId !== 'undefined') {
+        const prevModal = document.getElementById(previousModalId);
+        if (prevModal) {
+            prevModal.style.display = 'flex';
+            currentActiveModal = previousModalId;
         }
+    }
+}
+
+// Функция для получения иконки статуса
+function getStatusIcon(status) {
+    const iconMap = {
+        'Зарегистрирован': '📝',
+        'Назначены ворота': '🚪',
+        'Документы готовы к выдаче': '📄',
+        'Отказ в приемке': '❌',
+        'Нет в графике': '⏰',
+        'Проблема с товаром': '⚠️',
+        'Проблема с документами': '📋',
+        'Отправлено': '✅',
+        'Ожидает': '⏳',
+        'Превышен лимит': '⛔',
+        'Дубликат': '🔄'
     };
+    
+    return iconMap[status] || '📋';
+}
+
+// Улучшенная функция закрытия модального окна
+function closeModalById(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.style.display = 'none';
+        if (currentActiveModal === modalId) {
+            currentActiveModal = null;
+        }
+        // Не удаляем элемент из DOM, просто скрываем
+    }
 }
 
 // Fallback функция для копирования
@@ -3534,20 +3567,6 @@ function getStatusBadge(status) {
         bgColor: '#666666',
         textColor: '#ffffff'
     };
-}
-
-/// Вспомогательная функция для иконок статусов
-function getStatusIcon(status) {
-    const iconMap = {
-        'Зарегистрирован': '📝',
-        'Назначены ворота': '✅',
-        'Документы готовы к выдаче': '📄',
-        'Отказ в приемке': '❌',
-        'Нет в графике': '⏰',
-        'Проблема с товаром': '⚠️',
-        'Проблема с документами': '⚠️'
-    };
-    return iconMap[status] || '📋';
 }
 
 function getNotificationIcon(type) {
@@ -4911,7 +4930,6 @@ async function clearCache() {
     logToConsole('ERROR', 'Ошибка сети при очистке кэша', error);
   }
 }
-
 // ==================== ЭКСПОРТ ФУНКЦИЙ ====================
 
 window.handlePhoneSubmit = handlePhoneSubmit;
@@ -4953,6 +4971,7 @@ window.enterCabinetWithPhone = enterCabinetWithPhone;
 window.openDriverCabinetFromStep1 = openDriverCabinetFromStep1;
 window.formatDateUniversal = formatDateUniversal;
 window.refreshCabinet = refreshCabinet;
+window.openDriverCabinetFromStep1 = openDriverCabinetFromStep1;
 window.openDriverCabinet = openDriverCabinet;
 window.refreshCabinet = refreshCabinet;
 window.switchCabinetTab = switchCabinetTab;
@@ -4971,12 +4990,12 @@ window.closeAllModals = closeAllModals;
 window.refreshCabinetInModal = refreshCabinetInModal;
 window.switchCabinetTab = switchCabinetTab;
 window.shareRegistration = shareRegistration;
-window.returnToPreviousModal = returnToPreviousModal;
 window.getStatusIcon = getStatusIcon;
 window.fallbackCopyTextToClipboard = fallbackCopyTextToClipboard;
+window.closeDetailsAndRestore = closeDetailsAndRestore;
+window.restorePreviousModal = restorePreviousModal;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
-
 
 
 
