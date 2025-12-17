@@ -2110,8 +2110,30 @@ async function openDriverCabinet() {
 
 // Функция для открытия детального просмотра регистрации
 function openRegistrationDetails(registration, index) {
-    const formattedDate = formatNotificationTime(registration.displayDate || registration.date || '');
-    const statusBadge = getStatusBadge(registration.status);
+    // Безопасное форматирование данных
+    const safeRegistration = {
+        ...registration,
+        fio: registration.fio || 'Не указано',
+        phone: registration.phone || '',
+        supplier: registration.supplier || 'Не указан',
+        legalEntity: registration.legalEntity || 'Не указано',
+        productType: registration.productType || 'Не указан',
+        vehicleType: registration.vehicleType || 'Не указана',
+        vehicleNumber: registration.vehicleNumber || 'Не указан',
+        pallets: registration.pallets || 0,
+        orderNumber: registration.orderNumber || 'Не указан',
+        etrn: registration.etrn || 'Не указан',
+        transit: registration.transit || 'Нет',
+        assignedGate: registration.assignedGate || '',
+        defaultGate: registration.defaultGate || 'Не назначены',
+        status: registration.status || 'Зарегистрирован',
+        problemType: registration.problemType || '',
+        scheduleViolation: registration.scheduleViolation || 'Нет'
+    };
+    
+    const formattedDate = formatNotificationTime(safeRegistration.displayDate || safeRegistration.date || '');
+    const statusBadge = getStatusBadge(safeRegistration.status);
+    const formattedPhone = formatPhoneDisplay(safeRegistration.phone);
     
     const modalHtml = `
         <div class="modal-overlay" onclick="closeModal()">
@@ -2130,73 +2152,75 @@ function openRegistrationDetails(registration, index) {
                         </div>
                     </div>
                     
-                    <div class="registration-details-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                    <div class="registration-details-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px;">
                         <div class="detail-card" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
                             <div style="font-size: 12px; color: #666; margin-bottom: 5px;">👤 Водитель</div>
-                            <div style="font-weight: 600; font-size: 15px;">${registration.fio || 'Не указано'}</div>
+                            <div style="font-weight: 600; font-size: 15px;">${safeRegistration.fio}</div>
                         </div>
                         
                         <div class="detail-card" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
                             <div style="font-size: 12px; color: #666; margin-bottom: 5px;">📱 Телефон</div>
-                            <div style="font-weight: 600; font-size: 15px;">${formatPhoneDisplay(registration.phone) || 'Не указан'}</div>
+                            <div style="font-weight: 600; font-size: 15px;">${formattedPhone}</div>
                         </div>
                         
                         <div class="detail-card" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
                             <div style="font-size: 12px; color: #666; margin-bottom: 5px;">🏢 Поставщик</div>
-                            <div style="font-weight: 600; font-size: 15px;">${registration.supplier || 'Не указан'}</div>
+                            <div style="font-weight: 600; font-size: 15px;">${safeRegistration.supplier}</div>
                         </div>
                         
                         <div class="detail-card" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
                             <div style="font-size: 12px; color: #666; margin-bottom: 5px;">🏛️ Юрлицо</div>
-                            <div style="font-weight: 600; font-size: 15px;">${registration.legalEntity || 'Не указано'}</div>
+                            <div style="font-weight: 600; font-size: 15px;">${safeRegistration.legalEntity}</div>
                         </div>
-                        
+                    </div>
+                    
+                    <div class="registration-details-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px;">
                         <div class="detail-card" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
                             <div style="font-size: 12px; color: #666; margin-bottom: 5px;">📦 Тип товара</div>
-                            <div style="font-weight: 600; font-size: 15px;">${registration.productType || 'Не указан'}</div>
+                            <div style="font-weight: 600; font-size: 15px;">${safeRegistration.productType}</div>
                         </div>
                         
                         <div class="detail-card" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
                             <div style="font-size: 12px; color: #666; margin-bottom: 5px;">🚗 Марка авто</div>
-                            <div style="font-weight: 600; font-size: 15px;">${registration.vehicleType || 'Не указана'}</div>
+                            <div style="font-weight: 600; font-size: 15px;">${safeRegistration.vehicleType}</div>
                         </div>
                         
                         <div class="detail-card" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
                             <div style="font-size: 12px; color: #666; margin-bottom: 5px;">🔢 Номер ТС</div>
-                            <div style="font-weight: 600; font-size: 15px;">${registration.vehicleNumber || 'Не указан'}</div>
+                            <div style="font-weight: 600; font-size: 15px;">${safeRegistration.vehicleNumber}</div>
                         </div>
                         
                         <div class="detail-card" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
                             <div style="font-size: 12px; color: #666; margin-bottom: 5px;">📦 Поддоны</div>
-                            <div style="font-weight: 600; font-size: 15px;">${registration.pallets || 0}</div>
+                            <div style="font-weight: 600; font-size: 15px;">${safeRegistration.pallets}</div>
                         </div>
                     </div>
                     
-                    <div style="margin-top: 20px;">
+                    <div style="margin-bottom: 20px;">
                         <div class="detail-section" style="margin-bottom: 15px;">
                             <div style="font-size: 14px; color: #666; margin-bottom: 8px;">🚪 Ворота</div>
-                            <div style="background: ${registration.status === 'Назначены ворота' ? '#e8f5e9' : '#f8f9fa'}; padding: 12px; border-radius: 8px; border-left: 4px solid ${registration.status === 'Назначены ворота' ? '#4caf50' : '#666'};">
+                            <div style="background: ${safeRegistration.status === 'Назначены ворота' ? '#e8f5e9' : '#f8f9fa'}; padding: 12px; border-radius: 8px; border-left: 4px solid ${safeRegistration.status === 'Назначены ворота' ? '#4caf50' : '#666'};">
                                 <div style="font-weight: 600; font-size: 15px;">
-                                    ${registration.assignedGate || registration.defaultGate || 'Не назначены'}
+                                    ${safeRegistration.assignedGate || safeRegistration.defaultGate}
                                 </div>
-                                ${registration.assignedGate ? `<div style="font-size: 12px; color: #666; margin-top: 5px;">Назначенные ворота</div>` : ''}
+                                ${safeRegistration.assignedGate ? `<div style="font-size: 12px; color: #666; margin-top: 5px;">Назначенные ворота</div>` : ''}
                             </div>
                         </div>
                         
-                        ${registration.orderNumber ? `
+                        ${safeRegistration.orderNumber !== 'Не указан' ? `
                             <div class="detail-section" style="margin-bottom: 15px;">
                                 <div style="font-size: 14px; color: #666; margin-bottom: 8px;">📋 Номер заказа</div>
                                 <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
-                                    <div style="font-weight: 600; font-size: 15px;">${registration.orderNumber}</div>
+                                    <div style="font-weight: 600; font-size: 15px;">${safeRegistration.orderNumber}</div>
                                 </div>
                             </div>
                         ` : ''}
                         
-                        ${registration.etrn ? `
+                        ${safeRegistration.etrn !== 'Не указан' ? `
                             <div class="detail-section" style="margin-bottom: 15px;">
                                 <div style="font-size: 14px; color: #666; margin-bottom: 8px;">📱 ЭТрН</div>
                                 <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
-                                    <div style="font-weight: 600; font-size: 15px;">${registration.etrn}</div>
+                                    <div style="font-weight: 600; font-size: 15px;">${safeRegistration.etrn}</div>
                                 </div>
                             </div>
                         ` : ''}
@@ -2204,33 +2228,33 @@ function openRegistrationDetails(registration, index) {
                         <div class="detail-section" style="margin-bottom: 15px;">
                             <div style="font-size: 14px; color: #666; margin-bottom: 8px;">🔄 Транзит</div>
                             <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
-                                <div style="font-weight: 600; font-size: 15px;">${registration.transit || 'Нет'}</div>
+                                <div style="font-weight: 600; font-size: 15px;">${safeRegistration.transit}</div>
                             </div>
                         </div>
-                        
-                        ${registration.problemType ? `
-                            <div class="detail-section" style="margin-bottom: 15px;">
-                                <div style="font-size: 14px; color: #666; margin-bottom: 8px;">⚠️ Тип проблемы</div>
-                                <div style="background: #ffebee; padding: 12px; border-radius: 8px; border-left: 4px solid #f44336;">
-                                    <div style="font-weight: 600; font-size: 15px; color: #c62828;">${registration.problemType}</div>
-                                </div>
-                            </div>
-                        ` : ''}
-                        
-                        ${registration.scheduleViolation === 'Да' ? `
-                            <div class="detail-section" style="margin-bottom: 15px;">
-                                <div style="font-size: 14px; color: #666; margin-bottom: 8px;">⏰ Нарушение графика</div>
-                                <div style="background: #fff3e0; padding: 12px; border-radius: 8px; border-left: 4px solid #ff9800;">
-                                    <div style="font-weight: 600; font-size: 15px; color: #e65100;">Да</div>
-                                    <div style="font-size: 12px; color: #666; margin-top: 5px;">Водитель приехал вне установленного графика</div>
-                                </div>
-                            </div>
-                        ` : ''}
                     </div>
+                    
+                    ${safeRegistration.problemType ? `
+                        <div class="detail-section" style="margin-bottom: 15px;">
+                            <div style="font-size: 14px; color: #666; margin-bottom: 8px;">⚠️ Тип проблемы</div>
+                            <div style="background: #ffebee; padding: 12px; border-radius: 8px; border-left: 4px solid #f44336;">
+                                <div style="font-weight: 600; font-size: 15px; color: #c62828;">${safeRegistration.problemType}</div>
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    ${safeRegistration.scheduleViolation === 'Да' ? `
+                        <div class="detail-section" style="margin-bottom: 15px;">
+                            <div style="font-size: 14px; color: #666; margin-bottom: 8px;">⏰ Нарушение графика</div>
+                            <div style="background: #fff3e0; padding: 12px; border-radius: 8px; border-left: 4px solid #ff9800;">
+                                <div style="font-weight: 600; font-size: 15px; color: #e65100;">Да</div>
+                                <div style="font-size: 12px; color: #666; margin-top: 5px;">Водитель приехал вне установленного графика</div>
+                            </div>
+                        </div>
+                    ` : ''}
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" onclick="closeModal()">Закрыть</button>
-                    <button class="btn btn-primary" onclick="copyRegistrationDetails(${JSON.stringify(registration).replace(/"/g, '&quot;')})">
+                    <button class="btn btn-primary" onclick="copyRegistrationDetails(${JSON.stringify(safeRegistration).replace(/"/g, '&quot;')})">
                         📋 Копировать данные
                     </button>
                 </div>
@@ -2248,13 +2272,17 @@ function openRegistrationDetails(registration, index) {
     document.body.appendChild(modalContainer);
 }
 
+
 // Функция для копирования данных регистрации
+// Безопасная функция для копирования данных
 function copyRegistrationDetails(registration) {
     try {
+        const safePhone = registration.phone ? formatPhoneDisplay(registration.phone) : 'Не указан';
+        
         const textToCopy = `
 📋 Детали регистрации:
 👤 Водитель: ${registration.fio || 'Не указано'}
-📱 Телефон: ${formatPhoneDisplay(registration.phone) || 'Не указан'}
+📱 Телефон: ${safePhone}
 🏢 Поставщик: ${registration.supplier || 'Не указан'}
 🏛️ Юрлицо: ${registration.legalEntity || 'Не указано'}
 📦 Тип товара: ${registration.productType || 'Не указан'}
@@ -2274,14 +2302,20 @@ ${registration.scheduleViolation === 'Да' ? '⏰ Нарушение графи
             showNotification('✅ Данные скопированы в буфер обмена', 'success');
         }).catch(err => {
             console.error('Ошибка копирования:', err);
-            showNotification('❌ Не удалось скопировать данные', 'error');
+            // Fallback для старых браузеров
+            const textArea = document.createElement('textarea');
+            textArea.value = textToCopy;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            showNotification('✅ Данные скопированы', 'success');
         });
     } catch (error) {
         console.error('Ошибка копирования:', error);
         showNotification('❌ Ошибка копирования данных', 'error');
     }
 }
-
 // ==================== ПОКАЗ ЛИЧНОГО КАБИНЕТА ====================
 
 
@@ -2852,129 +2886,106 @@ function renderHistoryTab(history) {
         `;
     }
     
-    let html = `<div style="max-height: 400px; overflow-y: auto; padding-right: 5px;">`;
+    let html = `<div style="max-height: 400px; overflow-y: auto;">`;
     
     history.forEach((item, index) => {
         const statusBadge = getStatusBadge(item.status);
         const formattedDate = formatNotificationTime(item.displayDate || item.date || '');
         
-        // Экранируем JSON для передачи в onclick
-        const escapedItem = JSON.stringify(item).replace(/"/g, '&quot;');
+        // Создаем безопасный объект для передачи
+        const safeItem = {
+            ...item,
+            fio: item.fio || 'Не указано',
+            phone: item.phone || '',
+            supplier: item.supplier || 'Не указан',
+            legalEntity: item.legalEntity || 'Не указано',
+            productType: item.productType || 'Не указан',
+            vehicleType: item.vehicleType || 'Не указана',
+            vehicleNumber: item.vehicleNumber || 'Не указан',
+            pallets: item.pallets || 0,
+            orderNumber: item.orderNumber || 'Не указан',
+            etrn: item.etrn || 'Не указан',
+            transit: item.transit || 'Нет',
+            assignedGate: item.assignedGate || '',
+            defaultGate: item.defaultGate || 'Не назначены',
+            status: item.status || 'Зарегистрирован',
+            problemType: item.problemType || '',
+            scheduleViolation: item.scheduleViolation || 'Нет',
+            displayDate: formattedDate
+        };
+        
+        // Безопасная сериализация
+        const itemData = JSON.stringify(safeItem);
+        const safeItemData = escapeHTML(itemData);
         
         html += `
-            <div class="card" style="
-                margin-bottom: 10px; 
-                border-left: 4px solid ${statusBadge.bgColor}; 
-                cursor: pointer;
-                background: white;
-                border-radius: 8px;
-                border: 1px solid #e0e0e0;
-                transition: all 0.3s;
-                overflow: hidden;
-            " 
-            onclick="openRegistrationDetails('${escapedItem}', ${index + 1})"
-            onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 5px 15px rgba(0,0,0,0.1)';"
-            onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none';">
-                <div class="card-header" style="
-                    display: flex; 
-                    justify-content: space-between; 
-                    align-items: center; 
-                    margin-bottom: 5px;
-                    padding: 12px 15px 8px 15px;
-                    border-bottom: 1px solid #f0f0f0;
-                ">
-                    <div class="card-title" style="font-weight: 600; font-size: 14px; color: #333;">
+            <div class="card" style="margin-bottom: 10px; border-left: 4px solid ${statusBadge.color}; cursor: pointer; transition: all 0.2s;" 
+                 onclick="openRegistrationDetails(${safeItemData}, ${index + 1})"
+                 onmouseover="this.style.transform='translateX(5px)'; this.style.boxShadow='0 5px 15px rgba(0,0,0,0.1)';"
+                 onmouseout="this.style.transform='translateX(0)'; this.style.boxShadow='none';">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                    <div class="card-title" style="font-weight: 600; font-size: 14px;">
                         Регистрация #${index + 1}
+                        <span style="font-size: 11px; font-weight: normal; color: #888; margin-left: 10px;">
+                            ${formattedDate || ''}
+                        </span>
                     </div>
-                    <div class="badge" style="
-                        background: ${statusBadge.bgColor}; 
-                        color: ${statusBadge.textColor}; 
-                        padding: 4px 10px; 
-                        border-radius: 12px; 
-                        font-size: 11px; 
-                        font-weight: 600;
-                        white-space: nowrap;
-                    ">
+                    <div class="badge" style="background: ${statusBadge.bgColor}; color: ${statusBadge.textColor}; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; border: 1px solid ${statusBadge.color}20;">
                         ${statusBadge.text}
                     </div>
                 </div>
-                <div class="card-body" style="font-size: 13px; padding: 0 15px 12px 15px;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                        <div style="color: #666; font-size: 12px;">
-                            <strong>📅 Дата:</strong> ${formattedDate}
+                <div class="card-body" style="font-size: 13px; padding: 10px 0;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 10px;">
+                        <div>
+                            <div style="font-size: 11px; color: #666; margin-bottom: 3px;">🏢 Поставщик</div>
+                            <div style="font-weight: 500; color: #333; word-break: break-word;">${escapeHTML(safeItem.supplier)}</div>
                         </div>
-                        ${item.scheduleViolation === 'Да' ? `
-                            <div style="background: #fff3e0; color: #e65100; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600;">
-                                ⏰ Нарушение графика
+                        <div>
+                            <div style="font-size: 11px; color: #666; margin-bottom: 3px;">📦 Тип товара</div>
+                            <div style="font-weight: 500; color: #333;">${escapeHTML(safeItem.productType)}</div>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 10px;">
+                        <div>
+                            <div style="font-size: 11px; color: #666; margin-bottom: 3px;">🏛️ Юрлицо</div>
+                            <div style="font-weight: 500; color: #333;">${escapeHTML(safeItem.legalEntity)}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 11px; color: #666; margin-bottom: 3px;">🚪 Ворота</div>
+                            <div style="font-weight: 500; color: #333;">${escapeHTML(safeItem.assignedGate || safeItem.defaultGate)}</div>
+                        </div>
+                    </div>
+                    
+                    ${safeItem.vehicleNumber !== 'Не указан' ? `
+                        <div style="display: flex; align-items: center; gap: 10px; margin: 5px 0;">
+                            <div style="font-size: 11px; color: #666; min-width: 70px;">🚗 Номер ТС</div>
+                            <div style="font-weight: 500; color: #333; background: #f0f0f0; padding: 2px 8px; border-radius: 4px; font-family: monospace;">
+                                ${escapeHTML(safeItem.vehicleNumber)}
                             </div>
-                        ` : ''}
-                    </div>
-                    
-                    <div style="margin: 8px 0;">
-                        <div style="color: #666; font-size: 12px; margin-bottom: 3px;">🏢 Поставщик</div>
-                        <div style="font-weight: 500; color: #333;">${item.supplier || 'Не указан'}</div>
-                    </div>
-                    
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 8px 0;">
-                        <div>
-                            <div style="color: #666; font-size: 12px; margin-bottom: 3px;">📦 Тип товара</div>
-                            <div style="font-weight: 500; color: #333;">${item.productType || 'Не указан'}</div>
                         </div>
-                        <div>
-                            <div style="color: #666; font-size: 12px; margin-bottom: 3px;">🏛️ Юрлицо</div>
-                            <div style="font-weight: 500; color: #333;">${item.legalEntity || 'Не указано'}</div>
-                        </div>
-                    </div>
+                    ` : ''}
                     
-                    <div style="margin: 8px 0;">
-                        <div style="color: #666; font-size: 12px; margin-bottom: 3px;">🚪 Ворота</div>
-                        <div style="font-weight: 500; color: #333; 
-                            background: ${item.status === 'Назначены ворота' ? '#e8f5e9' : '#f8f9fa'}; 
-                            padding: 6px 10px; 
-                            border-radius: 6px;
-                            border-left: 3px solid ${item.status === 'Назначены ворота' ? '#4caf50' : '#ccc'};
-                        ">
-                            ${item.assignedGate || item.defaultGate || 'Не назначены'}
-                            ${item.assignedGate ? '<span style="font-size: 11px; color: #4caf50; margin-left: 5px;">(назначены)</span>' : ''}
-                        </div>
-                    </div>
-                    
-                    ${item.problemType ? `
+                    ${safeItem.problemType ? `
                         <div style="margin: 8px 0; padding: 8px; background: #ffebee; border-radius: 6px; border-left: 3px solid #f44336;">
-                            <div style="color: #c62828; font-size: 12px; margin-bottom: 3px; font-weight: 600;">⚠️ Проблема</div>
-                            <div style="font-weight: 500; color: #c62828;">${item.problemType}</div>
-                        </div>
-                    ` : ''}
-                    
-                    ${item.vehicleNumber ? `
-                        <div style="margin: 8px 0; display: flex; align-items: center; gap: 10px;">
-                            <div style="flex: 1;">
-                                <div style="color: #666; font-size: 12px; margin-bottom: 3px;">🚗 Номер ТС</div>
-                                <div style="font-weight: 500; color: #333;">${item.vehicleNumber}</div>
-                            </div>
-                            ${item.vehicleType ? `
-                                <div style="background: #e3f2fd; padding: 4px 8px; border-radius: 6px; font-size: 11px; color: #1565c0;">
-                                    ${item.vehicleType}
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="color: #f44336; font-size: 14px;">⚠️</div>
+                                <div>
+                                    <div style="font-size: 11px; color: #c62828; font-weight: 600;">Проблема</div>
+                                    <div style="font-size: 12px; color: #c62828;">${escapeHTML(safeItem.problemType)}</div>
                                 </div>
-                            ` : ''}
+                            </div>
                         </div>
                     ` : ''}
                     
-                    <div style="
-                        margin-top: 12px; 
-                        padding-top: 10px; 
-                        border-top: 1px solid #f0f0f0; 
-                        font-size: 11px; 
-                        color: #888; 
-                        text-align: center;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        gap: 8px;
-                    ">
-                        <span>👆</span>
-                        <span>Нажмите для подробной информации</span>
-                        <span style="font-size: 10px; color: #4285f4;">[Подробнее]</span>
+                    <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #888;">
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <div>👆 Нажмите для подробной информации</div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <div style="width: 6px; height: 6px; border-radius: 50%; background: #4285f4;"></div>
+                            <div>Подробнее</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2982,6 +2993,17 @@ function renderHistoryTab(history) {
     });
     
     html += `</div>`;
+    
+    // Добавляем статистику внизу
+    html += `
+        <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #f0f0f0;">
+            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #666;">
+                <div>Всего регистраций: <strong>${history.length}</strong></div>
+                <div>${new Date().toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+            </div>
+        </div>
+    `;
+    
     return html;
 }
 
@@ -4147,6 +4169,46 @@ async function retryFailedRequests() {
 
 // ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 
+function escapeHTML(str) {
+    if (!str) return '';
+    try {
+        return str.toString()
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    } catch (e) {
+        return '';
+    }
+}
+
+// Безопасный парсинг JSON
+function safeJSONParse(str, defaultValue = {}) {
+    try {
+        return JSON.parse(str);
+    } catch (error) {
+        console.error('Ошибка парсинга JSON:', error);
+        return defaultValue;
+    }
+}
+
+// Безопасная строка для вставки в HTML атрибуты
+function safeAttribute(str) {
+    if (!str) return '';
+    
+    try {
+        return String(str)
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    } catch (error) {
+        console.error('Ошибка экранирования атрибута:', error);
+        return '';
+    }
+}
+
 function normalizePhone(phone) {
     let cleaned = phone.replace(/\D/g, '');
     
@@ -4166,18 +4228,36 @@ function normalizePhone(phone) {
 }
 
 function formatPhoneDisplay(phone) {
-    const cleaned = phone.replace(/\D/g, '');
+    if (!phone) return '';
     
-    if (cleaned.length === 11) {
-        const part1 = cleaned.substring(1, 4);
-        const part2 = cleaned.substring(4, 7);
-        const part3 = cleaned.substring(7, 9);
-        const part4 = cleaned.substring(9, 11);
+    try {
+        const cleaned = phone.toString().replace(/\D/g, '');
         
-        return `${part1} ${part2} ${part3} ${part4}`;
+        if (cleaned.length === 11) {
+            const part1 = cleaned.substring(1, 4);
+            const part2 = cleaned.substring(4, 7);
+            const part3 = cleaned.substring(7, 9);
+            const part4 = cleaned.substring(9, 11);
+            
+            return `${part1} ${part2} ${part3} ${part4}`;
+        }
+        
+        if (cleaned.length === 10) {
+            const part1 = cleaned.substring(0, 3);
+            const part2 = cleaned.substring(3, 6);
+            const part3 = cleaned.substring(6, 8);
+            const part4 = cleaned.substring(8, 10);
+            
+            return `${part1} ${part2} ${part3} ${part4}`;
+        }
+        
+        // Если нестандартный формат, возвращаем как есть
+        return phone.toString();
+        
+    } catch (error) {
+        console.error('Ошибка форматирования телефона:', error, phone);
+        return phone ? phone.toString() : '';
     }
-    
-    return phone;
 }
 
 function formatDate(date) {
@@ -4508,5 +4588,10 @@ window.renderNotificationsTab = renderNotificationsTab;
 window.renderStatusTab = renderStatusTab;
 window.openRegistrationDetails = openRegistrationDetails;
 window.copyRegistrationDetails = copyRegistrationDetails;
+window.escapeHTML = escapeHTML;
+window.safeJSONParse = safeJSONParse;
+window.safeAttribute = safeAttribute;
+
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
+
