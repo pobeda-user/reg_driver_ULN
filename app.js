@@ -33,9 +33,10 @@ let registrationState = {
 };
 
 // ==================== ФУНКЦИЯ ДЛЯ ОТКРЫТИЯ ЛИЧНОГО КАБИНЕТА ИЗ ШАГА 1 ====================
-// ==================== ФУНКЦИЯ ДЛЯ ОТКРЫТИЯ ЛИЧНОГО КАБИНЕТА ИЗ ШАГА 1 ====================
 function openDriverCabinetFromStep1() {
     try {
+        console.log('🔄 Открываю личный кабинет из шага 1...');
+        
         let phone = '';
         let name = '';
         
@@ -51,19 +52,21 @@ function openDriverCabinetFromStep1() {
             if (registrationState && registrationState.data && registrationState.data.phone) {
                 phone = registrationState.data.phone;
                 name = registrationState.data.fio || '';
+                console.log('📱 Телефон из registrationState:', phone);
             }
             
-            // Пробуем из сохраненных данных
+            // Пробуем из сохраненных данных для кабинета
             if (!phone) {
-                const savedDriverInfo = localStorage.getItem('driver_info_for_cabinet');
-                if (savedDriverInfo) {
-                    try {
+                try {
+                    const savedDriverInfo = localStorage.getItem('driver_info_for_cabinet');
+                    if (savedDriverInfo) {
                         const driverInfo = JSON.parse(savedDriverInfo);
                         phone = driverInfo.phone || '';
                         name = driverInfo.name || '';
-                    } catch (e) {
-                        console.log('Ошибка парсинга сохраненных данных:', e);
+                        console.log('📱 Телефон из driver_info_for_cabinet:', phone);
                     }
+                } catch (e) {
+                    console.log('❌ Ошибка парсинга driver_info_for_cabinet:', e);
                 }
             }
             
@@ -71,58 +74,55 @@ function openDriverCabinetFromStep1() {
             if (!phone) {
                 phone = localStorage.getItem('last_driver_phone') || '';
                 name = localStorage.getItem('last_driver_name') || '';
+                console.log('📱 Телефон из last_driver_phone:', phone);
+            }
+            
+            // Пробуем из оффлайн данных
+            if (!phone) {
+                try {
+                    const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
+                    if (offlineRegistrations.length > 0) {
+                        phone = offlineRegistrations[offlineRegistrations.length - 1].data?.phone || '';
+                        name = offlineRegistrations[offlineRegistrations.length - 1].data?.fio || '';
+                        console.log('📱 Телефон из оффлайн данных:', phone);
+                    }
+                } catch (e) {
+                    console.log('❌ Ошибка получения оффлайн данных:', e);
+                }
             }
         }
         
-        // 3. Если телефон все еще не найден, показываем сообщение
+        // 3. Если телефон все еще не найден, показываем модальное окно для ввода
         if (!phone || phone.length < 10) {
-            showNotification('Пожалуйста, введите номер телефона для доступа к личному кабинету', 'error');
-            if (phoneInput) {
-                phoneInput.focus();
-            } else {
-                // Если нет поля ввода, показываем модальное окно для ввода телефона
-                showPhoneInputModal();
-            }
+            console.log('📱 Телефон не найден, показываю модальное окно');
+            showPhoneInputModal();
             return;
         }
         
         const normalizedPhone = normalizePhone(phone);
+        console.log('✅ Нормализованный телефон:', normalizedPhone);
+        
+        // Сохраняем телефон для будущих использований
+        saveDriverInfoForCabinet(normalizedPhone, name);
         
         // Сохраняем телефон в registrationState для совместимости
         if (registrationState && registrationState.data) {
             registrationState.data.phone = normalizedPhone;
             registrationState.data.fio = name || '';
-        } else {
-            registrationState = {
-                step: 1,
-                data: {
-                    phone: normalizedPhone,
-                    fio: name || '',
-                    supplier: '',
-                    legalEntity: '',
-                    productType: '',
-                    vehicleType: '',
-                    vehicleNumber: '',
-                    pallets: 0,
-                    orderNumber: '',
-                    etrn: '',
-                    transit: '',
-                    gate: '',
-                    date: '',
-                    time: '',
-                    scheduleViolation: 'Нет'
-                }
-            };
+            saveRegistrationState();
         }
         
-        // Сохраняем состояние
-        saveRegistrationState();
+        // Показываем загрузчик
+        showLoader(true);
         
-        // Открываем личный кабинет
-        openDriverCabinet();
+        // Открываем личный кабинет с небольшой задержкой для мобильных устройств
+        setTimeout(() => {
+            openDriverCabinet();
+        }, 300);
         
     } catch (error) {
-        console.error('Ошибка открытия личного кабинета:', error);
+        console.error('❌ Ошибка открытия личного кабинета:', error);
+        showLoader(false);
         showNotification('Ошибка открытия личного кабинета: ' + error.message, 'error');
     }
 }
@@ -374,12 +374,16 @@ document.addEventListener('DOMContentLoaded', function() {
         logToConsole('INFO', 'Конфигурация загружена', { url: CONFIG.APP_SCRIPT_URL });
     }
     
+    // Оптимизируем для мобильных устройств
+    optimizeForMobile();
+    
     // Загружаем сохраненное состояние
     loadRegistrationState();
     
     // Настраиваем обработчики
     setupPhoneInput();
     setupEventListeners();
+    setupMobileTouchHandlers(); // <-- Добавьте эту строку
     
     // Инициализация системы уведомлений
     initializeNotificationSystem();
@@ -438,6 +442,161 @@ function setupEventListeners() {
         updateConnectionStatus(false);
         showNotification('⚠️ Нет соединения с интернетом', 'warning');
     });
+}
+
+// ==================== ОБРАБОТКА МОБИЛЬНЫХ КАСАНИЙ ====================
+function setupMobileTouchHandlers() {
+    console.log('📱 Настройка обработки мобильных касаний...');
+    
+    // Обработчик для кнопки личного кабинета
+    const cabinetBtn = document.querySelector('[onclick*="openDriverCabinetFromStep1"]');
+    if (cabinetBtn) {
+        // Удаляем старый обработчик
+        cabinetBtn.removeAttribute('onclick');
+        
+        // Добавляем новые обработчики для мобильных устройств
+        cabinetBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('📱 Нажата кнопка личного кабинета');
+            openDriverCabinetFromStep1();
+        });
+        
+        // Добавляем обработчик для касаний (мобильные устройства)
+        cabinetBtn.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.style.transform = 'scale(0.98)';
+            this.style.opacity = '0.9';
+        }, { passive: false });
+        
+        cabinetBtn.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.style.transform = '';
+            this.style.opacity = '';
+            console.log('📱 Касание кнопки личного кабинета');
+            openDriverCabinetFromStep1();
+        }, { passive: false });
+    }
+    
+    // Обработчик для кнопки начала регистрации
+    const regBtn = document.querySelector('[onclick*="handlePhoneSubmit"]');
+    if (regBtn) {
+        regBtn.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.style.transform = 'scale(0.98)';
+            this.style.opacity = '0.9';
+        }, { passive: false });
+        
+        regBtn.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.style.transform = '';
+            this.style.opacity = '';
+        }, { passive: false });
+    }
+    
+    console.log('✅ Обработчики мобильных касаний настроены');
+}
+
+// ==================== ОПТИМИЗАЦИЯ ДЛЯ МОБИЛЬНЫХ УСТРОЙСТВ ====================
+function optimizeForMobile() {
+    if (/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        console.log('📱 Обнаружено мобильное устройство');
+        
+        // Добавляем viewport meta тег если его нет
+        if (!document.querySelector('meta[name="viewport"]')) {
+            const meta = document.createElement('meta');
+            meta.name = 'viewport';
+            meta.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+            document.head.appendChild(meta);
+        }
+        
+        // Добавляем стили для мобильных устройств
+        const mobileStyles = `
+            /* Оптимизация для мобильных устройств */
+            @media (max-width: 768px) {
+                body {
+                    -webkit-tap-highlight-color: transparent;
+                    -webkit-touch-callout: none;
+                    touch-action: manipulation;
+                }
+                
+                button, .btn, .option-btn, .compact-brand-btn {
+                    min-height: 44px;
+                    min-width: 44px;
+                    cursor: pointer;
+                }
+                
+                .modal {
+                    width: 95% !important;
+                    margin: 10px !important;
+                    max-height: 85vh !important;
+                }
+                
+                .modal-body {
+                    max-height: 60vh;
+                    overflow-y: auto;
+                    -webkit-overflow-scrolling: touch;
+                }
+                
+                input, textarea, select {
+                    font-size: 16px !important; /* Предотвращает масштабирование в iOS */
+                    min-height: 44px;
+                }
+                
+                /* Предотвращение зума при фокусе на iOS */
+                @supports (-webkit-touch-callout: none) {
+                    input, textarea, select {
+                        font-size: 16px;
+                    }
+                }
+                
+                .button-group.double {
+                    flex-direction: column;
+                    gap: 10px;
+                }
+                
+                .button-group.double .btn {
+                    width: 100%;
+                }
+            }
+            
+            /* Исправление для iPhone X и выше */
+            @supports (padding: max(0px)) {
+                .modal-footer {
+                    padding-bottom: max(15px, env(safe-area-inset-bottom)) !important;
+                }
+                
+                body {
+                    padding-left: env(safe-area-inset-left);
+                    padding-right: env(safe-area-inset-right);
+                }
+            }
+            
+            /* Предотвращение выделения текста при тапах */
+            .no-select {
+                -webkit-touch-callout: none;
+                -webkit-user-select: none;
+                -khtml-user-select: none;
+                -moz-user-select: none;
+                -ms-user-select: none;
+                user-select: none;
+            }
+            
+            /* Плавные анимации для мобильных устройств */
+            * {
+                -webkit-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+        `;
+        
+        const style = document.createElement('style');
+        style.textContent = mobileStyles;
+        document.head.appendChild(style);
+    }
 }
 
 // ==================== ОБРАБОТКА КЛАВИШИ ENTER ====================
@@ -5104,6 +5263,7 @@ window.closeDetailsAndRestore = closeDetailsAndRestore;
 window.restorePreviousModal = restorePreviousModal;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
+
 
 
 
