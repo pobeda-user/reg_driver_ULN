@@ -90,6 +90,53 @@ function openDriverCabinetFromStep1() {
     }
 }
 
+// Функция для открытия модального окна
+
+let currentActiveModal = null;
+
+function openModal(modalId) {
+    // Закрываем предыдущее модальное окно
+    if (currentActiveModal && currentActiveModal !== modalId) {
+        const prevModal = document.getElementById(currentActiveModal);
+        if (prevModal) {
+            prevModal.style.display = 'none';
+        }
+    }
+    
+    // Открываем новое
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.style.display = 'flex';
+        currentActiveModal = modalId;
+    }
+}
+
+// Функция для закрытия конкретного модального окна
+function closeModalById(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.style.display = 'none';
+        if (currentActiveModal === modalId) {
+            currentActiveModal = null;
+        }
+    }
+}
+
+// Функция для закрытия активного модального окна
+function closeCurrentModal() {
+    if (currentActiveModal) {
+        closeModalById(currentActiveModal);
+    }
+}
+
+// Функция для закрытия всех модальных окон
+function closeAllModals() {
+    document.querySelectorAll('.modal-overlay').forEach(modal => {
+        modal.style.display = 'none';
+    });
+    currentActiveModal = null;
+}
+
 // ==================== КЭШИРОВАНИЕ ТОП-ДАННЫХ ====================
 
 // Загрузка ТОП-данных при старте приложения
@@ -1947,44 +1994,42 @@ function showOfflineDataModal() {
 function showDriverCabinetModal(history, notifications, driverPhone, driverName) {
     const formattedPhone = formatPhoneDisplay(driverPhone);
     
-    // Получаем имя из истории, если не передано
+    // Получаем имя из истории
     let actualDriverName = driverName;
     if ((!actualDriverName || actualDriverName === 'Не указано') && history.length > 0) {
-        // Ищем первую запись с именем
         const registrationWithName = history.find(reg => reg.fio && reg.fio.trim() !== '');
         if (registrationWithName) {
             actualDriverName = registrationWithName.fio;
         }
     }
     
-    // Или пробуем получить из registrationState
-    if ((!actualDriverName || actualDriverName === 'Не указано') && registrationState && registrationState.data && registrationState.data.fio) {
+    if ((!actualDriverName || actualDriverName === 'Не указано') && registrationState.data.fio) {
         actualDriverName = registrationState.data.fio;
     }
     
-    // Подсчитываем уведомления
     const unreadNotifications = notifications.filter(n => !n.status || n.status !== 'read').length;
     
     const modalHtml = `
-        <div class="modal-overlay" onclick="closeModal()">
-            <div class="modal" onclick="event.stopPropagation()" style="max-width: 800px; max-height: 90vh;">
+        <div class="modal-overlay" id="driver-cabinet-modal" onclick="if(event.target === this) closeModalById('driver-cabinet-modal')">
+            <div class="modal" onclick="event.stopPropagation()" style="max-width: 800px; max-height: 90vh; display: flex; flex-direction: column;">
                 <div class="modal-header">
                     <h3 class="modal-title">👤 Личный кабинет водителя</h3>
-                    <button class="modal-close" onclick="closeModal()">✕</button>
+                    <button class="modal-close" onclick="closeModalById('driver-cabinet-modal')">✕</button>
                 </div>
-                <div class="modal-body">
-                    <div class="info-box" style="margin-bottom: 20px;">
+                
+                <div class="modal-body" style="flex: 1; overflow-y: auto; padding: 0 20px;">
+                    <div class="info-box" style="margin: 0 0 20px 0;">
                         <p><strong>👤 Водитель:</strong> ${actualDriverName || 'Не указано'}</p>
                         <p><strong>📱 Телефон:</strong> ${formattedPhone}</p>
                         <p><strong>📊 Всего регистраций:</strong> ${history.length}</p>
                         <p><strong>🔔 Непрочитанных уведомлений:</strong> ${unreadNotifications}</p>
-                        <p><strong>⏰ Часовой пояс:</strong> UTC+3 (Московское время)</p>
+                        <p><strong>⏰ Часовой пояс:</strong> UTC+3 (время отображается корректно)</p>
                     </div>
                     
                     <div class="tabs" style="margin-bottom: 20px; display: flex; gap: 5px; border-bottom: 1px solid #e0e0e0;">
                         <button class="tab-btn active" onclick="switchCabinetTab('history')" 
                                 style="padding: 10px 15px; border: none; background: none; cursor: pointer; border-bottom: 3px solid #4285f4; color: #4285f4;">
-                            📋 История регистраций (${history.length})
+                            📋 История (${history.length})
                         </button>
                         <button class="tab-btn" onclick="switchCabinetTab('notifications')"
                                 style="padding: 10px 15px; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; color: #666;">
@@ -1992,7 +2037,7 @@ function showDriverCabinetModal(history, notifications, driverPhone, driverName)
                         </button>
                         <button class="tab-btn" onclick="switchCabinetTab('status')"
                                 style="padding: 10px 15px; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; color: #666;">
-                            📊 Текущий статус
+                            📊 Статус
                         </button>
                     </div>
                     
@@ -2008,9 +2053,15 @@ function showDriverCabinetModal(history, notifications, driverPhone, driverName)
                         ${renderStatusTab(history)}
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" onclick="closeModal()">Закрыть</button>
-                    <button class="btn btn-primary" onclick="refreshCabinet('${driverPhone}')">🔄 Обновить</button>
+                
+                <!-- ЗАКРЕПЛЕННАЯ КНОПКА ВНИЗУ -->
+                <div class="modal-footer" style="position: sticky; bottom: 0; background: white; border-top: 1px solid #f0f0f0; padding: 15px 20px; margin-top: auto;">
+                    <button class="btn btn-secondary" onclick="closeModalById('driver-cabinet-modal')">
+                        Закрыть
+                    </button>
+                    <button class="btn btn-primary" onclick="refreshCabinetInModal('${driverPhone}')" style="margin-left: 10px;">
+                        🔄 Обновить данные
+                    </button>
                 </div>
             </div>
         </div>
@@ -2022,8 +2073,10 @@ function showDriverCabinetModal(history, notifications, driverPhone, driverName)
     
     const modalContainer = document.createElement('div');
     modalContainer.innerHTML = modalHtml;
-    modalContainer.id = 'driver-cabinet-modal';
     document.body.appendChild(modalContainer);
+    
+    // Устанавливаем активное модальное окно
+    currentActiveModal = 'driver-cabinet-modal';
 }
 
 function closeModal(event) {
@@ -2051,6 +2104,101 @@ function clearOfflineData() {
         showOfflineDataCount();
         closeModal();
         showNotification('Оффлайн данные очищены', 'info');
+    }
+}
+
+// Функция обновления внутри модального окна
+async function refreshCabinetInModal(phone) {
+    try {
+        // Находим модальное окно
+        const modal = document.getElementById('driver-cabinet-modal');
+        if (!modal) return;
+        
+        // Показываем индикатор загрузки
+        const refreshIndicator = document.createElement('div');
+        refreshIndicator.innerHTML = `
+            <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255, 255, 255, 0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000;">
+                <div class="loader" style="width: 40px; height: 40px; border: 4px solid #f3f3f3; border-top: 4px solid #4285f4; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                <div style="margin-top: 15px; font-weight: 600; color: #333;">Обновление данных...</div>
+                <div style="margin-top: 5px; font-size: 13px; color: #666;">Пожалуйста, подождите</div>
+            </div>
+        `;
+        refreshIndicator.id = 'refresh-indicator';
+        modal.querySelector('.modal').appendChild(refreshIndicator);
+        
+        // Обновляем данные
+        const [history, notifications] = await Promise.all([
+            getDriverHistory(phone),
+            getPWANotifications(phone)
+        ]);
+        
+        // Получаем имя
+        let actualDriverName = '';
+        if (history.length > 0) {
+            const registrationWithName = history.find(reg => reg.fio && reg.fio.trim() !== '');
+            if (registrationWithName) {
+                actualDriverName = registrationWithName.fio;
+            }
+        }
+        
+        if (!actualDriverName && registrationState.data.fio) {
+            actualDriverName = registrationState.data.fio;
+        }
+        
+        // Обновляем вкладки
+        const historyTab = modal.querySelector('#cabinet-history-tab');
+        const notificationsTab = modal.querySelector('#cabinet-notifications-tab');
+        const statusTab = modal.querySelector('#cabinet-status-tab');
+        
+        if (historyTab) historyTab.innerHTML = renderHistoryTab(history);
+        if (notificationsTab) notificationsTab.innerHTML = renderNotificationsTab(notifications);
+        if (statusTab) statusTab.innerHTML = renderStatusTab(history);
+        
+        // Обновляем заголовок и информацию
+        const infoBox = modal.querySelector('.info-box');
+        if (infoBox) {
+            const unreadNotifications = notifications.filter(n => !n.status || n.status !== 'read').length;
+            infoBox.innerHTML = `
+                <p><strong>👤 Водитель:</strong> ${actualDriverName || 'Не указано'}</p>
+                <p><strong>📱 Телефон:</strong> ${formatPhoneDisplay(phone)}</p>
+                <p><strong>📊 Всего регистраций:</strong> ${history.length}</p>
+                <p><strong>🔔 Непрочитанных уведомлений:</strong> ${unreadNotifications}</p>
+                <p><strong>⏰ Часовой пояс:</strong> UTC+3 (время отображается корректно)</p>
+                <p style="color: #4caf50; font-weight: 600; margin-top: 10px;">✅ Данные обновлены: ${new Date().toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}</p>
+            `;
+        }
+        
+        // Обновляем кнопки вкладок
+        const historyBtn = modal.querySelector('.tab-btn:nth-child(1)');
+        const notificationsBtn = modal.querySelector('.tab-btn:nth-child(2)');
+        
+        if (historyBtn) {
+            historyBtn.innerHTML = `📋 История (${history.length})`;
+        }
+        if (notificationsBtn) {
+            notificationsBtn.innerHTML = `🔔 Уведомления (${unreadNotifications})`;
+        }
+        
+        // Убираем индикатор загрузки
+        setTimeout(() => {
+            const indicator = modal.querySelector('#refresh-indicator');
+            if (indicator) indicator.remove();
+            
+            // Показываем уведомление
+            showNotification('✅ Данные обновлены', 'success');
+        }, 500);
+        
+    } catch (error) {
+        console.error('Ошибка обновления кабинета:', error);
+        
+        // Убираем индикатор загрузки при ошибке
+        const modal = document.getElementById('driver-cabinet-modal');
+        if (modal) {
+            const indicator = modal.querySelector('#refresh-indicator');
+            if (indicator) indicator.remove();
+        }
+        
+        showNotification('❌ Ошибка обновления данных', 'error');
     }
 }
 
@@ -2128,150 +2276,358 @@ function openRegistrationDetails(registration, index) {
         defaultGate: registration.defaultGate || 'Не назначены',
         status: registration.status || 'Зарегистрирован',
         problemType: registration.problemType || '',
-        scheduleViolation: registration.scheduleViolation || 'Нет'
+        scheduleViolation: registration.scheduleViolation || 'Нет',
+        date: registration.date || '',
+        time: registration.time || ''
     };
     
     const formattedDate = formatNotificationTime(safeRegistration.displayDate || safeRegistration.date || '');
     const statusBadge = getStatusBadge(safeRegistration.status);
     const formattedPhone = formatPhoneDisplay(safeRegistration.phone);
     
+    const modalId = `registration-details-${Date.now()}`;
+    
     const modalHtml = `
-        <div class="modal-overlay" onclick="closeModal()">
-            <div class="modal" onclick="event.stopPropagation()" style="max-width: 700px;">
-                <div class="modal-header">
-                    <h3 class="modal-title">📋 Детали регистрации #${index}</h3>
-                    <button class="modal-close" onclick="closeModal()">✕</button>
+        <div class="modal-overlay" id="${modalId}" onclick="if(event.target === this) closeModalById('${modalId}')">
+            <div class="modal" onclick="event.stopPropagation()" style="max-width: 750px; max-height: 85vh; display: flex; flex-direction: column;">
+                <div class="modal-header" style="position: sticky; top: 0; background: white; z-index: 10;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="font-size: 24px; color: #4285f4;">📋</div>
+                        <div>
+                            <h3 class="modal-title" style="margin: 0; font-size: 18px;">Детали регистрации #${index}</h3>
+                            <div style="font-size: 13px; color: #666; margin-top: 3px;">
+                                ${formattedDate || 'Дата не указана'}
+                            </div>
+                        </div>
+                    </div>
+                    <button class="modal-close" onclick="closeModalById('${modalId}')" style="font-size: 20px; padding: 5px 10px;">✕</button>
                 </div>
-                <div class="modal-body">
-                    <div style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
-                        <div class="badge" style="background: ${statusBadge.bgColor}; color: ${statusBadge.textColor}; padding: 6px 12px; border-radius: 15px; font-size: 13px; font-weight: 600;">
+                
+                <div class="modal-body" style="flex: 1; overflow-y: auto; padding: 20px;">
+                    <!-- Статус -->
+                    <div style="margin-bottom: 25px; display: flex; align-items: center; justify-content: space-between;">
+                        <div class="badge" style="background: ${statusBadge.bgColor}; color: ${statusBadge.textColor}; padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; border: 2px solid ${statusBadge.bgColor}40;">
                             ${statusBadge.text}
                         </div>
-                        <div style="color: #666; font-size: 13px;">
-                            ${formattedDate}
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="font-size: 24px;">${getStatusIcon(safeRegistration.status)}</div>
                         </div>
                     </div>
                     
-                    <div class="registration-details-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px;">
-                        <div class="detail-card" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
-                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">👤 Водитель</div>
-                            <div style="font-weight: 600; font-size: 15px;">${safeRegistration.fio}</div>
-                        </div>
-                        
-                        <div class="detail-card" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
-                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">📱 Телефон</div>
-                            <div style="font-weight: 600; font-size: 15px;">${formattedPhone}</div>
-                        </div>
-                        
-                        <div class="detail-card" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
-                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">🏢 Поставщик</div>
-                            <div style="font-weight: 600; font-size: 15px;">${safeRegistration.supplier}</div>
-                        </div>
-                        
-                        <div class="detail-card" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
-                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">🏛️ Юрлицо</div>
-                            <div style="font-weight: 600; font-size: 15px;">${safeRegistration.legalEntity}</div>
-                        </div>
-                    </div>
-                    
-                    <div class="registration-details-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px;">
-                        <div class="detail-card" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
-                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">📦 Тип товара</div>
-                            <div style="font-weight: 600; font-size: 15px;">${safeRegistration.productType}</div>
-                        </div>
-                        
-                        <div class="detail-card" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
-                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">🚗 Марка авто</div>
-                            <div style="font-weight: 600; font-size: 15px;">${safeRegistration.vehicleType}</div>
-                        </div>
-                        
-                        <div class="detail-card" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
-                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">🔢 Номер ТС</div>
-                            <div style="font-weight: 600; font-size: 15px;">${safeRegistration.vehicleNumber}</div>
-                        </div>
-                        
-                        <div class="detail-card" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
-                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">📦 Поддоны</div>
-                            <div style="font-weight: 600; font-size: 15px;">${safeRegistration.pallets}</div>
-                        </div>
-                    </div>
-                    
-                    <div style="margin-bottom: 20px;">
-                        <div class="detail-section" style="margin-bottom: 15px;">
-                            <div style="font-size: 14px; color: #666; margin-bottom: 8px;">🚪 Ворота</div>
-                            <div style="background: ${safeRegistration.status === 'Назначены ворота' ? '#e8f5e9' : '#f8f9fa'}; padding: 12px; border-radius: 8px; border-left: 4px solid ${safeRegistration.status === 'Назначены ворота' ? '#4caf50' : '#666'};">
-                                <div style="font-weight: 600; font-size: 15px;">
-                                    ${safeRegistration.assignedGate || safeRegistration.defaultGate}
+                    <!-- Основная информация в 2 колонки -->
+                    <div class="details-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin-bottom: 25px;">
+                        <!-- Левая колонка -->
+                        <div>
+                            <!-- Водитель -->
+                            <div class="detail-card" style="background: #f8f9fa; border-radius: 10px; padding: 15px; margin-bottom: 12px;">
+                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                    <div style="font-size: 18px; color: #4285f4;">👤</div>
+                                    <div style="font-size: 13px; color: #666; font-weight: 500;">Водитель</div>
                                 </div>
-                                ${safeRegistration.assignedGate ? `<div style="font-size: 12px; color: #666; margin-top: 5px;">Назначенные ворота</div>` : ''}
-                            </div>
-                        </div>
-                        
-                        ${safeRegistration.orderNumber !== 'Не указан' ? `
-                            <div class="detail-section" style="margin-bottom: 15px;">
-                                <div style="font-size: 14px; color: #666; margin-bottom: 8px;">📋 Номер заказа</div>
-                                <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
-                                    <div style="font-weight: 600; font-size: 15px;">${safeRegistration.orderNumber}</div>
+                                <div style="font-weight: 600; font-size: 16px; color: #333;">
+                                    ${escapeHTML(safeRegistration.fio)}
                                 </div>
                             </div>
-                        ` : ''}
-                        
-                        ${safeRegistration.etrn !== 'Не указан' ? `
-                            <div class="detail-section" style="margin-bottom: 15px;">
-                                <div style="font-size: 14px; color: #666; margin-bottom: 8px;">📱 ЭТрН</div>
-                                <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
-                                    <div style="font-weight: 600; font-size: 15px;">${safeRegistration.etrn}</div>
+                            
+                            <!-- Телефон -->
+                            <div class="detail-card" style="background: #f8f9fa; border-radius: 10px; padding: 15px; margin-bottom: 12px;">
+                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                    <div style="font-size: 18px; color: #4285f4;">📱</div>
+                                    <div style="font-size: 13px; color: #666; font-weight: 500;">Телефон</div>
+                                </div>
+                                <div style="font-weight: 600; font-size: 16px; color: #333; font-family: monospace;">
+                                    ${formattedPhone}
                                 </div>
                             </div>
-                        ` : ''}
+                            
+                            <!-- Поставщик -->
+                            <div class="detail-card" style="background: #f8f9fa; border-radius: 10px; padding: 15px; margin-bottom: 12px;">
+                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                    <div style="font-size: 18px; color: #4285f4;">🏢</div>
+                                    <div style="font-size: 13px; color: #666; font-weight: 500;">Поставщик</div>
+                                </div>
+                                <div style="font-weight: 600; font-size: 16px; color: #333;">
+                                    ${escapeHTML(safeRegistration.supplier)}
+                                </div>
+                            </div>
+                            
+                            <!-- Юрлицо -->
+                            <div class="detail-card" style="background: #f8f9fa; border-radius: 10px; padding: 15px; margin-bottom: 12px;">
+                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                    <div style="font-size: 18px; color: #4285f4;">🏛️</div>
+                                    <div style="font-size: 13px; color: #666; font-weight: 500;">Юрлицо</div>
+                                </div>
+                                <div style="font-weight: 600; font-size: 16px; color: #333;">
+                                    ${escapeHTML(safeRegistration.legalEntity)}
+                                </div>
+                            </div>
+                        </div>
                         
-                        <div class="detail-section" style="margin-bottom: 15px;">
-                            <div style="font-size: 14px; color: #666; margin-bottom: 8px;">🔄 Транзит</div>
-                            <div style="background: #f8f9fa; padding: 12px; border-radius: 8px;">
-                                <div style="font-weight: 600; font-size: 15px;">${safeRegistration.transit}</div>
+                        <!-- Правая колонка -->
+                        <div>
+                            <!-- Тип товара -->
+                            <div class="detail-card" style="background: #f8f9fa; border-radius: 10px; padding: 15px; margin-bottom: 12px;">
+                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                    <div style="font-size: 18px; color: #4285f4;">📦</div>
+                                    <div style="font-size: 13px; color: #666; font-weight: 500;">Тип товара</div>
+                                </div>
+                                <div style="font-weight: 600; font-size: 16px; color: #333;">
+                                    ${escapeHTML(safeRegistration.productType)}
+                                </div>
+                            </div>
+                            
+                            <!-- Транспорт -->
+                            <div class="detail-card" style="background: #f8f9fa; border-radius: 10px; padding: 15px; margin-bottom: 12px;">
+                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                    <div style="font-size: 18px; color: #4285f4;">🚗</div>
+                                    <div style="font-size: 13px; color: #666; font-weight: 500;">Транспорт</div>
+                                </div>
+                                <div style="font-weight: 600; font-size: 16px; color: #333;">
+                                    ${escapeHTML(safeRegistration.vehicleType)}
+                                    ${safeRegistration.vehicleNumber && safeRegistration.vehicleNumber !== 'Не указан' ? 
+                                        `<div style="font-size: 14px; margin-top: 5px; font-family: monospace; background: #e9ecef; padding: 4px 8px; border-radius: 6px; display: inline-block;">${escapeHTML(safeRegistration.vehicleNumber)}</div>` : 
+                                        ''
+                                    }
+                                </div>
+                            </div>
+                            
+                            <!-- Поддоны -->
+                            <div class="detail-card" style="background: #f8f9fa; border-radius: 10px; padding: 15px; margin-bottom: 12px;">
+                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                    <div style="font-size: 18px; color: #4285f4;">📦</div>
+                                    <div style="font-size: 13px; color: #666; font-weight: 500;">Поддоны</div>
+                                </div>
+                                <div style="font-weight: 600; font-size: 16px; color: #333;">
+                                    ${safeRegistration.pallets} шт.
+                                </div>
+                            </div>
+                            
+                            <!-- Транзит -->
+                            <div class="detail-card" style="background: #f8f9fa; border-radius: 10px; padding: 15px; margin-bottom: 12px;">
+                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                    <div style="font-size: 18px; color: #4285f4;">🔄</div>
+                                    <div style="font-size: 13px; color: #666; font-weight: 500;">Транзит</div>
+                                </div>
+                                <div style="font-weight: 600; font-size: 16px; color: #333;">
+                                    ${escapeHTML(safeRegistration.transit)}
+                                </div>
                             </div>
                         </div>
                     </div>
                     
-                    ${safeRegistration.problemType ? `
-                        <div class="detail-section" style="margin-bottom: 15px;">
-                            <div style="font-size: 14px; color: #666; margin-bottom: 8px;">⚠️ Тип проблемы</div>
-                            <div style="background: #ffebee; padding: 12px; border-radius: 8px; border-left: 4px solid #f44336;">
-                                <div style="font-weight: 600; font-size: 15px; color: #c62828;">${safeRegistration.problemType}</div>
+                    <!-- Ворота (широкая карточка) -->
+                    <div class="detail-section" style="margin-bottom: 20px;">
+                        <div style="font-size: 15px; color: #666; margin-bottom: 10px; font-weight: 500; display: flex; align-items: center; gap: 10px;">
+                            <div style="font-size: 20px;">🚪</div>
+                            <div>Ворота</div>
+                        </div>
+                        <div style="background: ${safeRegistration.status === 'Назначены ворота' ? '#e8f5e9' : '#f8f9fa'}; padding: 20px; border-radius: 12px; border-left: 5px solid ${safeRegistration.status === 'Назначены ворота' ? '#4caf50' : '#666'};">
+                            <div style="font-weight: 600; font-size: 17px; color: #333; line-height: 1.4;">
+                                ${escapeHTML(safeRegistration.assignedGate || safeRegistration.defaultGate)}
+                            </div>
+                            ${safeRegistration.assignedGate ? 
+                                `<div style="font-size: 13px; color: #4caf50; margin-top: 8px; font-weight: 500;">✅ Назначенные ворота</div>` : 
+                                `<div style="font-size: 13px; color: #666; margin-top: 8px;">Ворота по умолчанию</div>`
+                            }
+                        </div>
+                    </div>
+                    
+                    <!-- Документы (если есть) -->
+                    ${(safeRegistration.orderNumber && safeRegistration.orderNumber !== 'Не указан') || (safeRegistration.etrn && safeRegistration.etrn !== 'Не указан') ? `
+                        <div class="detail-section" style="margin-bottom: 20px;">
+                            <div style="font-size: 15px; color: #666; margin-bottom: 10px; font-weight: 500; display: flex; align-items: center; gap: 10px;">
+                                <div style="font-size: 20px;">📋</div>
+                                <div>Документы</div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+                                ${safeRegistration.orderNumber && safeRegistration.orderNumber !== 'Не указан' ? `
+                                    <div style="background: #fff3e0; padding: 15px; border-radius: 10px; border-left: 4px solid #ff9800;">
+                                        <div style="font-size: 13px; color: #e65100; margin-bottom: 5px; font-weight: 500;">Номер заказа</div>
+                                        <div style="font-weight: 600; font-size: 16px; color: #333; font-family: monospace;">
+                                            ${escapeHTML(safeRegistration.orderNumber)}
+                                        </div>
+                                    </div>
+                                ` : ''}
+                                
+                                ${safeRegistration.etrn && safeRegistration.etrn !== 'Не указан' ? `
+                                    <div style="background: #e3f2fd; padding: 15px; border-radius: 10px; border-left: 4px solid #2196f3;">
+                                        <div style="font-size: 13px; color: #1565c0; margin-bottom: 5px; font-weight: 500;">ЭТрН</div>
+                                        <div style="font-weight: 600; font-size: 16px; color: #333; font-family: monospace;">
+                                            ${escapeHTML(safeRegistration.etrn)}
+                                        </div>
+                                    </div>
+                                ` : ''}
                             </div>
                         </div>
                     ` : ''}
                     
-                    ${safeRegistration.scheduleViolation === 'Да' ? `
-                        <div class="detail-section" style="margin-bottom: 15px;">
-                            <div style="font-size: 14px; color: #666; margin-bottom: 8px;">⏰ Нарушение графика</div>
-                            <div style="background: #fff3e0; padding: 12px; border-radius: 8px; border-left: 4px solid #ff9800;">
-                                <div style="font-weight: 600; font-size: 15px; color: #e65100;">Да</div>
-                                <div style="font-size: 12px; color: #666; margin-top: 5px;">Водитель приехал вне установленного графика</div>
+                    <!-- Проблемы и предупреждения -->
+                    ${safeRegistration.problemType || safeRegistration.scheduleViolation === 'Да' ? `
+                        <div class="detail-section" style="margin-bottom: 20px;">
+                            <div style="font-size: 15px; color: #666; margin-bottom: 10px; font-weight: 500; display: flex; align-items: center; gap: 10px;">
+                                <div style="font-size: 20px;">⚠️</div>
+                                <div>Внимание</div>
+                            </div>
+                            
+                            <div style="display: flex; flex-direction: column; gap: 10px;">
+                                ${safeRegistration.problemType ? `
+                                    <div style="background: #ffebee; padding: 15px; border-radius: 10px; border-left: 5px solid #f44336;">
+                                        <div style="display: flex; align-items: flex-start; gap: 12px;">
+                                            <div style="font-size: 20px; color: #f44336; margin-top: 2px;">❌</div>
+                                            <div style="flex: 1;">
+                                                <div style="font-weight: 600; font-size: 15px; color: #c62828; margin-bottom: 5px;">Тип проблемы</div>
+                                                <div style="font-size: 14px; color: #c62828; line-height: 1.4;">
+                                                    ${escapeHTML(safeRegistration.problemType)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ` : ''}
+                                
+                                ${safeRegistration.scheduleViolation === 'Да' ? `
+                                    <div style="background: #fff3e0; padding: 15px; border-radius: 10px; border-left: 5px solid #ff9800;">
+                                        <div style="display: flex; align-items: flex-start; gap: 12px;">
+                                            <div style="font-size: 20px; color: #ff9800; margin-top: 2px;">⏰</div>
+                                            <div style="flex: 1;">
+                                                <div style="font-weight: 600; font-size: 15px; color: #e65100; margin-bottom: 5px;">Нарушение графика</div>
+                                                <div style="font-size: 14px; color: #e65100; line-height: 1.4;">
+                                                    Водитель приехал вне установленного графика для данного типа товара
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ` : ''}
                             </div>
                         </div>
                     ` : ''}
+                    
+                    <!-- Статистика -->
+                    <div class="detail-section" style="margin-top: 25px; padding-top: 20px; border-top: 1px solid #f0f0f0;">
+                        <div style="font-size: 13px; color: #666; display: flex; justify-content: space-between;">
+                            <div>
+                                <div style="font-weight: 500; margin-bottom: 3px;">ID регистрации</div>
+                                <div style="font-family: monospace; font-size: 12px; color: #333; background: #f5f5f5; padding: 4px 8px; border-radius: 6px; display: inline-block;">
+                                    ${safeRegistration.rowNumber || 'N/A'}
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-weight: 500; margin-bottom: 3px;">Обновлено</div>
+                                <div style="font-size: 12px; color: #666;">
+                                    ${new Date().toLocaleDateString('ru-RU')} ${new Date().toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" onclick="closeModal()">Закрыть</button>
-                    <button class="btn btn-primary" onclick="copyRegistrationDetails(${JSON.stringify(safeRegistration).replace(/"/g, '&quot;')})">
-                        📋 Копировать данные
+                
+                <!-- Закрепленная панель кнопок -->
+                <div class="modal-footer" style="position: sticky; bottom: 0; background: white; border-top: 1px solid #f0f0f0; padding: 15px 20px; margin-top: auto; display: flex; justify-content: space-between; align-items: center;">
+                    <button class="btn btn-secondary" onclick="closeModalById('${modalId}')" style="padding: 10px 20px; font-size: 14px;">
+                        ← Назад к истории
                     </button>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-info" onclick="copyRegistrationDetails(${JSON.stringify(safeRegistration).replace(/"/g, '&quot;')})" 
+                                style="padding: 10px 20px; font-size: 14px; background: #17a2b8;">
+                            📋 Копировать
+                        </button>
+                        ${safeRegistration.phone ? `
+                            <button class="btn btn-primary" onclick="shareRegistration(${JSON.stringify(safeRegistration).replace(/"/g, '&quot;')})"
+                                    style="padding: 10px 20px; font-size: 14px;">
+                                📤 Поделиться
+                            </button>
+                        ` : ''}
+                    </div>
                 </div>
             </div>
         </div>
     `;
     
-    // Удаляем старые модальные окна
-    const oldModal = document.getElementById('registration-details-modal');
-    if (oldModal) oldModal.remove();
+    // Удаляем старые модальные окна с деталями
+    document.querySelectorAll('.modal-overlay[id^="registration-details-"]').forEach(modal => {
+        modal.remove();
+    });
     
+    // Создаем новое модальное окно
     const modalContainer = document.createElement('div');
     modalContainer.innerHTML = modalHtml;
-    modalContainer.id = 'registration-details-modal';
     document.body.appendChild(modalContainer);
+    
+    // Запоминаем предыдущее активное окно (личный кабинет)
+    const previousModal = currentActiveModal;
+    currentActiveModal = modalId;
+    
+    // Скрываем предыдущее модальное окно (личный кабинет)
+    if (previousModal && previousModal !== modalId) {
+        const prevModal = document.getElementById(previousModal);
+        if (prevModal) {
+            prevModal.style.display = 'none';
+        }
+    }
+    
+    // Добавляем функцию для возврата к предыдущему окну
+    window.returnToPreviousModal = function() {
+        closeModalById(modalId);
+        if (previousModal) {
+            const prevModal = document.getElementById(previousModal);
+            if (prevModal) {
+                prevModal.style.display = 'flex';
+                currentActiveModal = previousModal;
+            }
+        }
+    };
 }
 
+// Fallback функция для копирования
+function fallbackCopyTextToClipboard(text) {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    
+    try {
+        const successful = document.execCommand('copy');
+        if (successful) {
+            showNotification('✅ Данные скопированы в буфер обмена', 'success');
+        } else {
+            throw new Error('Не удалось выполнить команду копирования');
+        }
+    } catch (err) {
+        console.error('Ошибка fallback копирования:', err);
+        showNotification('❌ Не удалось скопировать данные. Попробуйте выделить текст вручную.', 'error');
+    } finally {
+        document.body.removeChild(textArea);
+    }
+}
+
+// Функция для шаринга (опционально)
+function shareRegistration(registration) {
+    try {
+        const safePhone = registration.phone ? formatPhoneDisplay(registration.phone) : 'Не указан';
+        const shareText = `Регистрация водителя: ${registration.fio || 'Не указано'}, тел: ${safePhone}, статус: ${registration.status}`;
+        
+        if (navigator.share) {
+            navigator.share({
+                title: 'Детали регистрации водителя',
+                text: shareText,
+                url: window.location.href
+            }).then(() => {
+                showNotification('✅ Информация отправлена', 'success');
+            }).catch(err => {
+                console.log('Отмена шаринга:', err);
+            });
+        } else {
+            // Fallback - копируем в буфер
+            copyRegistrationDetails(registration);
+        }
+    } catch (error) {
+        console.error('Ошибка шаринга:', error);
+        showNotification('❌ Ошибка отправки данных', 'error');
+    }
+}
 
 // Функция для копирования данных регистрации
 // Безопасная функция для копирования данных
@@ -2727,25 +3083,28 @@ function showSimpleDriverCabinet(driverPhone, driverName) {
 
 // Функция переключения вкладок
 function switchCabinetTab(tabName) {
+    const modal = document.getElementById('driver-cabinet-modal');
+    if (!modal) return;
+    
     // Скрыть все вкладки
-    document.querySelectorAll('.cabinet-tab-content').forEach(tab => {
+    modal.querySelectorAll('.cabinet-tab-content').forEach(tab => {
         tab.style.display = 'none';
     });
     
     // Убрать активный класс со всех кнопок
-    document.querySelectorAll('.tab-btn').forEach(btn => {
+    modal.querySelectorAll('.tab-btn').forEach(btn => {
         btn.style.borderBottomColor = 'transparent';
         btn.style.color = '#666';
     });
     
     // Показать выбранную вкладку
-    const tabElement = document.getElementById(`cabinet-${tabName}-tab`);
+    const tabElement = modal.querySelector(`#cabinet-${tabName}-tab`);
     if (tabElement) {
         tabElement.style.display = 'block';
     }
     
     // Активировать кнопку
-    const buttons = document.querySelectorAll('.tab-btn');
+    const buttons = modal.querySelectorAll('.tab-btn');
     buttons.forEach(btn => {
         if (btn.textContent.includes(getCabinetTabName(tabName))) {
             btn.style.borderBottomColor = '#4285f4';
@@ -3295,23 +3654,8 @@ function formatNotificationTime(timestamp) {
             
             // Проверяем корректность
             if (day && month && year && hours && minutes) {
-                // Исправляем время с учетом часового пояса +3
-                let hoursInt = parseInt(hours, 10);
-                let minutesInt = parseInt(minutes, 10);
-                
-                // Добавляем 3 часа для часового пояса +3
-                hoursInt += 3;
-                
-                // Если часы превысили 23, переходим на следующий день
-                if (hoursInt >= 24) {
-                    hoursInt -= 24;
-                    // Здесь можно добавить логику перехода на следующий день
-                }
-                
-                const formattedHours = String(hoursInt).padStart(2, '0');
-                const formattedMinutes = String(minutesInt).padStart(2, '0');
-                
-                return `${day}.${month}.${year} ${formattedHours}:${formattedMinutes}`;
+                // ВАЖНО: НЕ прибавляем 3 часа - время уже правильное
+                return `${day}.${month}.${year} ${hours}:${minutes}`;
             }
             
             return timestamp;
@@ -3322,7 +3666,7 @@ function formatNotificationTime(timestamp) {
         if (typeof timestamp === 'string') {
             // Пробуем разные форматы
             if (timestamp.includes('T')) {
-                // ISO формат
+                // ISO формат - парсим как есть
                 date = new Date(timestamp);
             } else if (timestamp.includes('.')) {
                 // Формат "дд.мм.гггг"
@@ -3337,8 +3681,8 @@ function formatNotificationTime(timestamp) {
             return timestamp;
         }
         
-        // Форматируем с учетом часового пояса +3
-        date.setHours(date.getHours() + 3); // Добавляем 3 часа
+        // ВАЖНО: НЕ добавляем 3 часа - оставляем время как есть
+        // Google Sheets уже хранит время в правильном часовом поясе
         
         const day = String(date.getDate()).padStart(2, '0');
         const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -4591,7 +4935,17 @@ window.copyRegistrationDetails = copyRegistrationDetails;
 window.escapeHTML = escapeHTML;
 window.safeJSONParse = safeJSONParse;
 window.safeAttribute = safeAttribute;
-
+window.openModal = openModal;
+window.closeModalById = closeModalById;
+window.closeCurrentModal = closeCurrentModal;
+window.closeAllModals = closeAllModals;
+window.refreshCabinetInModal = refreshCabinetInModal;
+window.switchCabinetTab = switchCabinetTab;
+window.shareRegistration = shareRegistration;
+window.returnToPreviousModal = returnToPreviousModal;
+window.getStatusIcon = getStatusIcon;
+window.fallbackCopyTextToClipboard = fallbackCopyTextToClipboard;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
+
 
