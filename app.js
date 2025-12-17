@@ -1963,78 +1963,48 @@ function clearOfflineData() {
     }
 }
 
-// ==================== ЛИЧНЫЙ КАБИНЕТ ВОДИТЕЛЯ ====================
+// ==================== ОТКРЫТИЕ ЛИЧНОГО КАБИНЕТА ====================
+
 async function openDriverCabinet() {
     try {
         console.log('Открываю личный кабинет...');
         
-        // 1. Пробуем получить телефон из текущей сессии
+        // Пробуем получить телефон из текущей сессии
         let driverPhone = '';
         let driverName = '';
         
         if (registrationState && registrationState.data) {
             driverPhone = registrationState.data.phone || '';
             driverName = registrationState.data.fio || '';
-            console.log('Телефон из registrationState:', driverPhone);
         }
         
-        // 2. Пробуем из localStorage
-        if (!driverPhone) {
-            const lastReg = localStorage.getItem('driver_last_registration');
-            if (lastReg) {
-                try {
-                    const data = JSON.parse(lastReg);
-                    driverPhone = data.phone || '';
-                    driverName = data.fio || '';
-                    console.log('Телефон из localStorage:', driverPhone);
-                } catch (e) {
-                    console.log('Ошибка парсинга localStorage:', e);
-                }
-            }
-        }
-        
-        // 3. Если телефон не найден, показываем ввод
+        // Если телефон не найден, показываем ввод
         if (!driverPhone) {
             showNotification('Введите номер телефона для доступа к личному кабинету', 'warning');
-            
-            // Показываем модальное окно для ввода телефона
-            showPhoneInputModal();
             return;
         }
         
-        // 4. Проверяем соединение с интернетом
-        if (!navigator.onLine) {
-            showNotification('Нет соединения с интернетом. Некоторые функции могут быть недоступны.', 'warning');
-            showSimpleDriverCabinet(driverPhone, driverName);
-            return;
-        }
-        
-        // 5. Показываем загрузчик
+        // Показываем загрузчик
         showLoader(true);
         
         try {
-            // 6. Получаем данные с сервера
-            const [history, notifications, statusUpdates] = await Promise.all([
+            // Получаем данные с сервера
+            const [history, notifications] = await Promise.all([
                 getDriverHistory(driverPhone),
-                getPWANotifications(driverPhone),
-                getDriverStatusUpdates(driverPhone)
+                getPWANotifications(driverPhone)
             ]);
             
             console.log('Данные получены:', {
                 historyCount: history.length,
-                notificationsCount: notifications.length,
-                statusUpdatesCount: statusUpdates.length
+                notificationsCount: notifications.length
             });
             
-            // 7. Сохраняем время последней проверки
-            localStorage.setItem('last_cabinet_check_' + driverPhone, Date.now().toString());
-            
-            // 8. Показываем полный личный кабинет с данными
-            showDriverCabinet(history, notifications, statusUpdates, driverPhone, driverName);
+            // Показываем личный кабинет
+            showDriverCabinetModal(history, notifications, driverPhone, driverName);
             
         } catch (error) {
-            console.error('Ошибка загрузки данных кабинета:', error);
-            showNotification('Не удалось загрузить данные. Показываю упрощенную версию.', 'warning');
+            console.error('Ошибка загрузки данных:', error);
+            showNotification('Не удалось загрузить данные', 'error');
             showSimpleDriverCabinet(driverPhone, driverName);
         } finally {
             showLoader(false);
@@ -2045,6 +2015,74 @@ async function openDriverCabinet() {
         showNotification('Ошибка: ' + error.message, 'error');
         showLoader(false);
     }
+}
+
+// ==================== ПОКАЗ ЛИЧНОГО КАБИНЕТА ====================
+
+function showDriverCabinetModal(history, notifications, driverPhone, driverName) {
+    const formattedPhone = formatPhoneDisplay(driverPhone);
+    
+    const modalHtml = `
+        <div class="modal-overlay" onclick="closeModal()">
+            <div class="modal" onclick="event.stopPropagation()" style="max-width: 700px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">👤 Личный кабинет</h3>
+                    <button class="modal-close" onclick="closeModal()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="info-box">
+                        <p><strong>👤 Водитель:</strong> ${driverName || 'Не указано'}</p>
+                        <p><strong>📱 Телефон:</strong> ${formattedPhone}</p>
+                        <p><strong>📊 Всего регистраций:</strong> ${history.length}</p>
+                        <p><strong>🔔 Уведомлений:</strong> ${notifications.length}</p>
+                    </div>
+                    
+                    ${history.length > 0 ? `
+                        <h4>История регистраций:</h4>
+                        <div style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
+                            ${history.map((item, index) => `
+                                <div class="modal-card">
+                                    <div class="modal-card-header">
+                                        <div class="modal-card-title">Регистрация ${index + 1}</div>
+                                        <div class="modal-date-badge">${item.displayDate || item.date || ''}</div>
+                                    </div>
+                                    <div class="modal-card-content">
+                                        <p><strong>Поставщик:</strong> ${item.supplier || ''}</p>
+                                        <p><strong>Статус:</strong> ${item.status || 'Зарегистрирован'}</p>
+                                        <p><strong>Ворота:</strong> ${item.assignedGate || item.defaultGate || 'Не назначены'}</p>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : `
+                        <div class="empty-state" style="padding: 20px; text-align: center; color: #999;">
+                            <p>История регистраций отсутствует</p>
+                        </div>
+                    `}
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeModal()">Закрыть</button>
+                    <button class="btn btn-primary" onclick="refreshCabinet('${driverPhone}')">Обновить</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Удаляем старый модальный окно если есть
+    const oldModal = document.getElementById('driver-cabinet-modal');
+    if (oldModal) oldModal.remove();
+    
+    const modalContainer = document.createElement('div');
+    modalContainer.innerHTML = modalHtml;
+    modalContainer.id = 'driver-cabinet-modal';
+    document.body.appendChild(modalContainer);
+}
+
+function refreshCabinet(phone) {
+    showNotification('Обновление информации...', 'info');
+    setTimeout(() => {
+        openDriverCabinet();
+    }, 1000);
 }
 
 function showPhoneInputModal() {
@@ -3767,6 +3805,64 @@ function assignGateAutomatically(legalEntity, productType) {
   return 'Не назначены (проверьте тип товара и юрлицо)';
 }
 
+// ==================== УНИВЕРСАЛЬНАЯ ФУНКЦИЯ ФОРМАТИРОВАНИЯ ДАТЫ ====================
+
+function formatDateUniversal(dateInput) {
+    if (!dateInput) return '';
+    
+    try {
+        let date;
+        
+        // Если это строка
+        if (typeof dateInput === 'string') {
+            // Убираем лишние пробелы
+            dateInput = dateInput.trim();
+            
+            // Формат "дд.мм.гггг чч:мм"
+            if (dateInput.includes('.') && dateInput.includes(':')) {
+                const [datePart, timePart] = dateInput.split(' ');
+                if (datePart && timePart) {
+                    const [day, month, year] = datePart.split('.');
+                    const [hours, minutes] = timePart.split(':');
+                    
+                    // Если есть секунды, убираем их
+                    const cleanMinutes = minutes.split('.')[0];
+                    
+                    date = new Date(
+                        parseInt(year, 10),
+                        parseInt(month, 10) - 1,
+                        parseInt(day, 10),
+                        parseInt(hours, 10),
+                        parseInt(cleanMinutes, 10),
+                        0
+                    );
+                }
+            } else if (dateInput.includes('T')) {
+                // ISO формат
+                date = new Date(dateInput);
+            }
+        } else if (dateInput instanceof Date) {
+            date = dateInput;
+        }
+        
+        if (!date || isNaN(date.getTime())) {
+            return dateInput;
+        }
+        
+        // Форматируем в "дд.мм.гггг чч:мм"
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        
+        return `${day}.${month}.${year} ${hours}:${minutes}`;
+        
+    } catch (error) {
+        console.error('Ошибка форматирования даты:', error, dateInput);
+        return dateInput;
+    }
+}
 // ==================== UI ФУНКЦИИ ====================
 
 function showNotification(message, type = 'info') {
@@ -3928,9 +4024,13 @@ window.refreshDriverCabinet = refreshDriverCabinet;
 window.switchCabinetTab = switchCabinetTab;
 window.refreshCabinet = refreshCabinet;
 window.enterCabinetWithPhone = enterCabinetWithPhone;
+window.openDriverCabinetFromStep1 = openDriverCabinetFromStep1;
+window.formatDateUniversal = formatDateUniversal;
+window.refreshCabinet = refreshCabinet;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
                             
+
 
 
 
