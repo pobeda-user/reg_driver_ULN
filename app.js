@@ -33,34 +33,71 @@ let registrationState = {
 };
 
 // ==================== ФУНКЦИЯ ДЛЯ ОТКРЫТИЯ ЛИЧНОГО КАБИНЕТА ИЗ ШАГА 1 ====================
+// ==================== ФУНКЦИЯ ДЛЯ ОТКРЫТИЯ ЛИЧНОГО КАБИНЕТА ИЗ ШАГА 1 ====================
 function openDriverCabinetFromStep1() {
     try {
-        const phoneInput = document.getElementById('phone-input');
-        let phone = phoneInput.value.replace(/\s/g, '');
+        let phone = '';
+        let name = '';
         
-        // Если поле пустое, пробуем получить телефон из registrationState
+        // 1. Пробуем получить из поля ввода
+        const phoneInput = document.getElementById('phone-input');
+        if (phoneInput && phoneInput.value) {
+            phone = phoneInput.value.replace(/\s/g, '');
+        }
+        
+        // 2. Если поле пустое, пробуем получить из сохраненных данных
         if (!phone || phone.length < 10) {
+            // Пробуем из текущей сессии
             if (registrationState && registrationState.data && registrationState.data.phone) {
                 phone = registrationState.data.phone;
-            } else {
-                showNotification('Пожалуйста, введите номер телефона для доступа к личному кабинету', 'error');
-                phoneInput.focus();
-                return;
+                name = registrationState.data.fio || '';
             }
+            
+            // Пробуем из сохраненных данных
+            if (!phone) {
+                const savedDriverInfo = localStorage.getItem('driver_info_for_cabinet');
+                if (savedDriverInfo) {
+                    try {
+                        const driverInfo = JSON.parse(savedDriverInfo);
+                        phone = driverInfo.phone || '';
+                        name = driverInfo.name || '';
+                    } catch (e) {
+                        console.log('Ошибка парсинга сохраненных данных:', e);
+                    }
+                }
+            }
+            
+            // Пробуем из последней регистрации
+            if (!phone) {
+                phone = localStorage.getItem('last_driver_phone') || '';
+                name = localStorage.getItem('last_driver_name') || '';
+            }
+        }
+        
+        // 3. Если телефон все еще не найден, показываем сообщение
+        if (!phone || phone.length < 10) {
+            showNotification('Пожалуйста, введите номер телефона для доступа к личному кабинету', 'error');
+            if (phoneInput) {
+                phoneInput.focus();
+            } else {
+                // Если нет поля ввода, показываем модальное окно для ввода телефона
+                showPhoneInputModal();
+            }
+            return;
         }
         
         const normalizedPhone = normalizePhone(phone);
         
-        // Сохраняем телефон в registrationState
+        // Сохраняем телефон в registrationState для совместимости
         if (registrationState && registrationState.data) {
             registrationState.data.phone = normalizedPhone;
-            registrationState.data.fio = registrationState.data.fio || ''; // Сохраняем ФИО если есть
+            registrationState.data.fio = name || '';
         } else {
             registrationState = {
                 step: 1,
                 data: {
                     phone: normalizedPhone,
-                    fio: '',
+                    fio: name || '',
                     supplier: '',
                     legalEntity: '',
                     productType: '',
@@ -87,27 +124,6 @@ function openDriverCabinetFromStep1() {
     } catch (error) {
         console.error('Ошибка открытия личного кабинета:', error);
         showNotification('Ошибка открытия личного кабинета: ' + error.message, 'error');
-    }
-}
-
-// Функция для открытия модального окна
-
-let currentActiveModal = null;
-
-function openModal(modalId) {
-    // Закрываем предыдущее модальное окно
-    if (currentActiveModal && currentActiveModal !== modalId) {
-        const prevModal = document.getElementById(currentActiveModal);
-        if (prevModal) {
-            prevModal.style.display = 'none';
-        }
-    }
-    
-    // Открываем новое
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.style.display = 'flex';
-        currentActiveModal = modalId;
     }
 }
 
@@ -1171,6 +1187,10 @@ async function submitRegistration() {
         connectionStatus: navigator.onLine ? 'online' : 'offline'
     });
     
+    // СОХРАНЯЕМ ТЕЛЕФОН ПЕРЕД ОЧИСТКОЙ
+    const driverPhone = registrationState.data.phone;
+    const driverName = registrationState.data.fio;
+    
     // ДЕБАГ: Выводим данные перед отправкой
     console.log('=== ДАННЫЕ ПЕРЕД ОТПРАВКОЙ ===');
     console.log('Оригинальный телефон:', registrationState.data.phone);
@@ -1247,6 +1267,9 @@ async function submitRegistration() {
             // ВАЖНО: СОХРАНЯЕМ ДАННЫЕ ДЛЯ ЛИЧНОГО КАБИНЕТА
             saveDriverRegistrationData();
             
+            // СОХРАНЯЕМ ТЕЛЕФОН И ФИО ДЛЯ ЛИЧНОГО КАБИНЕТА
+            saveDriverInfoForCabinet(driverPhone, driverName);
+            
             showSuccessMessage(response.data);
             resetRegistrationState();
             showStep(13);
@@ -1261,6 +1284,9 @@ async function submitRegistration() {
             if (saved) {
                 // СОХРАНЯЕМ ДАННЫЕ ДЛЯ ЛИЧНОГО КАБИНЕТА ДАЖЕ ПРИ ОШИБКЕ
                 saveDriverRegistrationData();
+                
+                // СОХРАНЯЕМ ТЕЛЕФОН И ФИО ДЛЯ ЛИЧНОГО КАБИНЕТА
+                saveDriverInfoForCabinet(driverPhone, driverName);
                 
                 showSuccessMessage();
                 resetRegistrationState();
@@ -1282,6 +1308,9 @@ async function submitRegistration() {
             // СОХРАНЯЕМ ДАННЫЕ ДЛЯ ЛИЧНОГО КАБИНЕТА ДАЖЕ ПРИ ОШИБКЕ
             saveDriverRegistrationData();
             
+            // СОХРАНЯЕМ ТЕЛЕФОН И ФИО ДЛЯ ЛИЧНОГО КАБИНЕТА
+            saveDriverInfoForCabinet(driverPhone, driverName);
+            
             showSuccessMessage();
             resetRegistrationState();
             showStep(13);
@@ -1289,6 +1318,34 @@ async function submitRegistration() {
         }
     } finally {
         showLoader(false);
+    }
+}
+
+// ==================== СОХРАНЕНИЕ ДАННЫХ ДЛЯ ЛИЧНОГО КАБИНЕТА ====================
+function saveDriverInfoForCabinet(phone, name) {
+    try {
+        if (!phone) return;
+        
+        const driverInfo = {
+            phone: normalizePhone(phone),
+            name: name || '',
+            lastAccess: Date.now(),
+            lastRegistration: new Date().toISOString()
+        };
+        
+        // Сохраняем в localStorage
+        localStorage.setItem('driver_info_for_cabinet', JSON.stringify(driverInfo));
+        
+        // Также сохраняем отдельно для быстрого доступа
+        localStorage.setItem('last_driver_phone', phone);
+        if (name) {
+            localStorage.setItem('last_driver_name', name);
+        }
+        
+        logToConsole('INFO', 'Данные для личного кабинета сохранены', driverInfo);
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка сохранения данных для кабинета', error);
     }
 }
 
@@ -2196,6 +2253,7 @@ async function refreshCabinetInModal(phone) {
 
 // ==================== ОТКРЫТИЕ ЛИЧНОГО КАБИНЕТА ====================
 
+// ==================== ОТКРЫТИЕ ЛИЧНОГО КАБИНЕТА ====================
 async function openDriverCabinet() {
     try {
         console.log('Открываю личный кабинет...');
@@ -2209,9 +2267,31 @@ async function openDriverCabinet() {
             driverName = registrationState.data.fio || '';
         }
         
-        // Если телефон не найден, показываем ввод
+        // Если телефон не найден, пробуем из сохраненных данных
+        if (!driverPhone) {
+            const savedDriverInfo = localStorage.getItem('driver_info_for_cabinet');
+            if (savedDriverInfo) {
+                try {
+                    const driverInfo = JSON.parse(savedDriverInfo);
+                    driverPhone = driverInfo.phone || '';
+                    driverName = driverInfo.name || '';
+                } catch (e) {
+                    console.log('Ошибка парсинга сохраненных данных:', e);
+                }
+            }
+        }
+        
+        // Если телефон не найден, пробуем из последней регистрации
+        if (!driverPhone) {
+            driverPhone = localStorage.getItem('last_driver_phone') || '';
+            driverName = localStorage.getItem('last_driver_name') || '';
+        }
+        
+        // Если телефон все еще не найден, показываем ввод
         if (!driverPhone) {
             showNotification('Введите номер телефона для доступа к личному кабинету', 'warning');
+            // Показываем модальное окно для ввода телефона
+            showPhoneInputModal();
             return;
         }
         
@@ -2709,11 +2789,6 @@ ${registration.scheduleViolation === 'Да' ? '⏰ Нарушение графи
     }
 }
 // ==================== ПОКАЗ ЛИЧНОГО КАБИНЕТА ====================
-
-
-
-
-
 function showPhoneInputModal() {
     const modalHtml = `
         <div class="modal-overlay" onclick="closeModal()">
@@ -2732,11 +2807,14 @@ function showPhoneInputModal() {
                     </div>
                     <div class="info-box">
                         <p>Используйте номер телефона, который вы указывали при регистрации</p>
+                        <p style="margin-top: 10px; color: #666; font-size: 13px;">
+                            Телефон сохраняется и будет доступен после завершения регистрации
+                        </p>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" onclick="closeModal()">Отмена</button>
-                    <button class="btn btn-primary" onclick="enterCabinetWithPhone()">Войти</button>
+                    <button class="btn btn-primary" onclick="enterCabinetWithPhone()">Войти в личный кабинет</button>
                 </div>
             </div>
         </div>
@@ -2750,7 +2828,14 @@ function showPhoneInputModal() {
     // Фокус на поле ввода
     setTimeout(() => {
         const phoneInput = document.getElementById('cabinet-phone-input');
-        if (phoneInput) phoneInput.focus();
+        if (phoneInput) {
+            phoneInput.focus();
+            // Автозаполнение сохраненного телефона если есть
+            const savedPhone = localStorage.getItem('last_driver_phone');
+            if (savedPhone) {
+                phoneInput.value = formatPhoneDisplay(savedPhone);
+            }
+        }
     }, 300);
 }
 
@@ -2768,8 +2853,17 @@ function enterCabinetWithPhone() {
     
     const normalizedPhone = normalizePhone(phone);
     
+    // Сохраняем телефон для будущих использований
+    saveDriverInfoForCabinet(normalizedPhone, '');
+    
     // Закрываем модальное окно
     closeModal();
+    
+    // Обновляем registrationState
+    if (registrationState && registrationState.data) {
+        registrationState.data.phone = normalizedPhone;
+        saveRegistrationState();
+    }
     
     // Показываем личный кабинет
     openDriverCabinet();
@@ -5010,6 +5104,7 @@ window.closeDetailsAndRestore = closeDetailsAndRestore;
 window.restorePreviousModal = restorePreviousModal;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
+
 
 
 
