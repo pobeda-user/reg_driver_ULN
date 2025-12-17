@@ -95,6 +95,72 @@ async function loadTopData() {
   }
 }
 
+// ==================== ИСПРАВЛЕННЫЕ ФУНКЦИИ ДАТЫ ====================
+
+// Полный парсинг даты из любого формата
+function parseAnyDate(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string') return new Date(0);
+    
+    try {
+        // Убираем лишние пробелы
+        dateStr = dateStr.trim();
+        
+        // Формат 1: "дд.мм.гггг чч:мм"
+        if (dateStr.includes('.') && dateStr.includes(':')) {
+            const [datePart, timePart] = dateStr.split(' ');
+            if (datePart && timePart) {
+                const [day, month, year] = datePart.split('.');
+                const [hours, minutes] = timePart.split(':');
+                
+                // Проверяем, есть ли секунды
+                const hasSeconds = minutes && minutes.includes('.');
+                
+                if (hasSeconds) {
+                    // Если есть десятичная часть (секунды), берем только минуты
+                    const minutesOnly = minutes.split('.')[0];
+                    return new Date(
+                        parseInt(year, 10),
+                        parseInt(month, 10) - 1,
+                        parseInt(day, 10),
+                        parseInt(hours, 10),
+                        parseInt(minutesOnly, 10),
+                        0
+                    );
+                } else {
+                    return new Date(
+                        parseInt(year, 10),
+                        parseInt(month, 10) - 1,
+                        parseInt(day, 10),
+                        parseInt(hours, 10),
+                        parseInt(minutes, 10),
+                        0
+                    );
+                }
+            }
+        }
+        
+        // Формат 2: ISO строка
+        if (dateStr.includes('T') && dateStr.includes('Z')) {
+            const date = new Date(dateStr);
+            if (!isNaN(date.getTime())) {
+                return date;
+            }
+        }
+        
+        // Формат 3: пытаемся распарсить как есть
+        const date = new Date(dateStr);
+        if (!isNaN(date.getTime())) {
+            return date;
+        }
+        
+        return new Date(0);
+        
+    } catch (e) {
+        console.log('Ошибка парсинга даты:', e, dateStr);
+        return new Date(0);
+    }
+}
+
 // Принудительное обновление ТОП-данных
 async function refreshTopData() {
   try {
@@ -1994,6 +2060,7 @@ function enterCabinetWithPhone() {
 }
 
 // ==================== ПОЛУЧЕНИЕ ИСТОРИИ РЕГИСТРАЦИЙ ====================
+// ==================== ФУНКЦИЯ ПОЛУЧЕНИЯ ИСТОРИИ (С ИСПРАВЛЕННЫМИ ДАТАМИ) ====================
 async function getDriverHistory(phone) {
     try {
         if (!phone) {
@@ -2009,6 +2076,13 @@ async function getDriverHistory(phone) {
         console.log('Ответ истории:', response);
         
         if (response && response.success && response.registrations) {
+            // Форматируем даты
+            const formattedRegistrations = response.registrations.map(reg => ({
+                ...reg,
+                formattedDate: formatNotificationTime(reg.date + ' ' + reg.time),
+                displayDate: reg.date ? `${reg.date} ${reg.time || ''}` : ''
+            }));
+            
             // Сохраняем последнюю проверку
             localStorage.setItem('last_history_check_' + phone, Date.now().toString());
             
@@ -2016,16 +2090,53 @@ async function getDriverHistory(phone) {
             try {
                 localStorage.setItem('driver_history_cache_' + phone, 
                     JSON.stringify({
-                        data: response.registrations,
-                        timestamp: Date.now()
+                        data: formattedRegistrations,
+                        timestamp: Date.now(),
+                        formattedTimestamp: formatDateTime(new Date())
                     })
                 );
             } catch (cacheError) {
                 console.log('Не удалось сохранить в кэш:', cacheError);
             }
             
-            return response.registrations;
+            return formattedRegistrations;
         }
+        
+        // Пробуем получить из кэша
+        const cached = localStorage.getItem('driver_history_cache_' + phone);
+        if (cached) {
+            try {
+                const cacheData = JSON.parse(cached);
+                const age = Date.now() - cacheData.timestamp;
+                if (age < 24 * 60 * 60 * 1000) { // 24 часа
+                    console.log('Использую кэшированную историю');
+                    return cacheData.data || [];
+                }
+            } catch (e) {
+                console.log('Ошибка парсинга кэша:', e);
+            }
+        }
+        
+        return [];
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка получения истории', error);
+        
+        // Пробуем получить из кэша при ошибке
+        const cached = localStorage.getItem('driver_history_cache_' + phone);
+        if (cached) {
+            try {
+                const cacheData = JSON.parse(cached);
+                console.log('Использую кэш истории при ошибке');
+                return cacheData.data || [];
+            } catch (e) {
+                console.log('Ошибка парсинга кэша при ошибке:', e);
+            }
+        }
+        
+        return [];
+    }
+}
         
         // Пробуем получить из кэша
         const cached = localStorage.getItem('driver_history_cache_' + phone);
@@ -2064,6 +2175,7 @@ async function getDriverHistory(phone) {
 }
 
 // ==================== ПОЛУЧЕНИЕ PWA УВЕДОМЛЕНИЙ ====================
+// ==================== ФУНКЦИЯ ПОЛУЧЕНИЯ УВЕДОМЛЕНИЙ (С ИСПРАВЛЕННЫМИ ДАТАМИ) ====================
 async function getPWANotifications(phone) {
     try {
         if (!phone) {
@@ -2082,18 +2194,26 @@ async function getPWANotifications(phone) {
         console.log('Ответ уведомлений:', response);
         
         if (response && response.success && response.notifications) {
-            // Сохраняем время последнего обновления
-            if (response.notifications.length > 0) {
-                const latestTimestamp = response.notifications[0].timestamp;
+            // Форматируем даты в уведомлениях
+            const formattedNotifications = response.notifications.map(notification => ({
+                ...notification,
+                formattedTimestamp: formatNotificationTime(notification.timestamp),
+                displayDate: formatNotificationTime(notification.timestamp)
+            }));
+            
+            // Сохраняем время последнего обновления в правильном формате
+            if (formattedNotifications.length > 0) {
+                const latestTimestamp = formattedNotifications[0].timestamp;
                 localStorage.setItem('last_notification_update_' + phone, latestTimestamp);
             }
             
-            // Сохраняем уведомления в кэш
+            // Сохраняем уведомления в кэш с отформатированными датами
             try {
                 localStorage.setItem('notifications_cache_' + phone, 
                     JSON.stringify({
-                        data: response.notifications,
-                        timestamp: Date.now()
+                        data: formattedNotifications,
+                        timestamp: Date.now(),
+                        formattedTimestamp: formatDateTime(new Date())
                     })
                 );
             } catch (cacheError) {
@@ -2101,13 +2221,13 @@ async function getPWANotifications(phone) {
             }
             
             // Показываем новые уведомления как push
-            response.notifications.forEach(notification => {
+            formattedNotifications.forEach(notification => {
                 if (!notification.status || notification.status !== 'read') {
                     showPushNotification(notification);
                 }
             });
             
-            return response.notifications;
+            return formattedNotifications;
         }
         
         // Пробуем получить из кэша
@@ -2625,27 +2745,70 @@ function getStatusBoxClass(status) {
     return classMap[status] || '';
 }
 
+// Исправленная функция для отображения времени уведомлений
 function formatNotificationTime(timestamp) {
-  if (!timestamp) return '';
-  
-  try {
-    // Проверяем формат "дд.мм.гггг чч:мм"
-    if (typeof timestamp === 'string' && timestamp.includes('.')) {
-      return timestamp;
+    if (!timestamp) return '';
+    
+    // Если уже в формате "дд.мм.гггг чч:мм", возвращаем как есть
+    if (typeof timestamp === 'string' && 
+        timestamp.includes('.') && 
+        timestamp.includes(':') &&
+        timestamp.includes(' ')) {
+        // Проверяем формат
+        const parts = timestamp.split(' ');
+        if (parts.length === 2) {
+            const dateParts = parts[0].split('.');
+            const timeParts = parts[1].split(':');
+            if (dateParts.length === 3 && timeParts.length >= 2) {
+                // Убираем секунды если есть
+                if (timeParts[1].includes('.')) {
+                    const minutesOnly = timeParts[1].split('.')[0];
+                    return `${dateParts[0]}.${dateParts[1]}.${dateParts[2]} ${timeParts[0]}:${minutesOnly}`;
+                }
+                return timestamp;
+            }
+        }
     }
     
-    // Если это ISO формат
-    const date = new Date(timestamp);
-    return date.toLocaleString('ru-RU', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  } catch (e) {
-    return timestamp;
-  }
+    // Если нет, пытаемся распарсить
+    return formatAnyDate(timestamp);
+}
+// Исправленная функция для сравнения дат
+function compareDates(dateStr1, dateStr2) {
+    const date1 = parseAnyDate(dateStr1);
+    const date2 = parseAnyDate(dateStr2);
+    return date1 - date2;
+}
+
+// Проверка нужно ли включать уведомление
+function shouldIncludeNotification(timestamp, lastUpdate) {
+    try {
+        const notificationDate = parseAnyDate(timestamp);
+        const lastUpdateDate = parseAnyDate(lastUpdate);
+        return notificationDate > lastUpdateDate;
+    } catch (e) {
+        return true;
+    }
+}
+
+// ==================== ОТКРЫТИЕ ЛИЧНОГО КАБИНЕТА ИЗ ШАГА 1 ====================
+function openDriverCabinetFromStep1() {
+    const phoneInput = document.getElementById('phone-input');
+    const phone = phoneInput.value.replace(/\s/g, '');
+    
+    if (!phone || phone.length < 10) {
+        showNotification('Пожалуйста, введите номер телефона для доступа к личному кабинету', 'error');
+        phoneInput.focus();
+        return;
+    }
+    
+    const normalizedPhone = normalizePhone(phone);
+    
+    // Сохраняем телефон в registrationState
+    registrationState.data.phone = normalizedPhone;
+    
+    // Открываем личный кабинет
+    openDriverCabinet();
 }
 
 function switchTab(tabName) {
@@ -3493,8 +3656,32 @@ function formatTime(date) {
 }
 
 // Добавьте новую функцию для комбинированного формата
+// Форматирование даты в "дд.мм.гггг чч:мм"
 function formatDateTime(date) {
-  return `${formatDate(date)} ${formatTime(date)}`;
+    if (!date || !(date instanceof Date) || isNaN(date.getTime())) {
+        return '';
+    }
+    
+    try {
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        
+        return `${day}.${month}.${year} ${hours}:${minutes}`;
+    } catch (e) {
+        console.log('Ошибка форматирования даты:', e);
+        return '';
+    }
+}
+
+// Форматирование даты из любой строки в "дд.мм.гггг чч:мм"
+function formatAnyDate(dateStr) {
+    if (!dateStr) return '';
+    
+    const date = parseAnyDate(dateStr);
+    return formatDateTime(date);
 }
 
 function checkScheduleViolation() {
@@ -3715,4 +3902,5 @@ window.enterCabinetWithPhone = enterCabinetWithPhone;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
                             
+
 
