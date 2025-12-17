@@ -204,8 +204,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Настраиваем обработчики
     setupPhoneInput();
     setupEventListeners();
-// Добавить инициализацию push уведомлений
-    initializePushNotifications();
+    
+    // Инициализация системы уведомлений
+    initializeNotificationSystem();
     
     // ПРЕДВАРИТЕЛЬНАЯ ЗАГРУЗКА ТОП ДАННЫХ (в фоне)
     setTimeout(() => {
@@ -233,7 +234,6 @@ document.addEventListener('DOMContentLoaded', function() {
     logToConsole('INFO', 'Приложение инициализировано');
 });
 
-// ==================== ОБРАБОТЧИКИ СОБЫТИЙ ====================
 // ==================== ОБРАБОТЧИКИ СОБЫТИЙ ====================
 
 function setupEventListeners() {
@@ -804,6 +804,7 @@ function showDefaultBrands(container, infoBox) {
     container.appendChild(button);
   });
 }
+
 function selectBrand(brand) {
     logToConsole('INFO', 'Выбрана марка авто', { brand });
     registrationState.data.vehicleType = brand;
@@ -1001,6 +1002,7 @@ function showConfirmation() {
     
     container.innerHTML = html;
 }
+
 // ==================== ШАГ 13: ОТПРАВКА ====================
 // ==================== ПОЛНАЯ ФУНКЦИЯ SUBMITREGISTRATION ====================
 async function submitRegistration() {
@@ -1847,7 +1849,7 @@ function clearOfflineData() {
 }
 
 // ==================== ЛИЧНЫЙ КАБИНЕТ ВОДИТЕЛЯ ====================
-function openDriverCabinet() {
+async function openDriverCabinet() {
     try {
         console.log('Открываю личный кабинет...');
         
@@ -1885,12 +1887,48 @@ function openDriverCabinet() {
             return;
         }
         
-        // 4. Показываем личный кабинет
-        showSimpleDriverCabinet(driverPhone, driverName);
+        // 4. Проверяем соединение с интернетом
+        if (!navigator.onLine) {
+            showNotification('Нет соединения с интернетом. Некоторые функции могут быть недоступны.', 'warning');
+            showSimpleDriverCabinet(driverPhone, driverName);
+            return;
+        }
+        
+        // 5. Показываем загрузчик
+        showLoader(true);
+        
+        try {
+            // 6. Получаем данные с сервера
+            const [history, notifications, statusUpdates] = await Promise.all([
+                getDriverHistory(driverPhone),
+                getPWANotifications(driverPhone),
+                getDriverStatusUpdates(driverPhone)
+            ]);
+            
+            console.log('Данные получены:', {
+                historyCount: history.length,
+                notificationsCount: notifications.length,
+                statusUpdatesCount: statusUpdates.length
+            });
+            
+            // 7. Сохраняем время последней проверки
+            localStorage.setItem('last_cabinet_check_' + driverPhone, Date.now().toString());
+            
+            // 8. Показываем полный личный кабинет с данными
+            showDriverCabinet(history, notifications, statusUpdates, driverPhone, driverName);
+            
+        } catch (error) {
+            console.error('Ошибка загрузки данных кабинета:', error);
+            showNotification('Не удалось загрузить данные. Показываю упрощенную версию.', 'warning');
+            showSimpleDriverCabinet(driverPhone, driverName);
+        } finally {
+            showLoader(false);
+        }
         
     } catch (error) {
         console.error('Ошибка открытия личного кабинета:', error);
         showNotification('Ошибка: ' + error.message, 'error');
+        showLoader(false);
     }
 }
 
@@ -1933,6 +1971,7 @@ function showPhoneInputModal() {
         if (phoneInput) phoneInput.focus();
     }, 300);
 }
+
 function enterCabinetWithPhone() {
     const phoneInput = document.getElementById('cabinet-phone-input');
     if (!phoneInput) return;
@@ -1951,7 +1990,237 @@ function enterCabinetWithPhone() {
     closeModal();
     
     // Показываем личный кабинет
-    showSimpleDriverCabinet(normalizedPhone, '');
+    openDriverCabinet();
+}
+
+// ==================== ПОЛУЧЕНИЕ ИСТОРИИ РЕГИСТРАЦИЙ ====================
+async function getDriverHistory(phone) {
+    try {
+        if (!phone) {
+            console.log('Нет телефона для получения истории');
+            return [];
+        }
+        
+        const response = await sendAPIRequest({
+            action: 'get_driver_history',
+            phone: phone
+        });
+        
+        console.log('Ответ истории:', response);
+        
+        if (response && response.success && response.registrations) {
+            // Сохраняем последнюю проверку
+            localStorage.setItem('last_history_check_' + phone, Date.now().toString());
+            
+            // Сохраняем данные для оффлайн доступа
+            try {
+                localStorage.setItem('driver_history_cache_' + phone, 
+                    JSON.stringify({
+                        data: response.registrations,
+                        timestamp: Date.now()
+                    })
+                );
+            } catch (cacheError) {
+                console.log('Не удалось сохранить в кэш:', cacheError);
+            }
+            
+            return response.registrations;
+        }
+        
+        // Пробуем получить из кэша
+        const cached = localStorage.getItem('driver_history_cache_' + phone);
+        if (cached) {
+            try {
+                const cacheData = JSON.parse(cached);
+                const age = Date.now() - cacheData.timestamp;
+                if (age < 24 * 60 * 60 * 1000) { // 24 часа
+                    console.log('Использую кэшированную историю');
+                    return cacheData.data || [];
+                }
+            } catch (e) {
+                console.log('Ошибка парсинга кэша:', e);
+            }
+        }
+        
+        return [];
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка получения истории', error);
+        
+        // Пробуем получить из кэша при ошибке
+        const cached = localStorage.getItem('driver_history_cache_' + phone);
+        if (cached) {
+            try {
+                const cacheData = JSON.parse(cached);
+                console.log('Использую кэш истории при ошибке');
+                return cacheData.data || [];
+            } catch (e) {
+                console.log('Ошибка парсинга кэша при ошибке:', e);
+            }
+        }
+        
+        return [];
+    }
+}
+
+// ==================== ПОЛУЧЕНИЕ PWA УВЕДОМЛЕНИЙ ====================
+async function getPWANotifications(phone) {
+    try {
+        if (!phone) {
+            console.log('Нет телефона для получения уведомлений');
+            return [];
+        }
+        
+        const lastUpdate = localStorage.getItem('last_notification_update_' + phone);
+        
+        const response = await sendAPIRequest({
+            action: 'get_pwa_notifications',
+            phone: phone,
+            lastUpdate: lastUpdate || null
+        });
+        
+        console.log('Ответ уведомлений:', response);
+        
+        if (response && response.success && response.notifications) {
+            // Сохраняем время последнего обновления
+            if (response.notifications.length > 0) {
+                const latestTimestamp = response.notifications[0].timestamp;
+                localStorage.setItem('last_notification_update_' + phone, latestTimestamp);
+            }
+            
+            // Сохраняем уведомления в кэш
+            try {
+                localStorage.setItem('notifications_cache_' + phone, 
+                    JSON.stringify({
+                        data: response.notifications,
+                        timestamp: Date.now()
+                    })
+                );
+            } catch (cacheError) {
+                console.log('Не удалось сохранить уведомления в кэш:', cacheError);
+            }
+            
+            // Показываем новые уведомления как push
+            response.notifications.forEach(notification => {
+                if (!notification.status || notification.status !== 'read') {
+                    showPushNotification(notification);
+                }
+            });
+            
+            return response.notifications;
+        }
+        
+        // Пробуем получить из кэша
+        const cached = localStorage.getItem('notifications_cache_' + phone);
+        if (cached) {
+            try {
+                const cacheData = JSON.parse(cached);
+                const age = Date.now() - cacheData.timestamp;
+                if (age < 2 * 60 * 60 * 1000) { // 2 часа
+                    console.log('Использую кэшированные уведомления');
+                    return cacheData.data || [];
+                }
+            } catch (e) {
+                console.log('Ошибка парсинга кэша уведомлений:', e);
+            }
+        }
+        
+        return [];
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка получения уведомлений', error);
+        
+        // Пробуем получить из кэша при ошибке
+        const cached = localStorage.getItem('notifications_cache_' + phone);
+        if (cached) {
+            try {
+                const cacheData = JSON.parse(cached);
+                console.log('Использую кэш уведомлений при ошибке');
+                return cacheData.data || [];
+            } catch (e) {
+                console.log('Ошибка парсинга кэша при ошибке:', e);
+            }
+        }
+        
+        return [];
+    }
+}
+
+// ==================== ПОЛУЧЕНИЕ ОБНОВЛЕНИЙ СТАТУСА ====================
+async function getDriverStatusUpdates(phone) {
+    try {
+        if (!phone) {
+            console.log('Нет телефона для получения обновлений статуса');
+            return [];
+        }
+        
+        const lastUpdate = localStorage.getItem('last_status_update_' + phone);
+        
+        const response = await sendAPIRequest({
+            action: 'get_status_updates',
+            phone: phone,
+            timestamp: lastUpdate || null
+        });
+        
+        console.log('Ответ обновлений статуса:', response);
+        
+        if (response && response.success && response.updates) {
+            // Сохраняем время последнего обновления
+            if (response.updates.length > 0) {
+                const latestUpdate = response.updates[0];
+                localStorage.setItem('last_status_update_' + phone, 
+                    latestUpdate.rowNumber || latestUpdate.timestamp || Date.now().toString());
+            }
+            
+            // Сохраняем в кэш
+            try {
+                localStorage.setItem('status_updates_cache_' + phone, 
+                    JSON.stringify({
+                        data: response.updates,
+                        timestamp: Date.now()
+                    })
+                );
+            } catch (cacheError) {
+                console.log('Не удалось сохранить обновления статуса в кэш:', cacheError);
+            }
+            
+            return response.updates;
+        }
+        
+        // Пробуем получить из кэша
+        const cached = localStorage.getItem('status_updates_cache_' + phone);
+        if (cached) {
+            try {
+                const cacheData = JSON.parse(cached);
+                const age = Date.now() - cacheData.timestamp;
+                if (age < 30 * 60 * 1000) { // 30 минут
+                    console.log('Использую кэшированные обновления статуса');
+                    return cacheData.data || [];
+                }
+            } catch (e) {
+                console.log('Ошибка парсинга кэша статусов:', e);
+            }
+        }
+        
+        return [];
+        
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка получения обновлений статуса', error);
+        
+        // Пробуем получить из кэша при ошибке
+        const cached = localStorage.getItem('status_updates_cache_' + phone);
+        if (cached) {
+            try {
+                const cacheData = JSON.parse(cached);
+                console.log('Использую кэш статусов при ошибке');
+                return cacheData.data || [];
+            } catch (e) {
+                console.log('Ошибка парсинга кэша при ошибке:', e);
+            }
+        }
+        
+        return [];
+    }
 }
 
 function showSimpleDriverCabinet(driverPhone, driverName) {
@@ -2104,149 +2373,6 @@ function closeDriverCabinet() {
     }
 }
 
-function closeModal() {
-    const modal = document.querySelector('.modal-overlay');
-    if (modal) {
-        modal.remove();
-    }
-}
-
-
-
-async function getDriverHistory(phone) {
-    try {
-        if (!phone) {
-            console.log('Нет телефона для получения истории');
-            return [];
-        }
-        
-        const response = await sendAPIRequest({
-            action: 'get_driver_history',
-            phone: phone
-        });
-        
-        console.log('Ответ истории:', response);
-        
-        if (response && response.success && response.registrations) {
-            return response.registrations;
-        }
-        
-        return [];
-        
-    } catch (error) {
-        logToConsole('ERROR', 'Ошибка получения истории', error);
-        return [];
-    }
-}
-
-async function getPWANotifications(phone) {
-    try {
-        if (!phone) {
-            console.log('Нет телефона для получения уведомлений');
-            return [];
-        }
-        
-        const lastUpdate = localStorage.getItem('last_notification_update_' + phone);
-        
-        const response = await sendAPIRequest({
-            action: 'get_pwa_notifications',  // ИЗМЕНИТЬ СЮДА
-            phone: phone,
-            lastUpdate: lastUpdate || null
-        });
-        
-        console.log('Ответ уведомлений:', response);
-        
-        if (response && response.success && response.notifications) {
-            // Сохраняем время последнего обновления
-            if (response.notifications.length > 0) {
-                localStorage.setItem('last_notification_update_' + phone, response.notifications[0].timestamp);
-            }
-            
-            // Показываем новые уведомления
-            response.notifications.forEach(notification => {
-                showPushNotification(notification);
-            });
-            
-            return response.notifications;
-        }
-        
-        return [];
-        
-    } catch (error) {
-        logToConsole('ERROR', 'Ошибка получения уведомлений', error);
-        return [];
-    }
-}
-
-async function getDriverStatusUpdates(phone) {
-    try {
-        if (!phone) {
-            console.log('Нет телефона для получения обновлений статуса');
-            return [];
-        }
-        
-        const lastUpdate = localStorage.getItem('last_status_update_' + phone);
-        
-        const response = await sendAPIRequest({
-            action: 'get_status_updates',
-            phone: phone,
-            timestamp: lastUpdate || null
-        });
-        
-        console.log('Ответ обновлений статуса:', response);
-        
-        if (response && response.success && response.updates) {
-            // Сохраняем время последнего обновления
-            if (response.updates.length > 0) {
-                localStorage.setItem('last_status_update_' + phone, response.updates[0].rowNumber);
-            }
-            
-            return response.updates;
-        }
-        
-        return [];
-        
-    } catch (error) {
-        logToConsole('ERROR', 'Ошибка получения обновлений статуса', error);
-        return [];
-    }
-}
-
-function saveDriverRegistrationData() {
-    try {
-        if (registrationState.data && registrationState.data.phone) {
-            const dataToSave = {
-                phone: registrationState.data.phone,
-                fio: registrationState.data.fio,
-                supplier: registrationState.data.supplier,
-                legalEntity: registrationState.data.legalEntity,
-                vehicleNumber: registrationState.data.vehicleNumber,
-                timestamp: Date.now(),
-                date: new Date().toLocaleString('ru-RU')
-            };
-            
-            // Сохраняем в localStorage
-            localStorage.setItem('driver_last_registration', JSON.stringify(dataToSave));
-            
-            // Также сохраняем в историю
-            const history = JSON.parse(localStorage.getItem('driver_registration_history') || '[]');
-            history.unshift(dataToSave);
-            
-            // Ограничиваем историю последними 20 записями
-            if (history.length > 20) {
-                history.pop();
-            }
-            
-            localStorage.setItem('driver_registration_history', JSON.stringify(history));
-            
-            console.log('Данные регистрации сохранены:', dataToSave);
-        }
-    } catch (error) {
-        console.error('Ошибка сохранения данных регистрации:', error);
-    }
-}
-
-
 function showDriverCabinet(history, notifications, statusUpdates, driverPhone, driverName) {
     logToConsole('INFO', 'Показываю личный кабинет', {
         historyCount: history.length,
@@ -2268,12 +2394,13 @@ function showDriverCabinet(history, notifications, statusUpdates, driverPhone, d
                         <p><strong>👤 Водитель:</strong> ${driverName || 'Не указано'}</p>
                         <p><strong>📱 Телефон:</strong> ${formatPhoneDisplay(driverPhone)}</p>
                         <p><strong>📊 Всего регистраций:</strong> ${history.length}</p>
+                        <p><strong>🔔 Непрочитанных уведомлений:</strong> ${notifications.filter(n => !n.status || n.status !== 'read').length}</p>
                     </div>
                     
                     <div class="tabs" style="margin-bottom: 20px;">
                         <button class="tab-btn active" onclick="switchTab('history')">📋 История (${history.length})</button>
-                        <button class="tab-btn" onclick="switchTab('notifications')">🔔 Уведомления (${notifications.length})</button>
-                        <button class="tab-btn" onclick="switchTab('status')">📊 Текущий статус</button>
+                        <button class="tab-btn" onclick="switchTab('notifications')">🔔 Уведомления (${notifications.filter(n => !n.status || n.status !== 'read').length})</button>
+                        <button class="tab-btn" onclick="switchTab('status')">📊 Текущий статус (${statusUpdates.length > 0 ? 'Есть обновления' : 'Нет'})</button>
                     </div>
                     
                     <div id="history-tab" class="tab-content active">
@@ -2349,13 +2476,15 @@ function renderHistoryTab(history) {
 }
 
 function renderNotificationsTab(notifications) {
-    if (notifications.length === 0) {
+    const unreadNotifications = notifications.filter(n => !n.status || n.status !== 'read');
+    
+    if (unreadNotifications.length === 0) {
         return '<div class="empty-state">📭 Нет новых уведомлений</div>';
     }
     
     let html = '<div style="max-height: 400px; overflow-y: auto;">';
     
-    notifications.forEach((notification, index) => {
+    unreadNotifications.forEach((notification, index) => {
         const icon = getNotificationIcon(notification.type);
         
         html += `
@@ -2500,6 +2629,12 @@ function formatNotificationTime(timestamp) {
     if (!timestamp) return '';
     
     try {
+        // Проверяем формат "дд.мм.гггг чч:мм"
+        if (typeof timestamp === 'string' && timestamp.includes('.')) {
+            return timestamp;
+        }
+        
+        // Если это ISO формат
         const date = new Date(timestamp);
         return date.toLocaleString('ru-RU', {
             day: '2-digit',
@@ -2513,17 +2648,11 @@ function formatNotificationTime(timestamp) {
     }
 }
 
-function closeDriverCabinet() {
-    const modal = document.getElementById('driver-cabinet-modal');
-    if (modal) {
-        modal.remove();
-    }
-}
-
 function switchTab(tabName) {
     // Скрыть все вкладки
     document.querySelectorAll('.tab-content').forEach(tab => {
         tab.classList.remove('active');
+        tab.style.display = 'none';
     });
     
     // Убрать активный класс со всех кнопок
@@ -2535,6 +2664,7 @@ function switchTab(tabName) {
     const tabElement = document.getElementById(`${tabName}-tab`);
     if (tabElement) {
         tabElement.classList.add('active');
+        tabElement.style.display = 'block';
     }
     
     // Активировать кнопку
@@ -2561,10 +2691,18 @@ async function refreshDriverCabinet() {
         showLoader(true);
         
         try {
+            const data = modal._cabinetData;
+            if (!data || !data.driverPhone) {
+                showNotification('Ошибка обновления данных', 'error');
+                return;
+            }
+            
             // Обновляем данные
-            const history = await getDriverHistory();
-            const notifications = await getPWANotifications();
-            const statusUpdates = await getDriverStatusUpdates();
+            const [history, notifications, statusUpdates] = await Promise.all([
+                getDriverHistory(data.driverPhone),
+                getPWANotifications(data.driverPhone),
+                getDriverStatusUpdates(data.driverPhone)
+            ]);
             
             // Обновляем отображение
             document.getElementById('history-tab').innerHTML = renderHistoryTab(history);
@@ -2574,7 +2712,8 @@ async function refreshDriverCabinet() {
             // Обновляем счетчик уведомлений
             const notificationBtn = document.querySelector('.tab-btn[onclick*="notifications"]');
             if (notificationBtn) {
-                notificationBtn.innerHTML = `🔔 Уведомления (${notifications.length})`;
+                const unreadCount = notifications.filter(n => !n.status || n.status !== 'read').length;
+                notificationBtn.innerHTML = `🔔 Уведомления (${unreadCount})`;
             }
             
             showNotification('✅ Данные обновлены', 'success');
@@ -2588,235 +2727,336 @@ async function refreshDriverCabinet() {
     }
 }
 
-// ==================== PUSH УВЕДОМЛЕНИЯ ====================
+function saveDriverRegistrationData() {
+    try {
+        if (registrationState.data && registrationState.data.phone) {
+            const dataToSave = {
+                phone: registrationState.data.phone,
+                fio: registrationState.data.fio,
+                supplier: registrationState.data.supplier,
+                legalEntity: registrationState.data.legalEntity,
+                vehicleNumber: registrationState.data.vehicleNumber,
+                timestamp: Date.now(),
+                date: new Date().toLocaleString('ru-RU')
+            };
+            
+            // Сохраняем в localStorage
+            localStorage.setItem('driver_last_registration', JSON.stringify(dataToSave));
+            
+            // Также сохраняем в историю
+            const history = JSON.parse(localStorage.getItem('driver_registration_history') || '[]');
+            history.unshift(dataToSave);
+            
+            // Ограничиваем историю последними 20 записями
+            if (history.length > 20) {
+                history.pop();
+            }
+            
+            localStorage.setItem('driver_registration_history', JSON.stringify(history));
+            
+            console.log('Данные регистрации сохранены:', dataToSave);
+        }
+    } catch (error) {
+        console.error('Ошибка сохранения данных регистрации:', error);
+    }
+}
+
+// ==================== ЗАПУСК ПРОВЕРКИ УВЕДОМЛЕНИЙ ====================
+let notificationCheckInterval = null;
+
+function startNotificationChecker() {
+    console.log('Запускаю проверку уведомлений...');
+    
+    // Останавливаем предыдущий интервал если есть
+    if (notificationCheckInterval) {
+        clearInterval(notificationCheckInterval);
+    }
+    
+    // Проверяем каждые 30 секунд
+    notificationCheckInterval = setInterval(async () => {
+        await checkForNewNotifications();
+    }, 30000); // 30 секунд
+    
+    // Запускаем первую проверку сразу
+    setTimeout(() => {
+        checkForNewNotifications();
+    }, 5000); // Через 5 секунд после загрузки
+    
+    console.log('Проверка уведомлений запущена');
+}
+
+// ==================== ПРОВЕРКА НОВЫХ УВЕДОМЛЕНИЙ ====================
+async function checkForNewNotifications() {
+    try {
+        // Проверяем есть ли интернет
+        if (!navigator.onLine) {
+            // console.log('Нет интернета, пропускаю проверку уведомлений');
+            return;
+        }
+        
+        // Получаем текущий телефон
+        let driverPhone = '';
+        
+        if (registrationState && registrationState.data && registrationState.data.phone) {
+            driverPhone = registrationState.data.phone;
+        } else {
+            // Пробуем получить из localStorage
+            const lastReg = localStorage.getItem('driver_last_registration');
+            if (lastReg) {
+                try {
+                    const data = JSON.parse(lastReg);
+                    driverPhone = data.phone || '';
+                } catch (e) {
+                    console.log('Ошибка парсинга последней регистрации:', e);
+                }
+            }
+        }
+        
+        if (!driverPhone) {
+            // console.log('Нет телефона для проверки уведомлений');
+            return;
+        }
+        
+        // Проверяем когда была последняя проверка
+        const lastCheckKey = 'last_notification_check_' + driverPhone;
+        const lastCheck = localStorage.getItem(lastCheckKey);
+        const now = Date.now();
+        
+        // Не проверяем чаще чем раз в 20 секунд
+        if (lastCheck && (now - parseInt(lastCheck)) < 20000) {
+            // console.log('Слишком частая проверка, пропускаю');
+            return;
+        }
+        
+        // Обновляем время последней проверки
+        localStorage.setItem(lastCheckKey, now.toString());
+        
+        // Получаем новые уведомления
+        const notifications = await getPWANotifications(driverPhone);
+        
+        if (notifications && notifications.length > 0) {
+            console.log('Найдено новых уведомлений:', notifications.length);
+            
+            // Считаем непрочитанные
+            const unreadCount = notifications.filter(n => !n.status || n.status !== 'read').length;
+            
+            if (unreadCount > 0) {
+                // Обновляем иконку/баджик в заголовке
+                updateNotificationBadge(unreadCount);
+                
+                // Показываем всплывающее уведомление если приложение активно
+                if (document.hasFocus()) {
+                    if (unreadCount === 1) {
+                        const latest = notifications[0];
+                        showNotification(`🔔 ${latest.title}`, 'info');
+                    } else {
+                        showNotification(`🔔 ${unreadCount} новых уведомлений`, 'info');
+                    }
+                }
+            }
+        }
+        
+    } catch (error) {
+        console.error('Ошибка при проверке уведомлений:', error);
+    }
+}
+
+// ==================== ОБНОВЛЕНИЕ БЭЙДЖА УВЕДОМЛЕНИЙ ====================
+function updateNotificationBadge(count) {
+    try {
+        if (count > 0) {
+            // Обновляем заголовок страницы
+            document.title = `(${count}) УЛН. Регистрация водителей`;
+            
+            // Обновляем favicon (если есть)
+            const favicon = document.querySelector('link[rel="icon"]');
+            if (favicon) {
+                // Можно добавить красную точку на иконку
+                // Это более сложная реализация, требующая Canvas
+            }
+            
+            // Обновляем кнопку личного кабинета если она видна
+            const cabinetBtn = document.querySelector('button[onclick*="openDriverCabinet"]');
+            if (cabinetBtn) {
+                // Ищем существующий бэйдж
+                let badge = cabinetBtn.querySelector('.notification-badge');
+                if (!badge) {
+                    badge = document.createElement('span');
+                    badge.className = 'notification-badge';
+                    badge.style.cssText = `
+                        position: absolute;
+                        top: -5px;
+                        right: -5px;
+                        background: #f44336;
+                        color: white;
+                        border-radius: 50%;
+                        width: 20px;
+                        height: 20px;
+                        font-size: 12px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-weight: bold;
+                    `;
+                    cabinetBtn.style.position = 'relative';
+                    cabinetBtn.appendChild(badge);
+                }
+                badge.textContent = count > 9 ? '9+' : count.toString();
+                badge.style.display = 'block';
+            }
+        } else {
+            // Сбрасываем заголовок
+            document.title = 'УЛН. Регистрация водителей';
+            
+            // Скрываем бэйдж
+            const badge = document.querySelector('.notification-badge');
+            if (badge) {
+                badge.style.display = 'none';
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка обновления бэйджей:', error);
+    }
+}
+
+// ==================== ПОКАЗ PUSH УВЕДОМЛЕНИЙ ====================
 function showPushNotification(notification) {
-    // Проверяем разрешение на уведомления
+    // Проверяем поддержку браузерных уведомлений
     if (!("Notification" in window)) {
-        logToConsole('WARN', 'Браузер не поддерживает уведомления');
+        console.log('Браузер не поддерживает уведомления');
         return;
     }
     
+    // Проверяем разрешение
     if (Notification.permission === "granted") {
-        createNotification(notification);
+        createBrowserNotification(notification);
     } else if (Notification.permission !== "denied") {
+        // Запрашиваем разрешение при первом уведомлении
         Notification.requestPermission().then(permission => {
             if (permission === "granted") {
-                createNotification(notification);
+                createBrowserNotification(notification);
             }
         });
     }
 }
 
-function createNotification(notification) {
+// ==================== СОЗДАНИЕ БРАУЗЕРНОГО УВЕДОМЛЕНИЯ ====================
+function createBrowserNotification(notification) {
     try {
         const options = {
-            body: notification.message,
+            body: notification.message || '',
             icon: '/reg_driver_ULN/icons/icon-192x192.png',
             badge: '/reg_driver_ULN/icons/icon-72x72.png',
-            vibrate: [200, 100, 200],
             tag: notification.id || 'driver_notification',
-            renotify: true,
             requireInteraction: true,
-            data: notification.data || {}
+            data: notification.data || {},
+            silent: false
         };
         
         const n = new Notification(notification.title || 'Уведомление для водителя', options);
         
+        // Обработчик клика на уведомление
         n.onclick = function(event) {
             event.preventDefault();
             window.focus();
             
-            // Показываем личный кабинет при клике на уведомление
+            // Показываем личный кабинет
             openDriverCabinet();
             
-            // Переходим на вкладку уведомлений
-            setTimeout(() => {
-                const notificationsTab = document.querySelector('.tab-btn[onclick*="notifications"]');
-                if (notificationsTab) {
-                    notificationsTab.click();
-                }
-            }, 500);
+            // Помечаем уведомление как прочитанное
+            if (notification.id) {
+                markNotificationAsRead(notification.id);
+            }
             
             n.close();
         };
         
-        // Автоматически закрыть через 10 секунд
-        setTimeout(() => n.close(), 10000);
+        // Автоматически закрыть через 15 секунд
+        setTimeout(() => {
+            n.close();
+        }, 15000);
         
-        logToConsole('INFO', 'Push уведомление показано', notification);
+        console.log('Push уведомление показано:', notification.title);
         
     } catch (error) {
-        logToConsole('ERROR', 'Ошибка создания push уведомления', error);
+        console.error('Ошибка создания push уведомления:', error);
     }
 }
 
-// ==================== ПЕРИОДИЧЕСКАЯ ПРОВЕРКА ОБНОВЛЕНИЙ ====================
-let notificationCheckInterval = null;
-
-function startNotificationChecking() {
-    // Проверяем каждые 30 секунд если пользователь онлайн
-    notificationCheckInterval = setInterval(async () => {
-        if (navigator.onLine && registrationState.data.phone) {
+// ==================== ПОМЕТКА УВЕДОМЛЕНИЯ КАК ПРОЧИТАННОГО ====================
+async function markNotificationAsRead(notificationId) {
+    try {
+        // Здесь можно отправить запрос на сервер для пометки как прочитанного
+        // Пока просто обновим локальный кэш
+        
+        // Получаем текущий телефон
+        let driverPhone = '';
+        if (registrationState && registrationState.data && registrationState.data.phone) {
+            driverPhone = registrationState.data.phone;
+        }
+        
+        if (!driverPhone) return;
+        
+        // Обновляем кэш уведомлений
+        const cacheKey = 'notifications_cache_' + driverPhone;
+        const cached = localStorage.getItem(cacheKey);
+        
+        if (cached) {
             try {
-                const notifications = await getPWANotifications();
-                const statusUpdates = await getDriverStatusUpdates();
-                
-                // Если есть новые уведомления, показываем их
-                if (notifications.length > 0) {
-                    logToConsole('INFO', 'Получены новые уведомления', { count: notifications.length });
+                const cacheData = JSON.parse(cached);
+                if (cacheData.data && Array.isArray(cacheData.data)) {
+                    // Помечаем уведомление как прочитанное
+                    cacheData.data = cacheData.data.map(n => {
+                        if (n.id === notificationId) {
+                            return { ...n, status: 'read' };
+                        }
+                        return n;
+                    });
                     
-                    // Показываем встроенное уведомление
-                    if (notifications.length === 1) {
-                        showNotification(`🔔 ${notifications[0].title}`, 'info');
-                    } else {
-                        showNotification(`🔔 ${notifications.length} новых уведомлений`, 'info');
-                    }
-                    
-                    // Обновляем иконку вкладки
-                    updateTabNotificationBadge(notifications.length);
+                    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
                 }
-                
-            } catch (error) {
-                logToConsole('ERROR', 'Ошибка проверки уведомлений', error);
+            } catch (e) {
+                console.log('Ошибка обновления кэша уведомлений:', e);
             }
         }
-    }, 30000); // 30 секунд
-}
-
-function stopNotificationChecking() {
-    if (notificationCheckInterval) {
-        clearInterval(notificationCheckInterval);
-        notificationCheckInterval = null;
+        
+    } catch (error) {
+        console.error('Ошибка пометки уведомления как прочитанного:', error);
     }
 }
 
-function updateTabNotificationBadge(count) {
-    // Обновляем favicon или title
-    if (count > 0) {
-        document.title = `(${count}) УЛН. Регистрация водителей`;
-    } else {
-        document.title = 'УЛН. Регистрация водителей';
-    }
-}
-
-// ==================== ИНИЦИАЛИЗАЦИЯ PUSH УВЕДОМЛЕНИЙ ====================
-function initializePushNotifications() {
-    // Запрашиваем разрешение при загрузке приложения
+// ==================== ИНИЦИАЛИЗАЦИЯ СИСТЕМЫ УВЕДОМЛЕНИЙ ====================
+function initializeNotificationSystem() {
+    console.log('Инициализация системы уведомлений...');
+    
+    // Проверяем разрешение на уведомления при загрузке
     if ("Notification" in window && Notification.permission === "default") {
         // Можно показать кнопку для запроса разрешения
-        logToConsole('INFO', 'Push уведомления доступны, разрешение не запрошено');
+        console.log('Push уведомления доступны, разрешение не запрошено');
     }
     
-    // Начинаем проверку обновлений
-    startNotificationChecking();
+    // Запускаем проверку уведомлений
+    startNotificationChecker();
+    
+    // Обработчик когда приложение становится активным
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            // Приложение стало активным - проверяем уведомления
+            setTimeout(() => {
+                checkForNewNotifications();
+            }, 1000);
+        }
+    });
+    
+    // Проверяем при фокусе на окне
+    window.addEventListener('focus', function() {
+        setTimeout(() => {
+            checkForNewNotifications();
+        }, 500);
+    });
 }
 
-// ==================== ФУНКЦИЯ ДЛЯ ЗАПРОСА ИСТОРИИ В GAS ====================
-function handleGetDriverHistory(phone) {
-    try {
-        const spreadsheet = SpreadsheetApp.openById(SHEET_ID);
-        const sheet = spreadsheet.getSheetByName(SHEET_NAME);
-        
-        if (!sheet || sheet.getLastRow() <= 1) {
-            return {
-                success: true,
-                registrations: []
-            };
-        }
-        
-        const cleanPhone = normalizePhone(phone);
-        const lastRow = sheet.getLastRow();
-        
-        // Получаем все записи с этим телефоном
-        const dataRange = sheet.getRange(2, 1, lastRow - 1, 19);
-        const data = dataRange.getValues();
-        
-        const registrations = [];
-        
-        for (let i = 0; i < data.length; i++) {
-            const rowData = data[i];
-            const rowPhone = rowData[2] ? rowData[2].toString() : '';
-            
-            if (normalizePhone(rowPhone) === cleanPhone) {
-                registrations.push({
-                    rowNumber: i + 2,
-                    date: rowData[0] || '',
-                    time: rowData[1] || '',
-                    phone: rowData[2] || '',
-                    fio: rowData[3] || '',
-                    supplier: rowData[4] || '',
-                    legalEntity: rowData[5] || '',
-                    productType: rowData[6] || '',
-                    vehicleType: rowData[7] || '',
-                    vehicleNumber: rowData[8] || '',
-                    pallets: rowData[9] || 0,
-                    orderNumber: rowData[10] || '',
-                    etrn: rowData[11] || '',
-                    transit: rowData[12] || '',
-                    defaultGate: rowData[13] || '',
-                    assignedGate: rowData[14] || '',
-                    status: rowData[15] || 'Зарегистрирован',
-                    problemType: rowData[16] || '',
-                    chatId: rowData[17] || '',
-                    scheduleViolation: rowData[18] || 'Нет'
-                });
-            }
-        }
-        
-        // Сортируем по дате (новые сначала)
-        registrations.sort((a, b) => {
-            const dateA = parseDate(a.date, a.time);
-            const dateB = parseDate(b.date, b.time);
-            return dateB - dateA;
-        });
-        
-        return {
-            success: true,
-            registrations: registrations,
-            count: registrations.length,
-            driverPhone: cleanPhone,
-            driverName: registrations.length > 0 ? registrations[0].fio : ''
-        };
-        
-    } catch (error) {
-        Logger.log('Ошибка получения истории водителя:', error.toString());
-        return {
-            success: false,
-            error: error.toString(),
-            registrations: []
-        };
-    }
-}
-
-function parseDate(dateStr, timeStr) {
-    try {
-        if (!dateStr) return new Date(0);
-        
-        // Формат dd.MM.yyyy
-        const parts = dateStr.split('.');
-        if (parts.length !== 3) return new Date(0);
-        
-        const day = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1;
-        const year = parseInt(parts[2], 10);
-        
-        let hours = 0, minutes = 0, seconds = 0;
-        
-        if (timeStr) {
-            const timeParts = timeStr.split(':');
-            if (timeParts.length >= 2) {
-                hours = parseInt(timeParts[0], 10);
-                minutes = parseInt(timeParts[1], 10);
-                seconds = timeParts.length >= 3 ? parseInt(timeParts[2], 10) : 0;
-            }
-        }
-        
-        return new Date(year, month, day, hours, minutes, seconds);
-        
-    } catch (e) {
-        return new Date(0);
-    }
-                    }
+// ==================== ОЧИСТКА СТАРЫХ ОФФЛАЙН ЗАПИСЕЙ ====================
 
 function cleanupOldOfflineRecords() {
     try {
@@ -2941,7 +3181,7 @@ function showLogsModal() {
                     <div class="modal-body">
                         <div style="margin-bottom: 20px;">
                             <button class="btn btn-secondary" onclick="exportLogs()">Экспорт логов</button>
-                            <button class="btn btn-danger" onclick="clearLogs()">Очистить логи</button>
+                                                        <button class="btn btn-danger" onclick="clearLogs()">Очистить логи</button>
                         </div>
                         <div style="max-height: 400px; overflow-y: auto;">
         `;
@@ -3464,24 +3704,9 @@ window.openDriverCabinet = openDriverCabinet;
 window.closeDriverCabinet = closeDriverCabinet;
 window.switchTab = switchTab;
 window.refreshDriverCabinet = refreshDriverCabinet;
-window.openDriverCabinet = openDriverCabinet;
-window.closeDriverCabinet = closeDriverCabinet;
 window.switchCabinetTab = switchCabinetTab;
 window.refreshCabinet = refreshCabinet;
-window.closeModal = closeModal;
 window.enterCabinetWithPhone = enterCabinetWithPhone;
-logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными)');
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
+                            
