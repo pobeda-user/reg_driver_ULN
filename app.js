@@ -3536,6 +3536,20 @@ function getStatusBadge(status) {
     };
 }
 
+/ Вспомогательная функция для иконок статусов
+function getStatusIcon(status) {
+    const iconMap = {
+        'Зарегистрирован': '📝',
+        'Назначены ворота': '✅',
+        'Документы готовы к выдаче': '📄',
+        'Отказ в приемке': '❌',
+        'Нет в графике': '⏰',
+        'Проблема с товаром': '⚠️',
+        'Проблема с документами': '⚠️'
+    };
+    return iconMap[status] || '📋';
+}
+
 function getNotificationIcon(type) {
     const iconMap = {
         'gate_assigned': '🚪',
@@ -3549,6 +3563,22 @@ function getNotificationIcon(type) {
     };
     
     return iconMap[type] || '🔔';
+}
+
+// Функция для возврата к предыдущему модальному окну
+function returnToPreviousModal() {
+    if (window.previousActiveModal) {
+        closeCurrentModal(); // Закрываем текущее окно
+        
+        // Восстанавливаем предыдущее
+        const prevModal = document.getElementById(window.previousActiveModal);
+        if (prevModal) {
+            prevModal.style.display = 'flex';
+            currentActiveModal = window.previousActiveModal;
+        }
+        
+        delete window.previousActiveModal;
+    }
 }
 
 function getNotificationColor(type) {
@@ -4947,5 +4977,6 @@ window.getStatusIcon = getStatusIcon;
 window.fallbackCopyTextToClipboard = fallbackCopyTextToClipboard;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
+
 
 
