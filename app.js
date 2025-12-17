@@ -3536,7 +3536,7 @@ function getStatusBadge(status) {
     };
 }
 
-/ Вспомогательная функция для иконок статусов
+/// Вспомогательная функция для иконок статусов
 function getStatusIcon(status) {
     const iconMap = {
         'Зарегистрирован': '📝',
@@ -4976,6 +4976,7 @@ window.getStatusIcon = getStatusIcon;
 window.fallbackCopyTextToClipboard = fallbackCopyTextToClipboard;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
+
 
 
 
