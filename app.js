@@ -36,12 +36,17 @@ let registrationState = {
 function openDriverCabinetFromStep1() {
     try {
         const phoneInput = document.getElementById('phone-input');
-        const phone = phoneInput.value.replace(/\s/g, '');
+        let phone = phoneInput.value.replace(/\s/g, '');
         
+        // Если поле пустое, пробуем получить телефон из registrationState
         if (!phone || phone.length < 10) {
-            showNotification('Пожалуйста, введите номер телефона для доступа к личному кабинету', 'error');
-            phoneInput.focus();
-            return;
+            if (registrationState && registrationState.data && registrationState.data.phone) {
+                phone = registrationState.data.phone;
+            } else {
+                showNotification('Пожалуйста, введите номер телефона для доступа к личному кабинету', 'error');
+                phoneInput.focus();
+                return;
+            }
         }
         
         const normalizedPhone = normalizePhone(phone);
@@ -49,6 +54,7 @@ function openDriverCabinetFromStep1() {
         // Сохраняем телефон в registrationState
         if (registrationState && registrationState.data) {
             registrationState.data.phone = normalizedPhone;
+            registrationState.data.fio = registrationState.data.fio || ''; // Сохраняем ФИО если есть
         } else {
             registrationState = {
                 step: 1,
@@ -71,6 +77,9 @@ function openDriverCabinetFromStep1() {
                 }
             };
         }
+        
+        // Сохраняем состояние
+        saveRegistrationState();
         
         // Открываем личный кабинет
         openDriverCabinet();
@@ -2022,47 +2031,54 @@ async function openDriverCabinet() {
 function showDriverCabinetModal(history, notifications, driverPhone, driverName) {
     const formattedPhone = formatPhoneDisplay(driverPhone);
     
+    // Подсчитываем уведомления
+    const unreadNotifications = notifications.filter(n => !n.status || n.status !== 'read').length;
+    
     const modalHtml = `
         <div class="modal-overlay" onclick="closeModal()">
-            <div class="modal" onclick="event.stopPropagation()" style="max-width: 700px;">
+            <div class="modal" onclick="event.stopPropagation()" style="max-width: 800px; max-height: 90vh;">
                 <div class="modal-header">
-                    <h3 class="modal-title">👤 Личный кабинет</h3>
+                    <h3 class="modal-title">👤 Личный кабинет водителя</h3>
                     <button class="modal-close" onclick="closeModal()">✕</button>
                 </div>
                 <div class="modal-body">
-                    <div class="info-box">
+                    <div class="info-box" style="margin-bottom: 20px;">
                         <p><strong>👤 Водитель:</strong> ${driverName || 'Не указано'}</p>
                         <p><strong>📱 Телефон:</strong> ${formattedPhone}</p>
                         <p><strong>📊 Всего регистраций:</strong> ${history.length}</p>
-                        <p><strong>🔔 Уведомлений:</strong> ${notifications.length}</p>
+                        <p><strong>🔔 Непрочитанных уведомлений:</strong> ${unreadNotifications}</p>
                     </div>
                     
-                    ${history.length > 0 ? `
-                        <h4>История регистраций:</h4>
-                        <div style="max-height: 300px; overflow-y: auto; margin-bottom: 20px;">
-                            ${history.map((item, index) => `
-                                <div class="modal-card">
-                                    <div class="modal-card-header">
-                                        <div class="modal-card-title">Регистрация ${index + 1}</div>
-                                        <div class="modal-date-badge">${item.displayDate || item.date || ''}</div>
-                                    </div>
-                                    <div class="modal-card-content">
-                                        <p><strong>Поставщик:</strong> ${item.supplier || ''}</p>
-                                        <p><strong>Статус:</strong> ${item.status || 'Зарегистрирован'}</p>
-                                        <p><strong>Ворота:</strong> ${item.assignedGate || item.defaultGate || 'Не назначены'}</p>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    ` : `
-                        <div class="empty-state" style="padding: 20px; text-align: center; color: #999;">
-                            <p>История регистраций отсутствует</p>
-                        </div>
-                    `}
+                    <div class="tabs" style="margin-bottom: 20px; display: flex; gap: 5px; border-bottom: 1px solid #e0e0e0;">
+                        <button class="tab-btn active" onclick="switchCabinetTab('history')" 
+                                style="padding: 10px 15px; border: none; background: none; cursor: pointer; border-bottom: 3px solid #4285f4; color: #4285f4;">
+                            📋 История регистраций (${history.length})
+                        </button>
+                        <button class="tab-btn" onclick="switchCabinetTab('notifications')"
+                                style="padding: 10px 15px; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; color: #666;">
+                            🔔 Уведомления (${unreadNotifications})
+                        </button>
+                        <button class="tab-btn" onclick="switchCabinetTab('status')"
+                                style="padding: 10px 15px; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; color: #666;">
+                            📊 Текущий статус
+                        </button>
+                    </div>
+                    
+                    <div id="cabinet-history-tab" class="cabinet-tab-content" style="display: block;">
+                        ${renderHistoryTab(history)}
+                    </div>
+                    
+                    <div id="cabinet-notifications-tab" class="cabinet-tab-content" style="display: none;">
+                        ${renderNotificationsTab(notifications)}
+                    </div>
+                    
+                    <div id="cabinet-status-tab" class="cabinet-tab-content" style="display: none;">
+                        ${renderStatusTab(history)}
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" onclick="closeModal()">Закрыть</button>
-                    <button class="btn btn-primary" onclick="refreshCabinet('${driverPhone}')">Обновить</button>
+                    <button class="btn btn-primary" onclick="refreshCabinet('${driverPhone}')">🔄 Обновить</button>
                 </div>
             </div>
         </div>
@@ -2077,6 +2093,8 @@ function showDriverCabinetModal(history, notifications, driverPhone, driverName)
     modalContainer.id = 'driver-cabinet-modal';
     document.body.appendChild(modalContainer);
 }
+
+
 
 function refreshCabinet(phone) {
     showNotification('Обновление информации...', 'info');
@@ -2314,56 +2332,6 @@ async function getPWANotifications(phone) {
         return [];
     }
 }
-
-// ==================== ФУНКЦИЯ ДЛЯ ОТКРЫТИЯ ЛИЧНОГО КАБИНЕТА ИЗ ШАГА 1 ====================
-function openDriverCabinetFromStep1() {
-    try {
-        const phoneInput = document.getElementById('phone-input');
-        const phone = phoneInput.value.replace(/\s/g, '');
-        
-        if (!phone || phone.length < 10) {
-            showNotification('Пожалуйста, введите номер телефона для доступа к личному кабинету', 'error');
-            phoneInput.focus();
-            return;
-        }
-        
-        const normalizedPhone = normalizePhone(phone);
-        
-        // Сохраняем телефон в registrationState
-        if (registrationState && registrationState.data) {
-            registrationState.data.phone = normalizedPhone;
-        } else {
-            registrationState = {
-                step: 1,
-                data: {
-                    phone: normalizedPhone,
-                    fio: '',
-                    supplier: '',
-                    legalEntity: '',
-                    productType: '',
-                    vehicleType: '',
-                    vehicleNumber: '',
-                    pallets: 0,
-                    orderNumber: '',
-                    etrn: '',
-                    transit: '',
-                    gate: '',
-                    date: '',
-                    time: '',
-                    scheduleViolation: 'Нет'
-                }
-            };
-        }
-        
-        // Открываем личный кабинет
-        openDriverCabinet();
-        
-    } catch (error) {
-        console.error('Ошибка открытия личного кабинета:', error);
-        showNotification('Ошибка открытия личного кабинета: ' + error.message, 'error');
-    }
-}
-
 // ==================== ПОЛУЧЕНИЕ ОБНОВЛЕНИЙ СТАТУСА ====================
 async function getDriverStatusUpdates(phone) {
     try {
@@ -2538,6 +2506,7 @@ function showSimpleDriverCabinet(driverPhone, driverName) {
     document.body.appendChild(modalContainer);
 }
 
+// Функция переключения вкладок
 function switchCabinetTab(tabName) {
     // Скрыть все вкладки
     document.querySelectorAll('.cabinet-tab-content').forEach(tab => {
@@ -2568,9 +2537,9 @@ function switchCabinetTab(tabName) {
 
 function getCabinetTabName(tabName) {
     const map = {
-        'info': 'Основная информация',
         'history': 'История регистраций',
-        'notifications': 'Уведомления'
+        'notifications': 'Уведомления',
+        'status': 'Текущий статус'
     };
     return map[tabName] || tabName;
 }
@@ -2662,127 +2631,197 @@ function showDriverCabinet(history, notifications, statusUpdates, driverPhone, d
     };
 }
 
+// Функция для рендеринга вкладки истории
 function renderHistoryTab(history) {
     if (history.length === 0) {
-        return '<div class="empty-state">📭 История регистраций отсутствует</div>';
+        return `
+            <div class="empty-state" style="padding: 40px 20px; text-align: center; color: #999;">
+                <div style="font-size: 40px; margin-bottom: 15px;">📭</div>
+                <p>История регистраций отсутствует</p>
+                <p style="font-size: 14px; margin-top: 10px;">Вы еще не проходили регистрацию через это приложение</p>
+            </div>
+        `;
     }
     
-    let html = '<div style="max-height: 400px; overflow-y: auto;">';
+    let html = `<div style="max-height: 400px; overflow-y: auto;">`;
     
     history.forEach((item, index) => {
+        const statusBadge = getStatusBadge(item.status);
+        const formattedDate = formatNotificationTime(item.displayDate || item.date || '');
+        
         html += `
-            <div class="card" style="margin-bottom: 10px;">
-                <div class="card-header">
-                    <div class="card-title">Регистрация #${index + 1}</div>
-                    <div class="badge ${getStatusBadgeClass(item.status)}">${item.status || 'Зарегистрирован'}</div>
+            <div class="card" style="margin-bottom: 10px; border-left: 4px solid ${statusBadge.color};">
+                <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                    <div class="card-title" style="font-weight: 600; font-size: 14px;">
+                        Регистрация #${index + 1}
+                    </div>
+                    <div class="badge" style="background: ${statusBadge.bgColor}; color: ${statusBadge.color}; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600;">
+                        ${statusBadge.text}
+                    </div>
                 </div>
-                <div class="card-body">
-                    <p><strong>Дата:</strong> ${item.date || ''} ${item.time || ''}</p>
-                    <p><strong>Поставщик:</strong> ${item.supplier || ''}</p>
-                    <p><strong>Юрлицо:</strong> ${item.legalEntity || ''}</p>
-                    <p><strong>Тип товара:</strong> ${item.productType || ''}</p>
-                    <p><strong>Ворота:</strong> ${item.defaultGate || 'Не назначены'}</p>
-                    ${item.assignedGate ? `<p><strong>Назначенные ворота:</strong> ${item.assignedGate}</p>` : ''}
-                    ${item.problemType ? `<p><strong>Проблема:</strong> <span style="color: #f44336;">${item.problemType}</span></p>` : ''}
+                <div class="card-body" style="font-size: 13px;">
+                    <p style="margin: 5px 0; color: #666; font-size: 12px;">
+                        <strong>📅 Дата:</strong> ${formattedDate}
+                    </p>
+                    <p style="margin: 5px 0;">
+                        <strong>🏢 Поставщик:</strong> ${item.supplier || 'Не указан'}
+                    </p>
+                    <p style="margin: 5px 0;">
+                        <strong>📦 Тип товара:</strong> ${item.productType || 'Не указан'}
+                    </p>
+                    <p style="margin: 5px 0;">
+                        <strong>🏛️ Юрлицо:</strong> ${item.legalEntity || 'Не указано'}
+                    </p>
+                    <p style="margin: 5px 0;">
+                        <strong>🚪 Ворота:</strong> ${item.assignedGate || item.defaultGate || 'Не назначены'}
+                    </p>
+                    ${item.problemType ? `
+                        <p style="margin: 5px 0; color: #f44336;">
+                            <strong>⚠️ Проблема:</strong> ${item.problemType}
+                        </p>
+                    ` : ''}
+                    ${item.vehicleNumber ? `
+                        <p style="margin: 5px 0; color: #666;">
+                            <strong>🚗 Номер ТС:</strong> ${item.vehicleNumber}
+                        </p>
+                    ` : ''}
                 </div>
             </div>
         `;
     });
     
-    html += '</div>';
+    html += `</div>`;
     return html;
 }
 
+
+// Функция для рендеринга вкладки уведомлений
 function renderNotificationsTab(notifications) {
     const unreadNotifications = notifications.filter(n => !n.status || n.status !== 'read');
     
     if (unreadNotifications.length === 0) {
-        return '<div class="empty-state">📭 Нет новых уведомлений</div>';
+        return `
+            <div class="empty-state" style="padding: 40px 20px; text-align: center; color: #999;">
+                <div style="font-size: 40px; margin-bottom: 15px;">🔕</div>
+                <p>Нет новых уведомлений</p>
+                <p style="font-size: 14px; margin-top: 10px;">Уведомления появятся здесь при изменении статуса</p>
+            </div>
+        `;
     }
     
-    let html = '<div style="max-height: 400px; overflow-y: auto;">';
+    let html = `<div style="max-height: 400px; overflow-y: auto;">`;
     
     unreadNotifications.forEach((notification, index) => {
         const icon = getNotificationIcon(notification.type);
+        const color = getNotificationColor(notification.type);
+        const formattedDate = formatNotificationTime(notification.timestamp || notification.formattedTimestamp || '');
         
         html += `
             <div class="notification-item" style="
-                background: ${getNotificationColor(notification.type)};
-                border-left: 4px solid ${getNotificationBorderColor(notification.type)};
+                background: ${color.background};
+                border-left: 4px solid ${color.border};
                 padding: 12px 15px;
                 margin-bottom: 10px;
                 border-radius: 8px;
                 color: #333;
             ">
-                <div style="display: flex; align-items: center; margin-bottom: 5px;">
-                    <div style="font-size: 20px; margin-right: 10px;">${icon}</div>
-                    <div style="font-weight: 600; flex: 1;">${notification.title || 'Уведомление'}</div>
-                    <div style="font-size: 11px; color: #666;">${formatNotificationTime(notification.timestamp)}</div>
+                <div style="display: flex; align-items: flex-start; margin-bottom: 8px;">
+                    <div style="font-size: 20px; margin-right: 10px; margin-top: 2px;">${icon}</div>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600; margin-bottom: 5px; font-size: 15px;">
+                            ${notification.title || 'Уведомление'}
+                        </div>
+                        <div style="font-size: 13px; color: #666; display: flex; align-items: center; gap: 8px;">
+                            <span>${formattedDate}</span>
+                            ${notification.type ? `<span style="background: ${color.border + '20'}; padding: 2px 8px; border-radius: 10px; font-size: 11px;">${notification.type}</span>` : ''}
+                        </div>
+                    </div>
                 </div>
-                <div style="font-size: 14px; line-height: 1.4;">${notification.message || ''}</div>
-                ${notification.data ? `<div style="font-size: 12px; color: #666; margin-top: 5px;">${JSON.stringify(notification.data)}</div>` : ''}
+                <div style="font-size: 14px; line-height: 1.4; margin-top: 8px;">
+                    ${notification.message || ''}
+                </div>
+                ${notification.data && notification.data.gate ? `
+                    <div style="margin-top: 10px; padding: 8px; background: rgba(66, 133, 244, 0.1); border-radius: 6px; font-size: 13px;">
+                        <strong>🚪 Ворота:</strong> ${notification.data.gate}
+                    </div>
+                ` : ''}
             </div>
         `;
     });
     
-    html += '</div>';
+    html += `</div>`;
     return html;
 }
 
-function renderStatusTab(statusUpdates) {
-    if (statusUpdates.length === 0) {
-        return '<div class="empty-state">📭 Нет информации о текущем статусе</div>';
+// Функция для рендеринга вкладки статуса
+function renderStatusTab(history) {
+    if (history.length === 0) {
+        return `
+            <div class="empty-state" style="padding: 40px 20px; text-align: center; color: #999;">
+                <div style="font-size: 40px; margin-bottom: 15px;">📭</div>
+                <p>Нет данных о текущем статусе</p>
+                <p style="font-size: 14px; margin-top: 10px;">Пройдите регистрацию для получения статуса</p>
+            </div>
+        `;
     }
     
-    const latestUpdate = statusUpdates[0];
+    // Берем последнюю регистрацию
+    const latestRegistration = history[0];
+    const statusBadge = getStatusBadge(latestRegistration.status);
+    const formattedDate = formatNotificationTime(latestRegistration.displayDate || latestRegistration.date || '');
     
-    let html = `
+    return `
         <div class="status-overview" style="margin-bottom: 20px;">
-            <div class="info-box ${getStatusBoxClass(latestUpdate.newStatus)}">
-                <p><strong>Текущий статус:</strong> <span style="font-size: 18px;">${latestUpdate.newStatus || 'Зарегистрирован'}</span></p>
-                ${latestUpdate.assignedGate ? `<p><strong>Назначенные ворота:</strong> ${latestUpdate.assignedGate}</p>` : ''}
-                ${latestUpdate.problemType ? `<p><strong>Тип проблемы:</strong> ${latestUpdate.problemType}</p>` : ''}
-                <p><strong>Последнее обновление:</strong> ${formatNotificationTime(latestUpdate.timestamp)}</p>
+            <div class="info-box" style="background: ${statusBadge.bgColor + '20'}; border-left: 4px solid ${statusBadge.color};">
+                <div style="display: flex; align-items: center; margin-bottom: 10px;">
+                    <div class="badge" style="background: ${statusBadge.bgColor}; color: ${statusBadge.color}; padding: 5px 12px; border-radius: 15px; font-size: 12px; font-weight: 600;">
+                        ${statusBadge.text}
+                    </div>
+                    <div style="margin-left: auto; font-size: 12px; color: #666;">
+                        ${formattedDate}
+                    </div>
+                </div>
+                
+                <p style="margin: 8px 0;">
+                    <strong>🏢 Поставщик:</strong> ${latestRegistration.supplier || 'Не указан'}
+                </p>
+                <p style="margin: 8px 0;">
+                    <strong>📦 Тип товара:</strong> ${latestRegistration.productType || 'Не указан'}
+                </p>
+                <p style="margin: 8px 0;">
+                    <strong>🚪 Ворота:</strong> ${latestRegistration.assignedGate || latestRegistration.defaultGate || 'Не назначены'}
+                </p>
+                ${latestRegistration.vehicleNumber ? `
+                    <p style="margin: 8px 0;">
+                        <strong>🚗 Номер ТС:</strong> ${latestRegistration.vehicleNumber}
+                    </p>
+                ` : ''}
+                ${latestRegistration.problemType ? `
+                    <p style="margin: 8px 0; color: #f44336;">
+                        <strong>⚠️ Проблема:</strong> ${latestRegistration.problemType}
+                    </p>
+                ` : ''}
             </div>
         </div>
         
-        <h4>История изменений статуса:</h4>
-        <div style="max-height: 300px; overflow-y: auto;">
+        <h4 style="margin-bottom: 15px; font-size: 16px;">Рекомендации:</h4>
+        ${getStatusRecommendations(latestRegistration.status)}
     `;
-    
-    statusUpdates.slice(0, 10).forEach((update, index) => {
-        html += `
-            <div class="history-item" style="padding: 10px; border-bottom: 1px solid #f0f0f0;">
-                <div style="display: flex; justify-content: space-between;">
-                    <div>
-                        <strong>${update.newStatus || 'Изменение статуса'}</strong>
-                        ${update.oldStatus ? ` (с ${update.oldStatus})` : ''}
-                    </div>
-                    <div style="font-size: 11px; color: #666;">${formatNotificationTime(update.timestamp)}</div>
-                </div>
-                ${update.problemType ? `<div style="font-size: 12px; color: #f44336; margin-top: 3px;">Проблема: ${update.problemType}</div>` : ''}
-                ${update.assignedGate ? `<div style="font-size: 12px; color: #4caf50; margin-top: 3px;">Ворота: ${update.assignedGate}</div>` : ''}
-            </div>
-        `;
-    });
-    
-    html += '</div>';
-    return html;
 }
 
 // Вспомогательные функции
-function getStatusBadgeClass(status) {
+function getStatusBadge(status) {
     const statusMap = {
-        'Зарегистрирован': 'badge-info',
-        'Назначены ворота': 'badge-success',
-        'Проблема с товаром': 'badge-warning',
-        'Проблема с документами': 'badge-warning',
-        'Отказ в приемке': 'badge-danger',
-        'Нет в графике': 'badge-danger',
-        'Документы готовы к выдаче': 'badge-success'
+        'Зарегистрирован': { text: 'Зарегистрирован', color: '#2196f3', bgColor: '#2196f3' },
+        'Назначены ворота': { text: 'Назначены ворота', color: '#4caf50', bgColor: '#4caf50' },
+        'Документы готовы к выдаче': { text: 'Документы готовы', color: '#4caf50', bgColor: '#4caf50' },
+        'Отказ в приемке': { text: 'Отказ в приемке', color: '#f44336', bgColor: '#f44336' },
+        'Нет в графике': { text: 'Нет в графике', color: '#ff9800', bgColor: '#ff9800' },
+        'Проблема с товаром': { text: 'Проблема с товаром', color: '#ff9800', bgColor: '#ff9800' },
+        'Проблема с документами': { text: 'Проблема с документами', color: '#ff9800', bgColor: '#ff9800' }
     };
     
-    return statusMap[status] || 'badge-info';
+    return statusMap[status] || { text: status || 'Неизвестно', color: '#666', bgColor: '#666' };
 }
 
 function getNotificationIcon(type) {
@@ -2802,18 +2841,61 @@ function getNotificationIcon(type) {
 
 function getNotificationColor(type) {
     const colorMap = {
-        'gate_assigned': '#e8f5e9',
-        'documents_ready': '#e8f5e9',
-        'rejection': '#ffebee',
-        'rejection_detail': '#ffebee',
-        'out_of_schedule': '#fff3e0',
-        'problem_initial': '#fff3e0',
-        'problem_detail': '#fff3e0',
-        'status_change': '#e3f2fd'
+        'gate_assigned': { background: '#e8f5e9', border: '#4caf50' },
+        'documents_ready': { background: '#e8f5e9', border: '#4caf50' },
+        'rejection': { background: '#ffebee', border: '#f44336' },
+        'rejection_detail': { background: '#ffebee', border: '#f44336' },
+        'out_of_schedule': { background: '#fff3e0', border: '#ff9800' },
+        'problem_initial': { background: '#fff3e0', border: '#ff9800' },
+        'problem_detail': { background: '#fff3e0', border: '#ff9800' },
+        'status_change': { background: '#e3f2fd', border: '#2196f3' }
     };
     
-    return colorMap[type] || '#f5f5f5';
+    return colorMap[type] || { background: '#f5f5f5', border: '#666' };
 }
+
+function getStatusRecommendations(status) {
+    const recommendations = {
+        'Зарегистрирован': `
+            <div class="info-box" style="margin-bottom: 10px;">
+                <p>⏳ Ожидайте назначения ворот...</p>
+                <p>📱 Вам придет уведомление, когда ворота будут назначены</p>
+            </div>
+        `,
+        'Назначены ворота': `
+            <div class="info-box" style="margin-bottom: 10px;">
+                <p>✅ Ворота назначены!</p>
+                <p>📍 Проследуйте к указанным воротам</p>
+                <p>⏰ Если ворота заняты - ожидайте очереди</p>
+            </div>
+        `,
+        'Документы готовы к выдаче': `
+            <div class="info-box" style="margin-bottom: 10px;">
+                <p>✅ Документы готовы!</p>
+                <p>📄 Подойдите к диспетчеру для получения документов</p>
+            </div>
+        `,
+        'Отказ в приемке': `
+            <div class="warning-box" style="background: #ffebee; border: 2px solid #f44336; border-radius: 12px; padding: 15px; margin-bottom: 10px;">
+                <p>❌ Отказ в приемке!</p>
+                <p>📞 Свяжитесь с вашим поставщиком для уточнения деталей</p>
+            </div>
+        `,
+        'Нет в графике': `
+            <div class="warning-box" style="background: #fff3e0; border: 2px solid #ff9800; border-radius: 12px; padding: 15px; margin-bottom: 10px;">
+                <p>⏰ Вы приехали вне графика!</p>
+                <p>📞 Свяжитесь с вашим поставщиком для согласования</p>
+            </div>
+        `
+    };
+    
+    return recommendations[status] || `
+        <div class="info-box">
+            <p>📱 Для получения информации обратитесь к диспетчеру</p>
+        </div>
+    `;
+}
+
 
 function getNotificationBorderColor(type) {
     const colorMap = {
@@ -2847,30 +2929,78 @@ function getStatusBoxClass(status) {
 function formatNotificationTime(timestamp) {
     if (!timestamp) return '';
     
-    // Если уже в формате "дд.мм.гггг чч:мм", возвращаем как есть
-    if (typeof timestamp === 'string' && 
-        timestamp.includes('.') && 
-        timestamp.includes(':') &&
-        timestamp.includes(' ')) {
-        // Проверяем формат
-        const parts = timestamp.split(' ');
-        if (parts.length === 2) {
-            const dateParts = parts[0].split('.');
-            const timeParts = parts[1].split(':');
-            if (dateParts.length === 3 && timeParts.length >= 2) {
-                // Убираем секунды если есть
-                if (timeParts[1].includes('.')) {
-                    const minutesOnly = timeParts[1].split('.')[0];
-                    return `${dateParts[0]}.${dateParts[1]}.${dateParts[2]} ${timeParts[0]}:${minutesOnly}`;
+    try {
+        // Если уже в формате "дд.мм.гггг чч:мм", возвращаем как есть
+        if (typeof timestamp === 'string' && 
+            timestamp.includes('.') && 
+            timestamp.includes(':') &&
+            timestamp.includes(' ')) {
+            
+            const [datePart, timePart] = timestamp.split(' ');
+            const [day, month, year] = datePart.split('.');
+            const [hours, minutes] = timePart.split(':');
+            
+            // Проверяем корректность
+            if (day && month && year && hours && minutes) {
+                // Исправляем время с учетом часового пояса +3
+                let hoursInt = parseInt(hours, 10);
+                let minutesInt = parseInt(minutes, 10);
+                
+                // Добавляем 3 часа для часового пояса +3
+                hoursInt += 3;
+                
+                // Если часы превысили 23, переходим на следующий день
+                if (hoursInt >= 24) {
+                    hoursInt -= 24;
+                    // Здесь можно добавить логику перехода на следующий день
                 }
-                return timestamp;
+                
+                const formattedHours = String(hoursInt).padStart(2, '0');
+                const formattedMinutes = String(minutesInt).padStart(2, '0');
+                
+                return `${day}.${month}.${year} ${formattedHours}:${formattedMinutes}`;
             }
+            
+            return timestamp;
         }
+        
+        // Если это ISO строка или Date объект
+        let date;
+        if (typeof timestamp === 'string') {
+            // Пробуем разные форматы
+            if (timestamp.includes('T')) {
+                // ISO формат
+                date = new Date(timestamp);
+            } else if (timestamp.includes('.')) {
+                // Формат "дд.мм.гггг"
+                const [day, month, year] = timestamp.split('.');
+                date = new Date(year, month - 1, day);
+            }
+        } else if (timestamp instanceof Date) {
+            date = timestamp;
+        }
+        
+        if (!date || isNaN(date.getTime())) {
+            return timestamp;
+        }
+        
+        // Форматируем с учетом часового пояса +3
+        date.setHours(date.getHours() + 3); // Добавляем 3 часа
+        
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        
+        return `${day}.${month}.${year} ${hours}:${minutes}`;
+        
+    } catch (e) {
+        console.error('Ошибка форматирования времени:', e);
+        return timestamp;
     }
-    
-    // Если нет, пытаемся распарсить
-    return formatAnyDate(timestamp);
 }
+
 // Исправленная функция для сравнения дат
 function compareDates(dateStr1, dateStr2) {
     const date1 = parseAnyDate(dateStr1);
@@ -4041,9 +4171,14 @@ window.refreshCabinet = refreshCabinet;
 window.openDriverCabinetFromStep1 = openDriverCabinetFromStep1;
 window.openDriverCabinet = openDriverCabinet;
 window.refreshCabinet = refreshCabinet;
+window.switchCabinetTab = switchCabinetTab;
+window.renderHistoryTab = renderHistoryTab;
+window.renderNotificationsTab = renderNotificationsTab;
+window.renderStatusTab = renderStatusTab;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
                             
+
 
 
 
