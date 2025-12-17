@@ -2626,26 +2626,26 @@ function getStatusBoxClass(status) {
 }
 
 function formatNotificationTime(timestamp) {
-    if (!timestamp) return '';
-    
-    try {
-        // Проверяем формат "дд.мм.гггг чч:мм"
-        if (typeof timestamp === 'string' && timestamp.includes('.')) {
-            return timestamp;
-        }
-        
-        // Если это ISO формат
-        const date = new Date(timestamp);
-        return date.toLocaleString('ru-RU', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    } catch (e) {
-        return timestamp;
+  if (!timestamp) return '';
+  
+  try {
+    // Проверяем формат "дд.мм.гггг чч:мм"
+    if (typeof timestamp === 'string' && timestamp.includes('.')) {
+      return timestamp;
     }
+    
+    // Если это ISO формат
+    const date = new Date(timestamp);
+    return date.toLocaleString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (e) {
+    return timestamp;
+  }
 }
 
 function switchTab(tabName) {
@@ -3479,17 +3479,22 @@ function formatPhoneDisplay(phone) {
 }
 
 function formatDate(date) {
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}.${month}.${year}`;
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}.${month}.${year}`;
 }
 
 function formatTime(date) {
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    return `${hours}:${minutes}:${seconds}`;
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
+}
+
+// Добавьте новую функцию для комбинированного формата
+function formatDateTime(date) {
+  return `${formatDate(date)} ${formatTime(date)}`;
 }
 
 function checkScheduleViolation() {
@@ -3710,3 +3715,4 @@ window.enterCabinetWithPhone = enterCabinetWithPhone;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
                             
+
