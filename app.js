@@ -4953,7 +4953,6 @@ window.enterCabinetWithPhone = enterCabinetWithPhone;
 window.openDriverCabinetFromStep1 = openDriverCabinetFromStep1;
 window.formatDateUniversal = formatDateUniversal;
 window.refreshCabinet = refreshCabinet;
-window.openDriverCabinetFromStep1 = openDriverCabinetFromStep1;
 window.openDriverCabinet = openDriverCabinet;
 window.refreshCabinet = refreshCabinet;
 window.switchCabinetTab = switchCabinetTab;
@@ -4977,6 +4976,7 @@ window.getStatusIcon = getStatusIcon;
 window.fallbackCopyTextToClipboard = fallbackCopyTextToClipboard;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
+
 
 
 
