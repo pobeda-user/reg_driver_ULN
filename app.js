@@ -32,6 +32,55 @@ let registrationState = {
     }
 };
 
+// ==================== ФУНКЦИЯ ДЛЯ ОТКРЫТИЯ ЛИЧНОГО КАБИНЕТА ИЗ ШАГА 1 ====================
+function openDriverCabinetFromStep1() {
+    try {
+        const phoneInput = document.getElementById('phone-input');
+        const phone = phoneInput.value.replace(/\s/g, '');
+        
+        if (!phone || phone.length < 10) {
+            showNotification('Пожалуйста, введите номер телефона для доступа к личному кабинету', 'error');
+            phoneInput.focus();
+            return;
+        }
+        
+        const normalizedPhone = normalizePhone(phone);
+        
+        // Сохраняем телефон в registrationState
+        if (registrationState && registrationState.data) {
+            registrationState.data.phone = normalizedPhone;
+        } else {
+            registrationState = {
+                step: 1,
+                data: {
+                    phone: normalizedPhone,
+                    fio: '',
+                    supplier: '',
+                    legalEntity: '',
+                    productType: '',
+                    vehicleType: '',
+                    vehicleNumber: '',
+                    pallets: 0,
+                    orderNumber: '',
+                    etrn: '',
+                    transit: '',
+                    gate: '',
+                    date: '',
+                    time: '',
+                    scheduleViolation: 'Нет'
+                }
+            };
+        }
+        
+        // Открываем личный кабинет
+        openDriverCabinet();
+        
+    } catch (error) {
+        console.error('Ошибка открытия личного кабинета:', error);
+        showNotification('Ошибка открытия личного кабинета: ' + error.message, 'error');
+    }
+}
+
 // ==================== КЭШИРОВАНИЕ ТОП-ДАННЫХ ====================
 
 // Загрузка ТОП-данных при старте приложения
@@ -2791,26 +2840,6 @@ function shouldIncludeNotification(timestamp, lastUpdate) {
     }
 }
 
-// ==================== ОТКРЫТИЕ ЛИЧНОГО КАБИНЕТА ИЗ ШАГА 1 ====================
-function openDriverCabinetFromStep1() {
-    const phoneInput = document.getElementById('phone-input');
-    const phone = phoneInput.value.replace(/\s/g, '');
-    
-    if (!phone || phone.length < 10) {
-        showNotification('Пожалуйста, введите номер телефона для доступа к личному кабинету', 'error');
-        phoneInput.focus();
-        return;
-    }
-    
-    const normalizedPhone = normalizePhone(phone);
-    
-    // Сохраняем телефон в registrationState
-    registrationState.data.phone = normalizedPhone;
-    
-    // Открываем личный кабинет
-    openDriverCabinet();
-}
-
 function switchTab(tabName) {
     // Скрыть все вкладки
     document.querySelectorAll('.tab-content').forEach(tab => {
@@ -3902,5 +3931,6 @@ window.enterCabinetWithPhone = enterCabinetWithPhone;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
                             
+
 
 
