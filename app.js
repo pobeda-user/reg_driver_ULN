@@ -1996,7 +1996,8 @@ function showDriverCabinetModal(history, notifications, driverPhone, driverName)
         actualDriverName = registrationState.data.fio;
     }
     
-    const unreadNotifications = notifications.filter(n => !n.status || n.status !== 'read').length;
+    // РАССЧИТЫВАЕМ непрочитанные уведомления ПРАВИЛЬНО
+    const unreadNotificationsCount = notifications.filter(n => !n.status || n.status !== 'read').length;
     
     const modalHtml = `
         <div class="modal-overlay" id="driver-cabinet-modal" onclick="if(event.target === this) closeModalById('driver-cabinet-modal')">
@@ -2011,7 +2012,7 @@ function showDriverCabinetModal(history, notifications, driverPhone, driverName)
                         <p><strong>👤 Водитель:</strong> ${actualDriverName || 'Не указано'}</p>
                         <p><strong>📱 Телефон:</strong> ${formattedPhone}</p>
                         <p><strong>📊 Всего регистраций:</strong> ${history.length}</p>
-                        <p><strong>🔔 Непрочитанных уведомлений:</strong> ${unreadNotifications}</p>
+                        <p><strong>🔔 Непрочитанных уведомлений:</strong> ${unreadNotificationsCount}</p>
                         <p><strong>⏰ Часовой пояс:</strong> UTC+3 (время отображается корректно)</p>
                     </div>
                     
@@ -2022,7 +2023,7 @@ function showDriverCabinetModal(history, notifications, driverPhone, driverName)
                         </button>
                         <button class="tab-btn" onclick="switchCabinetTab('notifications')"
                                 style="padding: 10px 15px; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; color: #666;">
-                            🔔 Уведомления (${unreadNotifications})
+                            🔔 Уведомления (${unreadNotificationsCount})
                         </button>
                         <button class="tab-btn" onclick="switchCabinetTab('status')"
                                 style="padding: 10px 15px; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; color: #666;">
@@ -2067,7 +2068,6 @@ function showDriverCabinetModal(history, notifications, driverPhone, driverName)
     // Устанавливаем активное модальное окно
     currentActiveModal = 'driver-cabinet-modal';
 }
-
 function closeModal(event) {
     if (event) {
         event.preventDefault();
@@ -2097,6 +2097,7 @@ function clearOfflineData() {
 }
 
 // Функция обновления внутри модального окна
+// ==================== ФУНКЦИЯ ОБНОВЛЕНИЯ В МОДАЛЬНОМ ОКНЕ ====================
 async function refreshCabinetInModal(phone) {
     try {
         // Находим модальное окно
@@ -2134,6 +2135,9 @@ async function refreshCabinetInModal(phone) {
             actualDriverName = registrationState.data.fio;
         }
         
+        // РАССЧИТЫВАЕМ количество непрочитанных уведомлений ПРАВИЛЬНО
+        const unreadNotificationsCount = notifications.filter(n => !n.status || n.status !== 'read').length;
+        
         // Обновляем вкладки
         const historyTab = modal.querySelector('#cabinet-history-tab');
         const notificationsTab = modal.querySelector('#cabinet-notifications-tab');
@@ -2146,12 +2150,11 @@ async function refreshCabinetInModal(phone) {
         // Обновляем заголовок и информацию
         const infoBox = modal.querySelector('.info-box');
         if (infoBox) {
-            const unreadNotifications = notifications.filter(n => !n.status || n.status !== 'read').length;
             infoBox.innerHTML = `
                 <p><strong>👤 Водитель:</strong> ${actualDriverName || 'Не указано'}</p>
                 <p><strong>📱 Телефон:</strong> ${formatPhoneDisplay(phone)}</p>
                 <p><strong>📊 Всего регистраций:</strong> ${history.length}</p>
-                <p><strong>🔔 Непрочитанных уведомлений:</strong> ${unreadNotifications}</p>
+                <p><strong>🔔 Непрочитанных уведомлений:</strong> ${unreadNotificationsCount}</p>
                 <p><strong>⏰ Часовой пояс:</strong> UTC+3 (время отображается корректно)</p>
                 <p style="color: #4caf50; font-weight: 600; margin-top: 10px;">✅ Данные обновлены: ${new Date().toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}</p>
             `;
@@ -2165,7 +2168,7 @@ async function refreshCabinetInModal(phone) {
             historyBtn.innerHTML = `📋 История (${history.length})`;
         }
         if (notificationsBtn) {
-            notificationsBtn.innerHTML = `🔔 Уведомления (${unreadNotifications})`;
+            notificationsBtn.innerHTML = `🔔 Уведомления (${unreadNotificationsCount})`;
         }
         
         // Убираем индикатор загрузки
@@ -2187,7 +2190,7 @@ async function refreshCabinetInModal(phone) {
             if (indicator) indicator.remove();
         }
         
-        showNotification('❌ Ошибка обновления данных', 'error');
+        showNotification('❌ Ошибка обновления данных: ' + error.message, 'error');
     }
 }
 
@@ -3115,6 +3118,7 @@ function showSimpleDriverCabinet(driverPhone, driverName) {
 }
 
 // Функция переключения вкладок
+// Функция переключения вкладок
 function switchCabinetTab(tabName) {
     const modal = document.getElementById('driver-cabinet-modal');
     if (!modal) return;
@@ -3139,11 +3143,21 @@ function switchCabinetTab(tabName) {
     // Активировать кнопку
     const buttons = modal.querySelectorAll('.tab-btn');
     buttons.forEach(btn => {
-        if (btn.textContent.includes(getCabinetTabName(tabName))) {
+        const btnText = btn.textContent || '';
+        if (btnText.includes(getCabinetTabName(tabName))) {
             btn.style.borderBottomColor = '#4285f4';
             btn.style.color = '#4285f4';
         }
     });
+}
+
+function getCabinetTabName(tabName) {
+    const map = {
+        'history': 'История',
+        'notifications': 'Уведомления',
+        'status': 'Статус'
+    };
+    return map[tabName] || tabName;
 }
 
 function refreshCabinet(phone) {
@@ -4996,6 +5010,7 @@ window.closeDetailsAndRestore = closeDetailsAndRestore;
 window.restorePreviousModal = restorePreviousModal;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
+
 
 
 
