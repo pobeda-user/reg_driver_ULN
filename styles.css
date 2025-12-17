@@ -2308,5 +2308,282 @@
 }
 }
 
+/* ==================== НОВЫЕ СТИЛИ ДЛЯ КНОПОК И ФОРМАТИРОВАНИЯ ДАТ ==================== */
+
+/* Стили для кнопок в шаге 1 */
+.button-group.double {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 15px;
+}
+
+.button-group.double .btn {
+    flex: 1;
+}
+
+/* Новая кнопка info */
+.btn-info {
+    background: linear-gradient(135deg, #17a2b8 0%, #0d707e 100%);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    padding: 16px 24px;
+    font-size: 16px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-family: inherit;
+    text-align: center;
+    outline: none;
+    display: inline-block;
+    text-decoration: none;
+}
+
+.btn-info:hover {
+    background: linear-gradient(135deg, #138496 0%, #0b5e6a 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(23, 162, 184, 0.3);
+}
+
+.btn-info:active {
+    transform: translateY(0);
+}
+
+/* Стили для отображения дат */
+.date-time-display {
+    font-family: 'Courier New', monospace;
+    color: #333;
+    font-size: 14px;
+    background: #f8f9fa;
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+    display: inline-block;
+}
+
+/* Стили для уведомлений с датами */
+.notification-date {
+    color: #666;
+    font-size: 12px;
+    font-weight: normal;
+    background: #f0f0f0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+}
+
+/* Стили для истории регистраций с датами */
+.registration-date {
+    color: #4285f4;
+    font-weight: 600;
+    font-size: 13px;
+    margin-right: 10px;
+    min-width: 140px;
+    display: inline-block;
+}
+
+/* Стили для даты в карточках */
+.card-date {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    font-size: 11px;
+    color: #888;
+    background: #f8f8f8;
+    padding: 3px 8px;
+    border-radius: 12px;
+}
+
+/* Компактная сетка марок авто (для шага 6) */
+.compact-brands-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.compact-brand-btn {
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 12px 8px;
+    font-size: 14px;
+    color: #333;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-align: center;
+    font-weight: 500;
+    outline: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.compact-brand-btn:hover {
+    border-color: #4285f4;
+    background: #f8f9ff;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(66, 133, 244, 0.1);
+}
+
+.compact-brand-btn.selected {
+    border-color: #4285f4;
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
+.brand-text {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Стили для индикатора поиска (улучшенные) */
+.search-indicator {
+    background: #e3f2fd;
+    border-left: 4px solid #2196f3;
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.search-indicator .loader {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #2196f3;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.search-indicator .text-content {
+    flex: 1;
+}
+
+.search-indicator .title {
+    font-weight: 600;
+    color: #1565c0;
+    margin: 0 0 5px 0;
+    font-size: 15px;
+}
+
+.search-indicator .subtitle {
+    color: #666;
+    margin: 0;
+    font-size: 12px;
+}
+
+/* Стили для даты в модальных окнах */
+.modal-date-badge {
+    display: inline-block;
+    background: #e3f2fd;
+    color: #1565c0;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    margin: 5px 0;
+    font-weight: 600;
+    border: 1px solid #bbdefb;
+}
+
+/* Адаптивные стили для дат */
+@media (max-width: 600px) {
+    .registration-date {
+        min-width: 120px;
+        font-size: 12px;
+    }
+    
+    .date-time-display {
+        font-size: 12px;
+        padding: 3px 6px;
+    }
+    
+    .compact-brands-grid {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    }
+    
+    .compact-brand-btn {
+        padding: 10px 6px;
+        font-size: 13px;
+    }
+    
+    .button-group.double {
+        flex-direction: column;
+    }
+    
+    .notification-date {
+        display: block;
+        margin: 5px 0 0 0;
+    }
+}
+
+/* Стили для форматирования времени в уведомлениях */
+.timestamp {
+    font-family: 'Consolas', 'Monaco', monospace;
+    color: #666;
+    background: #f5f5f5;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    border: 1px solid #eee;
+}
+
+/* Стили для дат в таблицах */
+.table-date {
+    font-family: monospace;
+    color: #333;
+    white-space: nowrap;
+}
+
+/* Стили для периода времени */
+.time-period {
+    color: #666;
+    font-size: 12px;
+    background: #f0f0f0;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: 5px;
+}
+
+/* Анимация для появления даты */
+@keyframes dateAppear {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-date {
+    animation: dateAppear 0.3s ease;
+}
+
+/* Стили для подчеркивания дат */
+.date-highlight {
+    position: relative;
+    padding-bottom: 3px;
+}
+
+.date-highlight:after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #4285f4, #34a853);
+    border-radius: 1px;
+}
+
+/* Стили для даты в заголовках */
+.header-date {
+    font-size: 14px;
+    color: #666;
+    font-weight: normal;
+    margin-left: 10px;
+    opacity: 0.8;
+}
+
+
 
 
