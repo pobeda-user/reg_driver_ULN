@@ -853,35 +853,38 @@
     <div id="connection-indicator" class="offline"></div>
     
     <div class="container">
-        <!-- Шаг 1: Ввод телефона -->
-        <div class="step active" data-step="1">
-            <div class="step-header">
-                <div class="step-number">1</div>
-                <h2>Введите номер телефона</h2>
-            </div>
-            <div class="step-content">
-                <div class="phone-input-container">
-                    <div class="phone-prefix">+7</div>
-                    <input 
-                        type="tel" 
-                        id="phone-input" 
-                        placeholder="999 123 45 67"
-                        autocomplete="tel"
-                        autofocus
-                        inputmode="numeric"
-                    >
-                </div>
-                <div class="info-box">
-                    <p>📱 Введите номер телефона, который вы указывали при прошлых визитах</p>
-                    <p>✅ Система автоматически найдет ваши данные</p>
-                </div>
-                <div class="button-group">
-                    <button type="button" class="btn btn-primary" onclick="handlePhoneSubmit()">
-                        Продолжить
-                    </button>
-                </div>
-            </div>
+        <!-- Шаг 1: Ввод телефона (ОБНОВЛЕННЫЙ) -->
+<div class="step active" data-step="1">
+    <div class="step-header">
+        <div class="step-number">1</div>
+        <h2>Введите номер телефона</h2>
+    </div>
+    <div class="step-content">
+        <div class="phone-input-container">
+            <div class="phone-prefix">+7</div>
+            <input 
+                type="tel" 
+                id="phone-input" 
+                placeholder="999 123 45 67"
+                autocomplete="tel"
+                autofocus
+                inputmode="numeric"
+            >
         </div>
+        <div class="button-group" style="margin-bottom: 15px;">
+            <button type="button" class="btn btn-primary" onclick="handlePhoneSubmit()">
+                📝 Новая регистрация
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="openDriverCabinetFromStep1()">
+                👤 Личный кабинет
+            </button>
+        </div>
+        <div class="info-box">
+            <p>📱 <strong>Новая регистрация</strong>: введите телефон и пройдите регистрацию</p>
+            <p>👤 <strong>Личный кабинет</strong>: для просмотра статуса заезда и истории</p>
+        </div>
+    </div>
+</div>
 
         <!-- Шаг 2: Ввод ФИО -->
         <div class="step" data-step="2">
@@ -1503,6 +1506,7 @@
     </script>
 </body>
 </html>
+
 
 
 
