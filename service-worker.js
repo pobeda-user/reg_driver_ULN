@@ -1,297 +1,353 @@
-// ==================== АВТОМАТИЧЕСКИЙ СБРОС КЭША ====================
-// Сервис-воркер с автоматическим обновлением кэша
-
-// ИЗМЕНИТЕ версию при каждом обновлении
+// service-worker.js - полная версия с кэшированием иконок
 const APP_VERSION = '1.4';
-const CACHE_NAME = `driver-registration-cache-v${APP_VERSION}-${Date.now()}`;
+const CACHE_NAME = `driver-registration-v${APP_VERSION}`;
+const OFFLINE_URL = '/reg_driver_ULN/offline.html';
 
-// Важные файлы для кэширования (с версиями)
-const CORE_ASSETS = [
-  // Основные файлы
+// Ресурсы для кэширования при установке
+const PRECACHE_RESOURCES = [
   '/reg_driver_ULN/',
-  `/reg_driver_ULN/index.html?v=${APP_VERSION}`,
-  `/reg_driver_ULN/app.js?v=${APP_VERSION}`,
-  `/reg_driver_ULN/styles.css?v=${APP_VERSION}`,
-  `/reg_driver_ULN/manifest.json?v=${APP_VERSION}`,
+  '/reg_driver_ULN/index.html',
+  '/reg_driver_ULN/styles.css',
+  '/reg_driver_ULN/app.js',
+  '/reg_driver_ULN/manifest.json',
   
-  // Иконки (с версиями)
-  `/reg_driver_ULN/icons/icon-72x72.png?v=${APP_VERSION}`,
-  `/reg_driver_ULN/icons/icon-96x96.png?v=${APP_VERSION}`,
-  `/reg_driver_ULN/icons/icon-128x128.png?v=${APP_VERSION}`,
-  `/reg_driver_ULN/icons/icon-144x144.png?v=${APP_VERSION}`,
-  `/reg_driver_ULN/icons/icon-152x152.png?v=${APP_VERSION}`,
-  `/reg_driver_ULN/icons/icon-192x192.png?v=${APP_VERSION}`,
-  `/reg_driver_ULN/icons/icon-512x512.png?v=${APP_VERSION}`,
+  // Иконки для PWA
+  '/reg_driver_ULN/icons/icon-16x16.png',
+  '/reg_driver_ULN/icons/icon-32x32.png',
+  '/reg_driver_ULN/icons/icon-72x72.png',
+  '/reg_driver_ULN/icons/icon-96x96.png',
+  '/reg_driver_ULN/icons/icon-128x128.png',
+  '/reg_driver_ULN/icons/icon-144x144.png',
+  '/reg_driver_ULN/icons/icon-152x152.png',
+  '/reg_driver_ULN/icons/icon-192x192.png',
+  '/reg_driver_ULN/icons/icon-384x384.png',
+  '/reg_driver_ULN/icons/icon-512x512.png',
   
-  // Шрифты и прочее
-  'https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap'
+  // Иконки для Windows
+  '/reg_driver_ULN/icons/icon-70x70.png',
+  '/reg_driver_ULN/icons/icon-150x150.png',
+  '/reg_driver_ULN/icons/icon-310x150.png',
+  '/reg_driver_ULN/icons/icon-310x310.png',
+  
+  // Шрифты и другие ресурсы
+  'https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap',
 ];
 
-// ==================== УСТАНОВКА ====================
+// Установка Service Worker
 self.addEventListener('install', event => {
-  console.log(`📦 Service Worker: Установка версии ${APP_VERSION}`);
+  console.log(`🔄 Service Worker ${APP_VERSION} устанавливается`);
   
   event.waitUntil(
-    (async () => {
-      try {
-        // Создаем новый кэш
-        const cache = await caches.open(CACHE_NAME);
-        console.log(`✅ Кэш создан: ${CACHE_NAME}`);
-        
-        // Кэшируем основные файлы
-        await cache.addAll(CORE_ASSETS);
-        console.log('✅ Основные файлы закэшированы');
-        
-        // Немедленно активируем новый сервис-воркер
-        await self.skipWaiting();
-        console.log('✅ Service Worker активирован немедленно');
-        
-      } catch (error) {
-        console.error('❌ Ошибка установки Service Worker:', error);
-      }
-    })()
+    caches.open(CACHE_NAME)
+      .then(cache => {
+        console.log('📦 Открываю кэш:', CACHE_NAME);
+        return cache.addAll(PRECACHE_RESOURCES)
+          .then(() => {
+            console.log('✅ Все ресурсы добавлены в кэш');
+            return self.skipWaiting();
+          })
+          .catch(error => {
+            console.error('❌ Ошибка кэширования:', error);
+          });
+      })
   );
 });
 
-// ==================== АКТИВАЦИЯ ====================
+// Активация Service Worker
 self.addEventListener('activate', event => {
-  console.log(`🔄 Service Worker: Активация версии ${APP_VERSION}`);
+  console.log('✅ Service Worker активирован');
   
   event.waitUntil(
-    (async () => {
-      try {
-        // Получаем все существующие кэши
-        const cacheNames = await caches.keys();
-        console.log(`📊 Найдено кэшей: ${cacheNames.length}`);
-        
-        // Удаляем ВСЕ старые кэши
-        const deletePromises = cacheNames.map(cacheName => {
-          // Удаляем все кэши, кроме текущего
-          if (!cacheName.startsWith('driver-registration-cache-v')) {
-            console.log(`🗑️ Удаляю кэш: ${cacheName}`);
-            return caches.delete(cacheName);
-          }
-          
-          // Для наших кэшей - удаляем все старые версии
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.map(cacheName => {
+          // Удаляем старые кэши
           if (cacheName !== CACHE_NAME) {
-            console.log(`🗑️ Удаляю старую версию кэша: ${cacheName}`);
+            console.log(`🗑️ Удаляю старый кэш: ${cacheName}`);
             return caches.delete(cacheName);
           }
-          
-          return Promise.resolve();
-        });
-        
-        await Promise.all(deletePromises);
-        console.log('✅ Все старые кэши удалены');
-        
-        // Немедленно берем контроль над всеми клиентами
-        await self.clients.claim();
-        console.log('✅ Service Worker контролирует все вкладки');
-        
-        // Отправляем сообщение всем клиентам об обновлении
-        const clients = await self.clients.matchAll();
+        })
+      );
+    })
+    .then(() => {
+      console.log(`✅ Текущий кэш: ${CACHE_NAME}`);
+      
+      // Удаляем старые записи из IndexedDB
+      return clearOldDatabases();
+    })
+    .then(() => {
+      console.log('🎉 Service Worker готов к работе');
+      
+      // Сообщаем клиентам об обновлении
+      return self.clients.matchAll().then(clients => {
         clients.forEach(client => {
           client.postMessage({
             type: 'SW_UPDATED',
             version: APP_VERSION,
-            cacheName: CACHE_NAME
+            timestamp: new Date().toISOString()
           });
         });
-        
-      } catch (error) {
-        console.error('❌ Ошибка активации Service Worker:', error);
-      }
-    })()
+      });
+    })
+    .then(() => self.clients.claim())
   );
 });
 
-// ==================== ОБРАБОТКА ЗАПРОСОВ ====================
+// Обработка запросов
 self.addEventListener('fetch', event => {
-  const { request } = event;
-  const url = new URL(request.url);
-  
-  // Пропускаем API запросы и внешние ресурсы
-  if (
-    request.url.includes('script.google.com') ||
-    request.url.includes('fonts.googleapis.com') ||
-    request.url.includes('fonts.gstatic.com') ||
-    request.method !== 'GET'
-  ) {
+  // Пропускаем запросы к API
+  if (event.request.url.includes('/api/') || 
+      event.request.url.includes('googleapis.com/firestore') ||
+      event.request.method !== 'GET') {
     return;
   }
   
-  // Для навигационных запросов (HTML) - СЕТЬ ПЕРВЫЙ
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      (async () => {
-        try {
-          // Пробуем получить из сети
-          const networkResponse = await fetch(request);
-          
-          // Клонируем для кэширования
-          const responseClone = networkResponse.clone();
-          
-          // Обновляем кэш асинхронно
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(request, responseClone);
-          });
-          
-          return networkResponse;
-          
-        } catch (error) {
-          // Если сеть недоступна - пробуем кэш
-          console.log('🌐 Сеть недоступна, использую кэш для:', request.url);
-          const cachedResponse = await caches.match(request);
-          
-          if (cachedResponse) {
-            return cachedResponse;
-          }
-          
-          // Если ничего нет - показываем fallback
-          return new Response('Сеть недоступна', {
-            status: 503,
-            headers: { 'Content-Type': 'text/plain' }
-          });
-        }
-      })()
-    );
-    
-    return;
-  }
-  
-  // Для статических ресурсов - КЭШ ПЕРВЫЙ с обновлением
   event.respondWith(
-    (async () => {
-      try {
-        // Сначала проверяем кэш
-        const cachedResponse = await caches.match(request);
-        
+    caches.match(event.request)
+      .then(cachedResponse => {
+        // Если есть в кэше - возвращаем
         if (cachedResponse) {
-          // Параллельно обновляем кэш
-          fetch(request)
-            .then(networkResponse => {
-              const responseClone = networkResponse.clone();
-              caches.open(CACHE_NAME).then(cache => {
-                cache.put(request, responseClone);
-              });
-            })
-            .catch(() => {
-              // Игнорируем ошибки обновления кэша
-            });
-          
+          console.log('📦 Из кэша:', event.request.url);
           return cachedResponse;
         }
         
-        // Если нет в кэше - получаем из сети
-        const networkResponse = await fetch(request);
-        
-        // Кэшируем для будущих запросов
-        const responseClone = networkResponse.clone();
-        caches.open(CACHE_NAME).then(cache => {
-          cache.put(request, responseClone);
-        });
-        
-        return networkResponse;
-        
-      } catch (error) {
-        console.error('❌ Ошибка получения:', request.url, error);
-        
-        // Для CSS/JS файлов возвращаем fallback
-        if (request.url.includes('.css')) {
-          return new Response('/* Fallback CSS */', {
-            headers: { 'Content-Type': 'text/css' }
+        // Иначе загружаем из сети
+        return fetch(event.request)
+          .then(response => {
+            // Проверяем валидность ответа
+            if (!response || response.status !== 200 || response.type !== 'basic') {
+              return response;
+            }
+            
+            // Клонируем ответ для кэширования
+            const responseToCache = response.clone();
+            
+            // Кэшируем новые ресурсы
+            caches.open(CACHE_NAME)
+              .then(cache => {
+                cache.put(event.request, responseToCache);
+                console.log('📥 Добавлено в кэш:', event.request.url);
+              });
+            
+            return response;
+          })
+          .catch(error => {
+            console.log('🌐 Ошибка сети:', error);
+            
+            // Для HTML запросов показываем offline страницу
+            if (event.request.headers.get('accept').includes('text/html')) {
+              return caches.match(OFFLINE_URL);
+            }
+            
+            // Для иконок и стилей пробуем найти в кэше альтернативу
+            if (event.request.url.includes('icon') || 
+                event.request.url.includes('css') ||
+                event.request.url.includes('js')) {
+              const iconMatch = event.request.url.match(/icon-(\d+x\d+)\.png/);
+              if (iconMatch) {
+                const size = iconMatch[1];
+                return caches.match(`/reg_driver_ULN/icons/icon-${size}.png`);
+              }
+            }
+            
+            return new Response('Нет соединения', {
+              status: 408,
+              statusText: 'Нет соединения',
+              headers: new Headers({
+                'Content-Type': 'text/html'
+              })
+            });
           });
-        }
-        
-        if (request.url.includes('.js')) {
-          return new Response('// Fallback JS', {
-            headers: { 'Content-Type': 'application/javascript' }
-          });
-        }
-        
-        return new Response('Ресурс недоступен', {
-          status: 404,
-          headers: { 'Content-Type': 'text/plain' }
-        });
-      }
-    })()
+      })
   );
 });
 
-// ==================== ОБРАБОТКА СООБЩЕНИЙ ====================
+// Обработка сообщений от клиента
 self.addEventListener('message', event => {
-  console.log('📨 Service Worker получил сообщение:', event.data);
+  console.log('📨 Сообщение от клиента:', event.data);
   
-  switch (event.data.action) {
+  switch (event.data.type) {
     case 'SKIP_WAITING':
+      console.log('🔄 Получена команда пропустить ожидание');
       self.skipWaiting();
       break;
       
     case 'CLEAR_CACHE':
-      caches.keys().then(cacheNames => {
-        cacheNames.forEach(cacheName => {
-          caches.delete(cacheName);
+      console.log('🧹 Очистка кэша по запросу клиента');
+      caches.delete(CACHE_NAME).then(() => {
+        event.ports[0].postMessage({ success: true });
+      });
+      break;
+      
+    case 'GET_CACHE_INFO':
+      caches.open(CACHE_NAME).then(cache => {
+        cache.keys().then(keys => {
+          event.ports[0].postMessage({
+            version: APP_VERSION,
+            cacheSize: keys.length,
+            resources: keys.map(k => k.url)
+          });
         });
       });
       break;
       
-    case 'GET_VERSION':
-      event.ports[0].postMessage({
-        version: APP_VERSION,
-        cacheName: CACHE_NAME
-      });
+    case 'CHECK_VERSION':
+      console.log(`📊 Проверка версии: клиент ${event.data.version}, сервис ${APP_VERSION}`);
+      if (event.data.version !== APP_VERSION) {
+        console.log('⚠️ Версии не совпадают, требуется обновление');
+        event.ports[0].postMessage({
+          needsUpdate: true,
+          currentVersion: APP_VERSION,
+          clientVersion: event.data.version
+        });
+      } else {
+        event.ports[0].postMessage({
+          needsUpdate: false,
+          currentVersion: APP_VERSION
+        });
+      }
+      break;
+      
+    case 'SYNC_REGISTRATION':
+      // Обработка фоновой синхронизации
+      console.log('🔄 Синхронизация регистраций');
+      syncOfflineRegistrations();
       break;
   }
 });
 
-// ==================== ПЕРИОДИЧЕСКАЯ СИНХРОНИЗАЦИЯ ====================
+// Фоновая синхронизация
 self.addEventListener('sync', event => {
-  if (event.tag === 'sync-data') {
-    console.log('🔄 Фоновая синхронизация');
-    event.waitUntil(syncOfflineData());
+  if (event.tag === 'sync-registrations') {
+    console.log('🔄 Запуск фоновой синхронизации');
+    event.waitUntil(syncOfflineRegistrations());
   }
 });
 
-async function syncOfflineData() {
-  // Здесь можно добавить синхронизацию оффлайн данных
-  return Promise.resolve();
-}
-
-// ==================== ФОН ВЫПУСК ПУШ-УВЕДОМЛЕНИЙ ====================
+// Пуш-уведомления
 self.addEventListener('push', event => {
   console.log('🔔 Push уведомление получено');
   
   const options = {
-    body: event.data?.text() || 'Новое уведомление',
+    body: event.data ? event.data.text() : 'Новое уведомление',
     icon: '/reg_driver_ULN/icons/icon-192x192.png',
-    badge: '/reg_driver_ULN/icons/icon-72x72.png',
-    vibrate: [200, 100, 200],
+    badge: '/reg_driver_ULN/icons/icon-96x96.png',
+    vibrate: [100, 50, 100],
     data: {
-      url: '/reg_driver_ULN/',
-      timestamp: Date.now()
-    }
+      dateOfArrival: Date.now(),
+      primaryKey: 1
+    },
+    actions: [
+      {
+        action: 'explore',
+        title: 'Открыть',
+        icon: '/reg_driver_ULN/icons/icon-96x96.png'
+      },
+      {
+        action: 'close',
+        title: 'Закрыть',
+        icon: '/reg_driver_ULN/icons/icon-96x96.png'
+      }
+    ]
   };
   
   event.waitUntil(
-    self.registration.showNotification('УЛН Регистрация', options)
+    self.registration.showNotification('Регистрация водителей', options)
   );
 });
 
 self.addEventListener('notificationclick', event => {
-  console.log('🔔 Нажатие на уведомление');
+  console.log('🔔 Нажато уведомление:', event.notification.tag);
   event.notification.close();
   
+  if (event.action === 'close') {
+    return;
+  }
+  
   event.waitUntil(
-    clients.matchAll({ type: 'window' }).then(clientList => {
-      for (const client of clientList) {
-        if (client.url === '/' && 'focus' in client) {
-          return client.focus();
+    clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then(clientList => {
+        for (const client of clientList) {
+          if (client.url.includes('/reg_driver_ULN/') && 'focus' in client) {
+            return client.focus();
+          }
         }
-      }
-      
-      if (clients.openWindow) {
-        return clients.openWindow('/reg_driver_ULN/');
-      }
-    })
+        if (clients.openWindow) {
+          return clients.openWindow('/reg_driver_ULN/');
+        }
+      })
   );
 });
+
+// Функция синхронизации оффлайн регистраций
+async function syncOfflineRegistrations() {
+  try {
+    // Здесь будет логика отправки оффлайн данных на сервер
+    console.log('🔄 Синхронизация оффлайн данных');
+    
+    // Временная заглушка - всегда успех
+    return Promise.resolve();
+  } catch (error) {
+    console.error('❌ Ошибка синхронизации:', error);
+    return Promise.reject(error);
+  }
+}
+
+// Функция очистки старых баз данных
+async function clearOldDatabases() {
+  try {
+    const databases = await indexedDB.databases();
+    const currentDate = new Date();
+    const monthAgo = new Date(currentDate.setMonth(currentDate.getMonth() - 1));
+    
+    for (const dbInfo of databases) {
+      if (dbInfo.name && dbInfo.name.includes('old_') || dbInfo.name.includes('temp_')) {
+        console.log(`🗑️ Удаляю старую БД: ${dbInfo.name}`);
+        indexedDB.deleteDatabase(dbInfo.name);
+      }
+    }
+  } catch (error) {
+    console.log('⚠️ Не удалось очистить старые БД:', error);
+  }
+}
+
+// Обработка ошибок
+self.addEventListener('error', event => {
+  console.error('❌ Ошибка Service Worker:', event.error);
+});
+
+self.addEventListener('unhandledrejection', event => {
+  console.error('❌ Необработанное исключение:', event.reason);
+});
+
+// Периодическая синхронизация (если поддерживается)
+if ('periodicSync' in self.registration) {
+  self.addEventListener('periodicsync', event => {
+    if (event.tag === 'update-cache') {
+      console.log('🔄 Периодическое обновление кэша');
+      event.waitUntil(updateCache());
+    }
+  });
+}
+
+// Функция обновления кэша
+async function updateCache() {
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    const cachedRequests = await cache.keys();
+    
+    for (const request of cachedRequests) {
+      try {
+        const response = await fetch(request);
+        if (response.status === 200) {
+          await cache.put(request, response);
+          console.log(`🔄 Обновлен в кэше: ${request.url}`);
+        }
+      } catch (error) {
+        console.log(`⚠️ Не удалось обновить: ${request.url}`, error);
+      }
+    }
+  } catch (error) {
+    console.error('❌ Ошибка обновления кэша:', error);
+  }
+}
