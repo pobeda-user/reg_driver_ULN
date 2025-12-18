@@ -9,7 +9,6 @@ let CONFIG = {
 // Константы для кэширования ТОП-данных
 const TOP_DATA_CACHE_KEY = 'driver_registration_top_data';
 const TOP_DATA_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 часа
-const APP_VERSION = '1.4';
 
 // Глобальные переменные
 let registrationState = {
@@ -38,11 +37,11 @@ function checkVersionAndCleanup() {
     const savedVersion = localStorage.getItem('app_version');
     const savedDate = localStorage.getItem('app_last_update');
     
-    console.log(`📊 Версия приложения: сохраненная=${savedVersion}, текущая=${APP_VERSION}`);
+    console.log(`📊 Версия приложения: сохраненная=${savedVersion}, текущая=${CONFIG.APP_VERSION}`);
     
     // Если версия изменилась - очищаем кэши
-    if (!savedVersion || savedVersion !== APP_VERSION) {
-        console.log(`🔄 Обнаружено обновление версии ${savedVersion || 'нет'} → ${APP_VERSION}`);
+    if (!savedVersion || savedVersion !== CONFIG.APP_VERSION) {
+        console.log(`🔄 Обнаружено обновление версии ${savedVersion || 'нет'} → ${CONFIG.APP_VERSION}`);
         
         // Список кэшей для очистки
         const cacheKeysToRemove = [
@@ -72,11 +71,11 @@ function checkVersionAndCleanup() {
         }
         
         // Сохраняем новую версию
-        localStorage.setItem('app_version', APP_VERSION);
+        localStorage.setItem('app_version', CONFIG.APP_VERSION);
         localStorage.setItem('app_last_update', new Date().toISOString());
         
         // Показываем уведомление об обновлении
-        showNotification(`Приложение обновлено до версии ${APP_VERSION}`, 'success');
+        showNotification(`Приложение обновлено до версии ${CONFIG.APP_VERSION}`, 'success');
     }
     
     // Периодическая проверка обновлений Service Worker
