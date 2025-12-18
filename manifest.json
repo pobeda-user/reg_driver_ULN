@@ -2,95 +2,100 @@
   "name": "УЛН. Регистрация водителей",
   "short_name": "Регистрация водителей",
   "description": "Система регистрации водителей для распределительного центра",
-  "start_url": "https://pobeda-user.github.io/reg_driver_ULN/",
+  "start_url": "/reg_driver_ULN/?v=1.4",
   "scope": "/reg_driver_ULN/",
   "display": "standalone",
   "background_color": "#4285f4",
   "theme_color": "#4285f4",
   "orientation": "portrait",
+  
+  // Ключевые настройки для сброса кэша
+  "version": "1.4",
+  "timestamp": "2025-12-17T12:00:00Z",
+  
   "icons": [
     {
-      "src": "/reg_driver_ULN/icons/icon-16x16.png",
+      "src": "/reg_driver_ULN/icons/icon-16x16.png?v=1.4",
       "sizes": "16x16",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/reg_driver_ULN/icons/icon-32x32.png",
+      "src": "/reg_driver_ULN/icons/icon-32x32.png?v=1.4",
       "sizes": "32x32",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/reg_driver_ULN/icons/icon-72x72.png",
+      "src": "/reg_driver_ULN/icons/icon-72x72.png?v=1.4",
       "sizes": "72x72",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/reg_driver_ULN/icons/icon-96x96.png",
+      "src": "/reg_driver_ULN/icons/icon-96x96.png?v=1.4",
       "sizes": "96x96",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/reg_driver_ULN/icons/icon-128x128.png",
+      "src": "/reg_driver_ULN/icons/icon-128x128.png?v=1.4",
       "sizes": "128x128",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/reg_driver_ULN/icons/icon-144x144.png",
+      "src": "/reg_driver_ULN/icons/icon-144x144.png?v=1.4",
       "sizes": "144x144",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/reg_driver_ULN/icons/icon-152x152.png",
+      "src": "/reg_driver_ULN/icons/icon-152x152.png?v=1.4",
       "sizes": "152x152",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/reg_driver_ULN/icons/icon-192x192.png",
+      "src": "/reg_driver_ULN/icons/icon-192x192.png?v=1.4",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/reg_driver_ULN/icons/icon-384x384.png",
+      "src": "/reg_driver_ULN/icons/icon-384x384.png?v=1.4",
       "sizes": "384x384",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/reg_driver_ULN/icons/icon-512x512.png",
+      "src": "/reg_driver_ULN/icons/icon-512x512.png?v=1.4",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
   ],
-  "categories": [
-    "business",
-    "productivity"
-  ],
+  
+  "categories": ["business", "productivity"],
+  
   "shortcuts": [
     {
       "name": "Новая регистрация",
       "short_name": "Новая",
       "description": "Начать новую регистрацию водителя",
-      "url": "/reg_driver_ULN/?new=true",
+      "url": "/reg_driver_ULN/?new=true&v=1.4",
       "icons": [
         {
-          "src": "/reg_driver_ULN/icons/icon-96x96.png",
+          "src": "/reg_driver_ULN/icons/icon-96x96.png?v=1.4",
           "sizes": "96x96"
         }
       ]
     }
   ],
+  
   "screenshots": [
     {
-      "src": "/reg_driver_ULN/screenshots/screenshot1.png",
+      "src": "/reg_driver_ULN/screenshots/screenshot1.png?v=1.4",
       "sizes": "1280x720",
       "type": "image/png"
     }
