@@ -9,6 +9,7 @@ let CONFIG = {
 // Константы для кэширования ТОП-данных
 const TOP_DATA_CACHE_KEY = 'driver_registration_top_data';
 const TOP_DATA_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 часа
+const APP_VERSION = '1.4';
 
 // Глобальные переменные
 let registrationState = {
@@ -31,6 +32,65 @@ let registrationState = {
         scheduleViolation: 'Нет'
     }
 };
+
+// Проверка версии и очистка старых данных
+function checkVersionAndCleanup() {
+    const savedVersion = localStorage.getItem('app_version');
+    const savedDate = localStorage.getItem('app_last_update');
+    
+    console.log(`📊 Версия приложения: сохраненная=${savedVersion}, текущая=${APP_VERSION}`);
+    
+    // Если версия изменилась - очищаем кэши
+    if (!savedVersion || savedVersion !== APP_VERSION) {
+        console.log(`🔄 Обнаружено обновление версии ${savedVersion || 'нет'} → ${APP_VERSION}`);
+        
+        // Список кэшей для очистки
+        const cacheKeysToRemove = [
+            'driver_info_for_cabinet',
+            'top_data_cache',
+            'supplier_cache',
+            'driver_history_cache_',
+            'notifications_cache_',
+            'status_updates_cache_',
+            'last_history_check_',
+            'last_notification_update_',
+            'last_status_update_',
+            'offline_registrations'
+        ];
+        
+        // Очищаем соответствующие ключи localStorage
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            const shouldRemove = cacheKeysToRemove.some(cacheKey => 
+                key.startsWith(cacheKey) || key.includes('cache')
+            );
+            
+            if (shouldRemove) {
+                localStorage.removeItem(key);
+                console.log(`🗑️ Удален кэш: ${key}`);
+            }
+        }
+        
+        // Сохраняем новую версию
+        localStorage.setItem('app_version', APP_VERSION);
+        localStorage.setItem('app_last_update', new Date().toISOString());
+        
+        // Показываем уведомление об обновлении
+        showNotification(`Приложение обновлено до версии ${APP_VERSION}`, 'success');
+    }
+    
+    // Периодическая проверка обновлений Service Worker
+    if ('serviceWorker' in navigator) {
+        setInterval(() => {
+            navigator.serviceWorker.getRegistration().then(registration => {
+                if (registration) {
+                    registration.update();
+                }
+            });
+        }, 60 * 60 * 1000); // Каждый час
+    }
+}
+
 
 // ==================== ФУНКЦИЯ ДЛЯ ОТКРЫТИЯ ЛИЧНОГО КАБИНЕТА ИЗ ШАГА 1 ====================
 function openDriverCabinetFromStep1() {
@@ -373,7 +433,7 @@ document.addEventListener('DOMContentLoaded', function() {
         CONFIG = { ...CONFIG, ...window.CONFIG };
         logToConsole('INFO', 'Конфигурация загружена', { url: CONFIG.APP_SCRIPT_URL });
     }
-    
+     checkVersionAndCleanup();
     // Оптимизируем для мобильных устройств
     optimizeForMobile();
     
@@ -5263,6 +5323,7 @@ window.closeDetailsAndRestore = closeDetailsAndRestore;
 window.restorePreviousModal = restorePreviousModal;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
+
 
 
 
