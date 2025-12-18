@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#4285f4">
     
-    <!-- Автоматическая версия для сброса кэша -->
+    <!-- Версия приложения -->
     <meta name="version" content="1.4">
     <meta name="build-date" content="2025-12-17">
     
@@ -17,43 +17,82 @@
     <title>УЛН. Регистрация водителей v1.4</title>
     
     <!-- PWA Manifest -->
-    <link rel="manifest" href="/reg_driver_ULN/manifest.json?v=1.4">
+    <link rel="manifest" href="/reg_driver_ULN/manifest.json">
     
     <!-- Иконки -->
-    <link rel="icon" type="image/png" href="/reg_driver_ULN/icons/icon-32x32.png?v=1.4">
-    <link rel="apple-touch-icon" href="/reg_driver_ULN/icons/icon-192x192.png?v=1.4">
+    <link rel="icon" type="image/png" href="/reg_driver_ULN/icons/icon-32x32.png">
+    <link rel="apple-touch-icon" href="/reg_driver_ULN/icons/icon-192x192.png">
     
     <!-- Стили -->
-    <link rel="stylesheet" href="/reg_driver_ULN/styles.css?v=1.4">
+    <link rel="stylesheet" href="/reg_driver_ULN/styles.css">
     
-    <!-- Автоматический сброс кэша и Service Worker регистрация -->
+    <!-- Управление кэшем и Service Worker -->
     <script>
-        // Автоматический сброс кэша при обновлении
+        // Константы версий
         const APP_VERSION = '1.4';
-        const CACHE_VERSION = `cache-v${APP_VERSION}`;
+        const CACHE_NAME = `driver-registration-v${APP_VERSION}`;
+        let updateShown = false;
         
-        // Сохраняем текущую версию
-        if (!localStorage.getItem('app_version') || localStorage.getItem('app_version') !== APP_VERSION) {
-            console.log(`🔄 Обновление с версии ${localStorage.getItem('app_version') || 'нет'} на ${APP_VERSION}`);
+        // Основная инициализация
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log(`🚀 Приложение версии ${APP_VERSION} запущено`);
             
-            // Очищаем старые кэши
+            // Проверяем и обновляем версию
+            checkAndUpdateVersion();
+            
+            // Регистрируем Service Worker с правильной логикой
+            registerServiceWorker();
+            
+            // Проверяем оффлайн данные
+            checkOfflineData();
+        });
+        
+        // Проверка и обновление версии
+        function checkAndUpdateVersion() {
+            const storedVersion = localStorage.getItem('app_version');
+            
+            if (!storedVersion || storedVersion !== APP_VERSION) {
+                console.log(`🔄 Обновление с версии ${storedVersion || 'нет'} на ${APP_VERSION}`);
+                
+                // Очищаем старые кэши
+                clearOldCaches();
+                
+                // Сохраняем новую версию
+                localStorage.setItem('app_version', APP_VERSION);
+                localStorage.setItem('app_last_update', new Date().toISOString());
+                
+                // Помечаем, что нужно обновить Service Worker
+                localStorage.setItem('sw_needs_update', 'true');
+            } else {
+                console.log(`✅ Текущая версия ${APP_VERSION} актуальна`);
+                localStorage.removeItem('sw_needs_update');
+            }
+        }
+        
+        // Очистка старых кэшей
+        function clearOldCaches() {
             if ('caches' in window) {
                 caches.keys().then(cacheNames => {
                     cacheNames.forEach(cacheName => {
-                        if (cacheName.startsWith('driver-registration-')) {
-                            console.log(`🗑️ Удаляю кэш: ${cacheName}`);
-                            caches.delete(cacheName);
+                        // Удаляем все кэши кроме текущего
+                        if (!cacheName.includes(CACHE_NAME)) {
+                            caches.delete(cacheName).then(success => {
+                                if (success) {
+                                    console.log(`🗑️ Удален старый кэш: ${cacheName}`);
+                                }
+                            });
                         }
                     });
                 });
             }
             
-            // Очищаем localStorage кэши
+            // Очищаем устаревшие данные localStorage
             const keysToRemove = [];
             for (let i = 0; i < localStorage.length; i++) {
                 const key = localStorage.key(i);
-                if (key.includes('cache') || key.includes('Cache') || 
-                    key.includes('top_data') || key.includes('supplier')) {
+                if (key.includes('cache_') || 
+                    key.includes('temp_') || 
+                    key.includes('old_')) {
                     keysToRemove.push(key);
                 }
             }
@@ -62,64 +101,143 @@
                 localStorage.removeItem(key);
                 console.log(`🗑️ Удален localStorage: ${key}`);
             });
-            
-            // Сохраняем новую версию
-            localStorage.setItem('app_version', APP_VERSION);
-            localStorage.setItem('app_last_update', new Date().toISOString());
         }
         
         // Регистрация Service Worker
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                const swUrl = '/reg_driver_ULN/service-worker.js?v=' + APP_VERSION;
+        function registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                const swUrl = '/reg_driver_ULN/service-worker.js';
                 
                 navigator.serviceWorker.register(swUrl)
                     .then(registration => {
                         console.log('✅ Service Worker зарегистрирован:', registration.scope);
                         
-                        // Проверяем обновления
+                        // Проверяем, нужно ли принудительно обновить SW
+                        if (localStorage.getItem('sw_needs_update') === 'true') {
+                            console.log('🔄 Требуется обновление Service Worker');
+                            registration.update().then(() => {
+                                localStorage.removeItem('sw_needs_update');
+                                console.log('✅ Service Worker обновлен');
+                            });
+                        }
+                        
+                        // Слушаем обновления
                         registration.addEventListener('updatefound', () => {
                             const newWorker = registration.installing;
-                            console.log('🔄 Обнаружено обновление Service Worker');
+                            console.log('🔍 Обнаружен новый Service Worker');
                             
                             newWorker.addEventListener('statechange', () => {
-                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                    console.log('✅ Новый Service Worker установлен');
-                                    // Предлагаем обновить страницу
-                                    if (confirm('Доступна новая версия приложения. Обновить сейчас?')) {
-                                        window.location.reload();
+                                console.log(`Состояние нового SW: ${newWorker.state}`);
+                                
+                                if (newWorker.state === 'installed') {
+                                    if (navigator.serviceWorker.controller) {
+                                        // Новый SW установлен, старый активен
+                                        if (!updateShown) {
+                                            showUpdateNotification(registration);
+                                            updateShown = true;
+                                        }
+                                    } else {
+                                        // Первая установка
+                                        console.log('✅ Service Worker установлен впервые');
                                     }
                                 }
                             });
                         });
                         
-                        // Проверяем обновления каждые 5 минут
-                        setInterval(() => {
-                            registration.update();
-                        }, 5 * 60 * 1000);
+                        // Проверяем версию SW при каждом запуске
+                        if (navigator.serviceWorker.controller) {
+                            navigator.serviceWorker.controller.postMessage({
+                                type: 'CHECK_VERSION',
+                                version: APP_VERSION
+                            });
+                        }
+                        
                     })
                     .catch(error => {
                         console.error('❌ Ошибка регистрации Service Worker:', error);
                     });
+            }
+        }
+        
+        // Показ уведомления об обновлении
+        function showUpdateNotification(registration) {
+            console.log('📢 Показываю уведомление об обновлении');
+            
+            // Создаем модальное окно вместо confirm
+            const modal = document.createElement('div');
+            modal.innerHTML = `
+                <div style="
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0,0,0,0.5);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 10000;
+                ">
+                    <div style="
+                        background: white;
+                        border-radius: 16px;
+                        padding: 25px;
+                        max-width: 400px;
+                        width: 90%;
+                        text-align: center;
+                        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                    ">
+                        <h3 style="margin-bottom: 15px; color: #333;">Доступно обновление!</h3>
+                        <p style="margin-bottom: 20px; color: #666;">
+                            Версия ${APP_VERSION} готова к использованию.
+                            Рекомендуем обновить приложение.
+                        </p>
+                        <div style="display: flex; gap: 10px; justify-content: center;">
+                            <button id="update-now" style="
+                                padding: 12px 24px;
+                                background: #4285f4;
+                                color: white;
+                                border: none;
+                                border-radius: 8px;
+                                font-weight: 600;
+                                cursor: pointer;
+                            ">Обновить сейчас</button>
+                            <button id="update-later" style="
+                                padding: 12px 24px;
+                                background: #f0f0f0;
+                                color: #666;
+                                border: none;
+                                border-radius: 8px;
+                                font-weight: 600;
+                                cursor: pointer;
+                            ">Позже</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // Обработчики кнопок
+            modal.querySelector('#update-now').addEventListener('click', function() {
+                console.log('✅ Пользователь выбрал обновление');
+                modal.remove();
+                
+                // Отправляем сообщение о пропуске ожидания
+                if (registration.waiting) {
+                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+                
+                // Перезагружаем страницу через 1 секунду
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
             });
             
-            // Обработка сообщений от Service Worker
-            navigator.serviceWorker.addEventListener('message', event => {
-                console.log('📨 Сообщение от Service Worker:', event.data);
-                
-                if (event.data.type === 'SW_UPDATED') {
-                    console.log(`🔄 Service Worker обновлен до версии ${event.data.version}`);
-                    // Можно показать уведомление пользователю
-                    if (Notification.permission === 'granted' && 'serviceWorker' in navigator) {
-                        navigator.serviceWorker.getRegistration().then(reg => {
-                            reg.showNotification('Приложение обновлено', {
-                                body: `Версия ${event.data.version} установлена`,
-                                icon: '/reg_driver_ULN/icons/icon-72x72.png',
-                                tag: 'app-update'
-                            });
-                        });
-                    }
-                }
+            modal.querySelector('#update-later').addEventListener('click', function() {
+                console.log('⏸️ Пользователь отложил обновление');
+                modal.remove();
+                updateShown = false; // Сбрасываем флаг для будущих показов
             });
         }
         
@@ -157,19 +275,41 @@
             }
         };
         
-        // Проверка обновлений при фокусе
-        window.addEventListener('focus', function() {
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.getRegistration().then(registration => {
-                    if (registration) {
-                        registration.update();
+        // Проверка оффлайн данных
+        function checkOfflineData() {
+            try {
+                const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
+                const pendingRecords = offlineRegistrations.filter(r => r.status === 'pending');
+                
+                const indicator = document.getElementById('offline-data-indicator');
+                const offlineInfo = document.getElementById('offline-info');
+                
+                if (pendingRecords.length > 0) {
+                    if (indicator) {
+                        indicator.innerHTML = `<strong>📱 ${pendingRecords.length} неотправленных записей</strong>`;
+                        indicator.style.display = 'block';
                     }
-                });
+                    
+                    if (offlineInfo) {
+                        offlineInfo.style.display = 'block';
+                    }
+                    
+                    return pendingRecords.length;
+                } else {
+                    if (indicator) indicator.style.display = 'none';
+                    if (offlineInfo) offlineInfo.style.display = 'none';
+                    return 0;
+                }
+            } catch (error) {
+                console.error('Ошибка проверки оффлайн данных:', error);
+                return 0;
             }
-        });
+        }
+        
     </script>
     
     <style>
+        /* Ваши стили остаются без изменений */
         * {
             margin: 0;
             padding: 0;
@@ -1501,159 +1641,10 @@
         <div class="loader"></div>
         <p style="margin-top: 20px; color: #666;">Пожалуйста, подождите...</p>
     </div>
-    <!-- Подключение скриптов -->
-    <script src="/reg_driver_ULN/app.js?v=1.4"></script>
     
-    <!-- PWA Service Worker -->
-    <script>
-        // Регистрация Service Worker
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/reg_driver_ULN/service-worker.js', {
-                    scope: '/reg_driver_ULN/'
-                }).then(function(registration) {
-                    console.log('ServiceWorker зарегистрирован: ', registration.scope);
-                }, function(err) {
-                    console.log('ServiceWorker не зарегистрирован: ', err);
-                });
-            });
-        }
-              
-        // Функция для показа загрузчика
-        function showLoader(show) {
-            const loader = document.getElementById('loader');
-            if (loader) {
-                loader.style.display = show ? 'flex' : 'none';
-            }
-        }
-        
-        // Обновление статуса соединения
-        function updateConnectionStatus() {
-            const indicator = document.getElementById('connection-indicator');
-            const statusElement = document.getElementById('connection-status');
-            
-            if (indicator) {
-                indicator.className = navigator.onLine ? 'online' : 'offline';
-                indicator.title = navigator.onLine ? 'Онлайн' : 'Оффлайн';
-            }
-            
-            if (statusElement) {
-                statusElement.style.display = navigator.onLine ? 'none' : 'block';
-            }
-        }
-        
-        // Проверка оффлайн данных
-        function checkOfflineData() {
-            try {
-                const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
-                const pendingRecords = offlineRegistrations.filter(r => r.status === 'pending');
-                
-                const indicator = document.getElementById('offline-data-indicator');
-                const offlineInfo = document.getElementById('offline-info');
-                
-                if (pendingRecords.length > 0) {
-                    if (indicator) {
-                        indicator.innerHTML = `<strong>📱 ${pendingRecords.length} неотправленных записей</strong>`;
-                        indicator.style.display = 'block';
-                    }
-                    
-                    if (offlineInfo) {
-                        offlineInfo.style.display = 'block';
-                    }
-                    
-                    return pendingRecords.length;
-                } else {
-                    if (indicator) indicator.style.display = 'none';
-                    if (offlineInfo) offlineInfo.style.display = 'none';
-                    return 0;
-                }
-            } catch (error) {
-                console.error('Ошибка проверки оффлайн данных:', error);
-                return 0;
-            }
-        }
-        
-        // Периодическая проверка
-        setInterval(checkOfflineData, 5000);
-        
-        // Инициализация
-        window.addEventListener('load', function() {
-            updateConnectionStatus();
-            checkOfflineData();
-            
-            window.addEventListener('online', updateConnectionStatus);
-            window.addEventListener('offline', updateConnectionStatus);
-        });
-        
-        // Экспорт функций
-        window.showLoader = showLoader;
-        
-              
-        // Автоматическое обновление Service Worker
-        if ('serviceWorker' in navigator) {
-            // Регистрируем Service Worker
-            navigator.serviceWorker.register('/reg_driver_ULN/service-worker.js', {
-                scope: '/reg_driver_ULN/'
-            }).then(registration => {
-                console.log('Service Worker зарегистрирован:', registration.scope);
-                
-                // Слушаем обновления
-                registration.addEventListener('updatefound', () => {
-                    const newWorker = registration.installing;
-                    console.log('Найден новый Service Worker:', newWorker);
-                    
-                    newWorker.addEventListener('statechange', () => {
-                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                            // Новый SW установлен, но старый еще активен
-                            console.log('Новая версия доступна. Перезагрузите страницу.');
-                            
-                            // Показываем пользователю уведомление
-                            if (confirm('Доступна новая версия приложения. Обновить сейчас?')) {
-                                window.location.reload();
-                            }
-                        }
-                    });
-                });
-                
-                // Проверяем обновления при фокусе на странице
-                window.addEventListener('focus', () => {
-                    registration.update().catch(err => 
-                        console.log('Ошибка проверки обновлений:', err)
-                    );
-                });
-                
-            }).catch(err => {
-                console.log('ServiceWorker не зарегистрирован:', err);
-            });
-            
-            // Принудительное обновление SW при загрузке
-            window.addEventListener('load', () => {
-                if (navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
-                }
-            });
-        }
-        
-        // Принудительно обновляем Service Worker при необходимости
-        function updateServiceWorker() {
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.getRegistration().then(registration => {
-                    if (registration) {
-                        registration.update().then(() => {
-                            console.log('Service Worker обновлен');
-                        });
-                    }
-                });
-            }
-        }
-        
-        // Вызываем обновление каждые 30 минут
-        setInterval(updateServiceWorker, 30 * 60 * 1000);
-        
-        // Также обновляем при каждом открытии приложения
-        updateServiceWorker();
-    </script>
-
+    <!-- Подключение скриптов -->
+    <script src="/reg_driver_ULN/app.js"></script>
+    
     <!-- Кнопка для разработчиков (скрытая) -->
     <button onclick="clearAppCache()" 
             style="position: fixed; bottom: 10px; left: 10px; 
