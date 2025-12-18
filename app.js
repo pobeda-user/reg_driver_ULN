@@ -2854,6 +2854,24 @@ function openRegistrationDetails(registration, index) {
 
 // ==================== ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ МОДАЛЬНЫМИ ОКНАМИ ====================
 
+// Универсальная функция открытия модального окна по id
+function openModal(modalId) {
+    // Закрываем предыдущее модальное окно
+    if (currentActiveModal && currentActiveModal !== modalId) {
+        const prevModal = document.getElementById(currentActiveModal);
+        if (prevModal) {
+            prevModal.style.display = 'none';
+        }
+    }
+    
+    // Открываем новое
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.style.display = 'flex';
+        currentActiveModal = modalId;
+    }
+}
+
 // Функция для закрытия деталей и восстановления предыдущего окна
 function closeDetailsAndRestore(currentModalId, previousModalId) {
     // Закрываем текущее окно с деталями
