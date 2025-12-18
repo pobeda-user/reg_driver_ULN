@@ -2,23 +2,172 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#4285f4">
+    
+    <!-- Автоматическая версия для сброса кэша -->
+    <meta name="version" content="1.4">
+    <meta name="build-date" content="2025-12-17">
+    
     <!-- Мета-теги для предотвращения кэширования -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
+    
     <title>УЛН. Регистрация водителей v1.4</title>
     
     <!-- PWA Manifest -->
-    <link rel="manifest" href="/reg_driver_ULN/manifest.json">
+    <link rel="manifest" href="/reg_driver_ULN/manifest.json?v=1.4">
     
     <!-- Иконки -->
-    <link rel="icon" type="image/png" href="/reg_driver_ULN/icons/icon-32x32.png">
-    <link rel="apple-touch-icon" href="/reg_driver_ULN/icons/icon-192x192.png">
+    <link rel="icon" type="image/png" href="/reg_driver_ULN/icons/icon-32x32.png?v=1.4">
+    <link rel="apple-touch-icon" href="/reg_driver_ULN/icons/icon-192x192.png?v=1.4">
     
     <!-- Стили -->
     <link rel="stylesheet" href="/reg_driver_ULN/styles.css?v=1.4">
+    
+    <!-- Автоматический сброс кэша и Service Worker регистрация -->
+    <script>
+        // Автоматический сброс кэша при обновлении
+        const APP_VERSION = '1.4';
+        const CACHE_VERSION = `cache-v${APP_VERSION}`;
+        
+        // Сохраняем текущую версию
+        if (!localStorage.getItem('app_version') || localStorage.getItem('app_version') !== APP_VERSION) {
+            console.log(`🔄 Обновление с версии ${localStorage.getItem('app_version') || 'нет'} на ${APP_VERSION}`);
+            
+            // Очищаем старые кэши
+            if ('caches' in window) {
+                caches.keys().then(cacheNames => {
+                    cacheNames.forEach(cacheName => {
+                        if (cacheName.startsWith('driver-registration-')) {
+                            console.log(`🗑️ Удаляю кэш: ${cacheName}`);
+                            caches.delete(cacheName);
+                        }
+                    });
+                });
+            }
+            
+            // Очищаем localStorage кэши
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.includes('cache') || key.includes('Cache') || 
+                    key.includes('top_data') || key.includes('supplier')) {
+                    keysToRemove.push(key);
+                }
+            }
+            
+            keysToRemove.forEach(key => {
+                localStorage.removeItem(key);
+                console.log(`🗑️ Удален localStorage: ${key}`);
+            });
+            
+            // Сохраняем новую версию
+            localStorage.setItem('app_version', APP_VERSION);
+            localStorage.setItem('app_last_update', new Date().toISOString());
+        }
+        
+        // Регистрация Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                const swUrl = '/reg_driver_ULN/service-worker.js?v=' + APP_VERSION;
+                
+                navigator.serviceWorker.register(swUrl)
+                    .then(registration => {
+                        console.log('✅ Service Worker зарегистрирован:', registration.scope);
+                        
+                        // Проверяем обновления
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            console.log('🔄 Обнаружено обновление Service Worker');
+                            
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    console.log('✅ Новый Service Worker установлен');
+                                    // Предлагаем обновить страницу
+                                    if (confirm('Доступна новая версия приложения. Обновить сейчас?')) {
+                                        window.location.reload();
+                                    }
+                                }
+                            });
+                        });
+                        
+                        // Проверяем обновления каждые 5 минут
+                        setInterval(() => {
+                            registration.update();
+                        }, 5 * 60 * 1000);
+                    })
+                    .catch(error => {
+                        console.error('❌ Ошибка регистрации Service Worker:', error);
+                    });
+            });
+            
+            // Обработка сообщений от Service Worker
+            navigator.serviceWorker.addEventListener('message', event => {
+                console.log('📨 Сообщение от Service Worker:', event.data);
+                
+                if (event.data.type === 'SW_UPDATED') {
+                    console.log(`🔄 Service Worker обновлен до версии ${event.data.version}`);
+                    // Можно показать уведомление пользователю
+                    if (Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+                        navigator.serviceWorker.getRegistration().then(reg => {
+                            reg.showNotification('Приложение обновлено', {
+                                body: `Версия ${event.data.version} установлена`,
+                                icon: '/reg_driver_ULN/icons/icon-72x72.png',
+                                tag: 'app-update'
+                            });
+                        });
+                    }
+                }
+            });
+        }
+        
+        // Принудительный сброс кэша (для разработки)
+        window.clearAppCache = function() {
+            if (confirm('Очистить весь кэш приложения? Все данные будут удалены.')) {
+                // Очищаем localStorage
+                localStorage.clear();
+                
+                // Очищаем sessionStorage
+                sessionStorage.clear();
+                
+                // Очищаем кэши Service Worker
+                if ('caches' in window) {
+                    caches.keys().then(cacheNames => {
+                        cacheNames.forEach(cacheName => {
+                            caches.delete(cacheName);
+                        });
+                    });
+                }
+                
+                // Удаляем Service Worker
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(registrations => {
+                        registrations.forEach(registration => {
+                            registration.unregister();
+                        });
+                    });
+                }
+                
+                // Перезагружаем страницу
+                setTimeout(() => {
+                    window.location.href = window.location.pathname + '?hard_reload=' + Date.now();
+                }, 1000);
+            }
+        };
+        
+        // Проверка обновлений при фокусе
+        window.addEventListener('focus', function() {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistration().then(registration => {
+                    if (registration) {
+                        registration.update();
+                    }
+                });
+            }
+        });
+    </script>
     
     <style>
         * {
@@ -1504,15 +1653,11 @@
         // Также обновляем при каждом открытии приложения
         updateServiceWorker();
     </script>
+
+    <!-- Кнопка для разработчиков (скрытая) -->
+    <button onclick="clearAppCache()" 
+            style="position: fixed; bottom: 10px; left: 10px; 
+                   opacity: 0.1; z-index: 9999; padding: 5px; 
+                   font-size: 10px;">🔄</button>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
