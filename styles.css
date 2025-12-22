@@ -57,6 +57,23 @@
     background: #2196f3;
 }
 
+.notification-badge-static {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    background: #f44336;
+    color: #fff;
+    border-radius: 999px;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    font-size: 12px;
+    line-height: 20px;
+    text-align: center;
+    font-weight: 700;
+    box-shadow: 0 4px 10px rgba(244, 67, 54, 0.35);
+}
+
 /* Загрузчик */
 .loader-overlay {
     position: fixed;
@@ -147,6 +164,51 @@
         width: 40px;
         height: 40px;
         border-width: 4px;
+    }
+}
+
+@media (max-width: 600px) {
+    #driver-cabinet-modal .modal {
+        max-width: 95vw !important;
+        width: 95vw !important;
+        max-height: 92dvh !important;
+        padding: 14px !important;
+    }
+
+    #driver-cabinet-modal .modal-header {
+        padding-bottom: 10px !important;
+        margin-bottom: 10px !important;
+    }
+
+    #driver-cabinet-modal .modal-title {
+        font-size: 16px !important;
+    }
+
+    #driver-cabinet-modal .info-box {
+        padding: 12px !important;
+        font-size: 13px !important;
+    }
+
+    #driver-cabinet-modal .tabs {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap !important;
+        gap: 6px !important;
+    }
+
+    #driver-cabinet-modal .tab-btn {
+        white-space: nowrap !important;
+        padding: 8px 10px !important;
+        font-size: 12px !important;
+    }
+
+    #driver-cabinet-modal .modal-footer {
+        flex-direction: column !important;
+        gap: 10px !important;
+    }
+
+    #driver-cabinet-modal .modal-footer .btn {
+        width: 100% !important;
     }
 }
 
@@ -2315,10 +2377,14 @@
     display: flex;
     gap: 12px;
     margin-bottom: 15px;
+    flex-wrap: wrap;
 }
 
 .button-group.double .btn {
-    flex: 1;
+    flex: 1 1 170px;
+    min-width: 170px;
+    white-space: normal;
+    line-height: 1.15;
 }
 
 /* Новая кнопка info */

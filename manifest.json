@@ -8,11 +8,8 @@
   "background_color": "#4285f4",
   "theme_color": "#4285f4",
   "orientation": "portrait",
-  
-  // Ключевые настройки для сброса кэша
   "version": "1.4",
   "timestamp": "2025-12-17T12:00:00Z",
-  
   "icons": [
     {
       "src": "/reg_driver_ULN/icons/icon-16x16.png?v=1.4",

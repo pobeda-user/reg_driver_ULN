@@ -2,8 +2,12 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#4285f4">
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="format-detection" content="telephone=no">
     
     <!-- Версия приложения -->
     <meta name="version" content="1.4">
@@ -17,14 +21,14 @@
     <title>УЛН. Регистрация водителей v1.4</title>
     
     <!-- PWA Manifest -->
-    <link rel="manifest" href="/reg_driver_ULN/manifest.json">
+    <link rel="manifest" href="/reg_driver_ULN/manifest.json?v=1.4">
     
     <!-- Иконки -->
     <link rel="icon" type="image/png" href="/reg_driver_ULN/icons/icon-32x32.png">
     <link rel="apple-touch-icon" href="/reg_driver_ULN/icons/icon-192x192.png">
     
     <!-- Стили -->
-    <link rel="stylesheet" href="/reg_driver_ULN/styles.css">
+    <link rel="stylesheet" href="/reg_driver_ULN/styles.css?v=1.4">
     
     <!-- Управление кэшем и Service Worker -->
     <script>
@@ -319,8 +323,8 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
+            min-height: 100dvh;
+            padding: calc(20px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) calc(20px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
             display: flex;
             justify-content: center;
             align-items: center;
@@ -1020,44 +1024,6 @@
             font-size: 14px;
         }
 
-        /* Индикатор поиска (НОВЫЙ СТИЛЬ - ДОБАВИТЬ В STYLES.CSS) */
-        .search-indicator {
-            background: #e3f2fd;
-            border-left: 4px solid #2196f3;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .search-indicator .loader {
-            width: 20px;
-            height: 20px;
-            border: 2px solid #f3f3f3;
-            border-top: 2px solid #2196f3;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        .search-indicator .text-content {
-            flex: 1;
-        }
-
-        .search-indicator .title {
-            font-weight: 600;
-            color: #1565c0;
-            margin: 0 0 5px 0;
-            font-size: 15px;
-        }
-
-        .search-indicator .subtitle {
-            color: #666;
-            margin: 0;
-            font-size: 12px;
-        }
-
         /* Адаптивность */
         @media (max-width: 600px) {
             body {
@@ -1160,7 +1126,7 @@
                 inputmode="numeric"
             >
         </div>
-        <div class="button-group" style="margin-bottom: 15px;">
+        <div class="button-group double" style="margin-bottom: 15px;">
             <button type="button" class="btn btn-primary" onclick="handlePhoneSubmit()">
                 📝 Новая регистрация
             </button>
@@ -1170,10 +1136,18 @@
         style="min-height: 44px; min-width: 44px;">
     👤 Личный кабинет
 </button>
+            <button type="button" class="btn btn-info" onclick="openNotificationsCenter()" id="notifications-btn-step1" style="min-height: 44px; min-width: 44px; position: relative;">
+                🔔 Уведомления
+                <span class="notification-badge-static" id="notifications-badge-step1" style="display:none;"></span>
+            </button>
+            <button type="button" class="btn btn-secondary" id="toggle-local-notifications-btn-step1" onclick="enableLocalNotifications()" style="min-height: 44px; min-width: 44px;">
+                🔕 Включить уведомления
+            </button>
         </div>
         <div class="info-box">
             <p>📱 <strong>Новая регистрация</strong>: введите телефон и пройдите регистрацию</p>
             <p>👤 <strong>Личный кабинет</strong>: для просмотра статуса заезда и истории</p>
+            <p>🔔 <strong>Уведомления</strong>: чтобы получать уведомления, разрешите их в браузере при первом запросе</p>
         </div>
     </div>
 </div>
@@ -1628,6 +1602,10 @@
     </button>
     <button type="button" class="btn btn-info" onclick="openDriverCabinet()">
         👤 Личный кабинет
+    </button>
+    <button type="button" class="btn btn-info" onclick="openNotificationsCenter()" id="notifications-btn-success" style="position: relative;">
+        🔔 Уведомления
+        <span class="notification-badge-static" id="notifications-badge-success" style="display:none;"></span>
     </button>
 </div>
         </div>

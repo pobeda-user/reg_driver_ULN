@@ -10,7 +10,6 @@ let CONFIG = {
 const TOP_DATA_CACHE_KEY = 'driver_registration_top_data';
 const TOP_DATA_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 часа
 
-// Глобальные переменные
 let registrationState = {
     step: 1,
     data: {
@@ -31,6 +30,282 @@ let registrationState = {
         scheduleViolation: 'Нет'
     }
 };
+
+function ensureRegistrationState() {
+    if (!registrationState || typeof registrationState !== 'object') {
+        registrationState = {};
+    }
+
+    if (!('step' in registrationState) || typeof registrationState.step !== 'number') {
+        registrationState.step = 1;
+    }
+
+    if (!registrationState.data || typeof registrationState.data !== 'object') {
+        registrationState.data = {};
+    }
+
+    const defaults = {
+        phone: '',
+        fio: '',
+        supplier: '',
+        legalEntity: '',
+        productType: '',
+        vehicleType: '',
+        vehicleNumber: '',
+        pallets: 0,
+        orderNumber: '',
+        etrn: '',
+        transit: '',
+        gate: '',
+        date: '',
+        time: '',
+        scheduleViolation: 'Нет'
+    };
+
+    for (const [k, v] of Object.entries(defaults)) {
+        if (!(k in registrationState.data) || registrationState.data[k] === undefined || registrationState.data[k] === null) {
+            registrationState.data[k] = v;
+        }
+    }
+}
+
+function getCabinetIdentity() {
+    try {
+        ensureRegistrationState();
+
+        // 1) Из текущего состояния (если оно есть)
+        let phone = registrationState?.data?.phone || '';
+        let name = registrationState?.data?.fio || '';
+
+        // 2) Из сохраненных данных кабинета
+        if (!phone) {
+            const savedDriverInfo = localStorage.getItem('driver_info_for_cabinet');
+            if (savedDriverInfo) {
+                try {
+                    const driverInfo = JSON.parse(savedDriverInfo);
+                    phone = driverInfo.phone || '';
+                    name = name || driverInfo.name || '';
+                } catch (e) {
+                    // ignore
+                }
+            }
+        }
+
+        // 3) Из последнего телефона
+        if (!phone) {
+            phone = localStorage.getItem('last_driver_phone') || '';
+            name = name || (localStorage.getItem('last_driver_name') || '');
+        }
+
+        return {
+            phone: phone ? normalizePhone(phone) : '',
+            name: name || ''
+        };
+    } catch (e) {
+        return { phone: '', name: '' };
+    }
+}
+
+// ==================== МЕНЕДЖЕР СОБЫТИЙ ====================
+const EventManager = {
+    events: {},
+    
+    /**
+     * Подписка на событие
+     * @param {string} event - Название события
+     * @param {Function} callback - Функция-обработчик
+     * @returns {Function} Функция для отписки
+     */
+    on(event, callback) {
+        if (!this.events[event]) {
+            this.events[event] = [];
+        }
+        this.events[event].push(callback);
+        return () => this.off(event, callback);
+    },
+    
+    /**
+     * Отписка от события
+     */
+    off(event, callback) {
+        if (!this.events[event]) return;
+        this.events[event] = this.events[event].filter(cb => cb !== callback);
+    },
+    
+    /**
+     * Отправка события
+     */
+    emit(event, data = null) {
+        if (!this.events[event]) return;
+        this.events[event].forEach(callback => {
+            try {
+                callback(data);
+            } catch (error) {
+                console.error(`Ошибка в обработчике события ${event}:`, error);
+            }
+        });
+    }
+};
+
+// ==================== МЕНЕДЖЕР СОСТОЯНИЯ ====================
+const StateManager = {
+    state: {
+        step: 1,
+        data: {
+            phone: '',
+            fio: '',
+            supplier: '',
+            legalEntity: '',
+            productType: '',
+            vehicleType: '',
+            vehicleNumber: '',
+            pallets: 0,
+            orderNumber: '',
+            etrn: '',
+            transit: '',
+            gate: '',
+            date: '',
+            time: '',
+            scheduleViolation: 'Нет'
+        },
+        ui: {
+            isLoading: false,
+            isOnline: navigator.onLine,
+            lastUpdate: null
+        }
+    },
+    
+    /**
+     * Обновление состояния
+     * @param {Object} updates - Обновления состояния
+     * @param {boolean} [silent=false] - Без вызова событий
+     */
+    setState(updates, silent = false) {
+        const oldState = { ...this.state };
+        
+        // Глубокое обновление состояния
+        this.state = this._deepMerge(this.state, updates);
+        
+        // Сохраняем состояние в localStorage
+        this._saveState();
+        
+        // Отправляем событие об изменении состояния
+        if (!silent) {
+            EventManager.emit('stateChange', {
+                newState: this.state,
+                oldState,
+                updates
+            });
+        }
+    },
+    
+    /**
+     * Получение состояния
+     * @param {string} [path] - Путь к свойству (например, 'ui.isLoading')
+     * @returns {*} Значение состояния
+     */
+    getState(path) {
+        if (!path) return this.state;
+        return path.split('.').reduce((obj, key) => (obj && obj[key] !== undefined) ? obj[key] : undefined, this.state);
+    },
+    
+    /**
+     * Сброс состояния к начальному
+     */
+    resetState() {
+        const initialState = {
+            step: 1,
+            data: {
+                phone: '',
+                fio: '',
+                supplier: '',
+                legalEntity: '',
+                productType: '',
+                vehicleType: '',
+                vehicleNumber: '',
+                pallets: 0,
+                orderNumber: '',
+                etrn: '',
+                transit: '',
+                gate: '',
+                date: '',
+                time: '',
+                scheduleViolation: 'Нет'
+            },
+            ui: {
+                isLoading: false,
+                isOnline: navigator.onLine,
+                lastUpdate: null
+            }
+        };
+        
+        this.setState(initialState);
+    },
+    
+    /**
+     * Сохранение состояния в localStorage
+     */
+    _saveState() {
+        try {
+            localStorage.setItem('app_state', JSON.stringify(this.state));
+        } catch (error) {
+            console.error('Ошибка сохранения состояния:', error);
+        }
+    },
+    
+    /**
+     * Загрузка состояния из localStorage
+     */
+    loadState() {
+        try {
+            const savedState = localStorage.getItem('app_state');
+            if (savedState) {
+                this.state = JSON.parse(savedState);
+                return true;
+            }
+        } catch (error) {
+            console.error('Ошибка загрузки состояния:', error);
+        }
+        return false;
+    },
+    
+    /**
+     * Глубокое слияние объектов
+     */
+    _deepMerge(target, source) {
+        const output = { ...target };
+        
+        if (this._isObject(target) && this._isObject(source)) {
+            Object.keys(source).forEach(key => {
+                if (this._isObject(source[key])) {
+                    if (!(key in target)) {
+                        Object.assign(output, { [key]: source[key] });
+                    } else {
+                        output[key] = this._deepMerge(target[key], source[key]);
+                    }
+                } else {
+                    Object.assign(output, { [key]: source[key] });
+                }
+            });
+        }
+        
+        return output;
+    },
+    
+    /**
+     * Проверка, является ли значение объектом
+     */
+    _isObject(item) {
+        return (item && typeof item === 'object' && !Array.isArray(item));
+    }
+};
+
+// Инициализация состояния
+StateManager.loadState();
+
+// Глобальный экспорт для отладки
+window.appState = StateManager;
+window.appEvents = EventManager;
 
 // Проверка версии и очистка старых данных
 function checkVersionAndCleanup() {
@@ -95,86 +370,24 @@ function checkVersionAndCleanup() {
 function openDriverCabinetFromStep1() {
     try {
         console.log('🔄 Открываю личный кабинет из шага 1...');
-        
-        let phone = '';
-        let name = '';
-        
-        // 1. Пробуем получить из поля ввода
+
         const phoneInput = document.getElementById('phone-input');
-        if (phoneInput && phoneInput.value) {
-            phone = phoneInput.value.replace(/\s/g, '');
-        }
-        
-        // 2. Если поле пустое, пробуем получить из сохраненных данных
-        if (!phone || phone.length < 10) {
-            // Пробуем из текущей сессии
-            if (registrationState && registrationState.data && registrationState.data.phone) {
-                phone = registrationState.data.phone;
-                name = registrationState.data.fio || '';
-                console.log('📱 Телефон из registrationState:', phone);
+        const rawPhone = phoneInput ? phoneInput.value : '';
+
+        // На шаге 1 входим в кабинет ТОЛЬКО по введенному телефону
+        if (!rawPhone || rawPhone.replace(/\D/g, '').length < 10) {
+            showNotification('Введите номер телефона в поле, чтобы открыть личный кабинет', 'warning');
+            if (phoneInput) {
+                phoneInput.focus();
             }
-            
-            // Пробуем из сохраненных данных для кабинета
-            if (!phone) {
-                try {
-                    const savedDriverInfo = localStorage.getItem('driver_info_for_cabinet');
-                    if (savedDriverInfo) {
-                        const driverInfo = JSON.parse(savedDriverInfo);
-                        phone = driverInfo.phone || '';
-                        name = driverInfo.name || '';
-                        console.log('📱 Телефон из driver_info_for_cabinet:', phone);
-                    }
-                } catch (e) {
-                    console.log('❌ Ошибка парсинга driver_info_for_cabinet:', e);
-                }
-            }
-            
-            // Пробуем из последней регистрации
-            if (!phone) {
-                phone = localStorage.getItem('last_driver_phone') || '';
-                name = localStorage.getItem('last_driver_name') || '';
-                console.log('📱 Телефон из last_driver_phone:', phone);
-            }
-            
-            // Пробуем из оффлайн данных
-            if (!phone) {
-                try {
-                    const offlineRegistrations = JSON.parse(localStorage.getItem('offline_registrations') || '[]');
-                    if (offlineRegistrations.length > 0) {
-                        phone = offlineRegistrations[offlineRegistrations.length - 1].data?.phone || '';
-                        name = offlineRegistrations[offlineRegistrations.length - 1].data?.fio || '';
-                        console.log('📱 Телефон из оффлайн данных:', phone);
-                    }
-                } catch (e) {
-                    console.log('❌ Ошибка получения оффлайн данных:', e);
-                }
-            }
-        }
-        
-        // 3. Если телефон все еще не найден, показываем модальное окно для ввода
-        if (!phone || phone.length < 10) {
-            console.log('📱 Телефон не найден, показываю модальное окно');
-            showPhoneInputModal();
             return;
         }
-        
-        const normalizedPhone = normalizePhone(phone);
-        console.log('✅ Нормализованный телефон:', normalizedPhone);
-        
-        // Сохраняем телефон для будущих использований
-        saveDriverInfoForCabinet(normalizedPhone, name);
-        
-        // Сохраняем телефон в registrationState для совместимости
-        if (registrationState && registrationState.data) {
-            registrationState.data.phone = normalizedPhone;
-            registrationState.data.fio = name || '';
-            saveRegistrationState();
-        }
-        
+
+        const normalizedPhone = normalizePhone(rawPhone);
+        saveDriverInfoForCabinet(normalizedPhone, '');
+
         // Показываем загрузчик
         showLoader(true);
-        
-        // Открываем личный кабинет с небольшой задержкой для мобильных устройств
         setTimeout(() => {
             openDriverCabinet();
         }, 300);
@@ -186,82 +399,337 @@ function openDriverCabinetFromStep1() {
     }
 }
 
-// Функция для закрытия активного модального окна
-function closeCurrentModal() {
-    if (currentActiveModal) {
-        closeModalById(currentActiveModal);
-    }
-}
-
-// Функция для закрытия всех модальных окон
-function closeAllModals() {
-    document.querySelectorAll('.modal-overlay').forEach(modal => {
-        modal.style.display = 'none';
-    });
-    currentActiveModal = null;
-}
-
-// ==================== КЭШИРОВАНИЕ ТОП-ДАННЫХ ====================
-
-// Загрузка ТОП-данных при старте приложения
-async function loadTopData() {
-  try {
-    logToConsole('INFO', 'Загрузка ТОП данных');
+// ==================== МЕНЕДЖЕР МОДАЛЬНЫХ ОКОН ====================
+const ModalManager = {
+    // Кэш для хранения загруженных модальных окон
+    modalCache: new Map(),
     
-    // Проверяем локальный кэш
-    const cached = localStorage.getItem(TOP_DATA_CACHE_KEY);
-    if (cached) {
-      const { data, timestamp } = JSON.parse(cached);
-      const age = Date.now() - timestamp;
-      
-      // Если кэш свежий (менее 24 часов), используем его
-      if (age < TOP_DATA_CACHE_TTL) {
-        logToConsole('INFO', 'Использую ТОП данные из кэша', {
-          age: Math.round(age / 1000 / 60) + ' минут',
-          suppliers: data.suppliers?.length || 0,
-          brands: data.brands?.length || 0
+    // Текущее активное модальное окно
+    currentModal: null,
+    
+    // Инициализация менеджера
+    init() {
+        // Обработка клика вне модального окна
+        document.addEventListener('click', (e) => {
+            if (this.currentModal && e.target.classList.contains('modal-overlay')) {
+                this.closeCurrent();
+            }
         });
-        return data;
-      }
+        
+        // Обработка клавиши Esc
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.currentModal) {
+                this.closeCurrent();
+            }
+        });
+        
+        logToConsole('INFO', 'Менеджер модальных окон инициализирован');
+    },
+    
+    // Открытие модального окна
+    async open(modalId, options = {}) {
+        // Закрываем текущее модальное окно, если оно есть
+        if (this.currentModal) {
+            this.closeCurrent();
+        }
+        
+        try {
+            // Проверяем кэш
+            let modalElement = this.modalCache.get(modalId);
+            
+            // Если модальное окно не в кэше, загружаем его
+            if (!modalElement) {
+                modalElement = document.getElementById(modalId);
+                
+                if (!modalElement) {
+                    throw new Error(`Модальное окно с ID "${modalId}" не найдено`);
+                }
+                
+                // Клонируем элемент для кэширования
+                const modalClone = modalElement.cloneNode(true);
+                this.modalCache.set(modalId, modalClone);
+                
+                logToConsole('DEBUG', `Модальное окно "${modalId}" загружено в кэш`);
+            } else {
+                // Используем клонированный элемент из кэша
+                modalElement = modalElement.cloneNode(true);
+                document.body.appendChild(modalElement);
+            }
+            
+            // Показываем модальное окно
+            modalElement.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            this.currentModal = modalElement;
+            
+            // Вызываем колбэк после открытия
+            if (typeof options.onOpen === 'function') {
+                setTimeout(() => options.onOpen(modalElement), 10);
+            }
+            
+            logToConsole('DEBUG', `Открыто модальное окно: ${modalId}`);
+            return modalElement;
+            
+        } catch (error) {
+            logToConsole('ERROR', `Ошибка открытия модального окна ${modalId}:`, error);
+            showNotification('Ошибка открытия окна', 'error');
+            return null;
+        }
+    },
+    
+    // Закрытие текущего модального окна
+    closeCurrent() {
+        if (!this.currentModal) return;
+        
+        this.currentModal.classList.remove('active');
+        
+        // Удаляем элемент из DOM после анимации
+        setTimeout(() => {
+            if (this.currentModal && this.currentModal.parentNode) {
+                this.currentModal.parentNode.removeChild(this.currentModal);
+            }
+            
+            document.body.style.overflow = '';
+            this.currentModal = null;
+        }, 300); // Должно совпадать с длительностью CSS-анимации
+        
+        logToConsole('DEBUG', 'Текущее модальное окно закрыто');
+    },
+    
+    // Закрытие всех модальных окон
+    closeAll() {
+        if (this.currentModal) {
+            this.closeCurrent();
+        }
+        
+        document.querySelectorAll('.modal-overlay').forEach(modal => {
+            modal.classList.remove('active');
+            setTimeout(() => {
+                if (modal.parentNode) {
+                    modal.parentNode.removeChild(modal);
+                }
+            }, 300);
+        });
+        
+        document.body.style.overflow = '';
+        logToConsole('DEBUG', 'Все модальные окна закрыты');
     }
+};
+
+// Инициализация менеджера модальных окон при загрузке
+if (typeof document !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', () => ModalManager.init());
+}
+
+// ==================== КЭШИРОВАНИЕ ДАННЫХ ====================
+
+const CacheManager = {
+    // Префикс для ключей кэша
+    PREFIX: 'drv_reg_',
     
-    // Загружаем с сервера
-    const response = await sendAPIRequest({
-      action: 'get_top_data'
-    });
+    // Получение данных из кэша
+    get(key, defaultValue = null) {
+        try {
+            const cached = localStorage.getItem(this.PREFIX + key);
+            if (!cached) return defaultValue;
+            
+            const { value, expires } = JSON.parse(cached);
+            
+            // Проверяем срок действия кэша
+            if (expires && Date.now() > expires) {
+                this.delete(key);
+                return defaultValue;
+            }
+            
+            return value;
+        } catch (error) {
+            logToConsole('ERROR', `Ошибка чтения из кэша (${key}):`, error);
+            return defaultValue;
+        }
+    },
     
-    if (response && response.success) {
-      // Сохраняем в кэш
-      const cacheData = {
-        data: response,
-        timestamp: Date.now()
-      };
-      localStorage.setItem(TOP_DATA_CACHE_KEY, JSON.stringify(cacheData));
-      
-      logToConsole('SUCCESS', 'ТОП данные загружены и сохранены', {
-        suppliers: response.suppliers?.length || 0,
-        brands: response.brands?.length || 0,
-        fromCache: response.fromCache || false
-      });
-      
-      return response;
-    } else {
-      throw new Error('Не удалось загрузить ТОП данные');
+    // Сохранение данных в кэш
+    set(key, value, ttl = null) {
+        try {
+            const data = {
+                value,
+                expires: ttl ? Date.now() + ttl : null
+            };
+            
+            localStorage.setItem(this.PREFIX + key, JSON.stringify(data));
+            return true;
+        } catch (error) {
+            logToConsole('ERROR', `Ошибка записи в кэш (${key}):`, error);
+            return false;
+        }
+    },
+    
+    // Удаление данных из кэша
+    delete(key) {
+        try {
+            localStorage.removeItem(this.PREFIX + key);
+            return true;
+        } catch (error) {
+            logToConsole('ERROR', `Ошибка удаления из кэша (${key}):`, error);
+            return false;
+        }
+    },
+    
+    // Очистка устаревших записей
+    cleanup() {
+        try {
+            const prefix = this.PREFIX;
+            const now = Date.now();
+            let cleared = 0;
+            
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                
+                if (key.startsWith(prefix)) {
+                    try {
+                        const { expires } = JSON.parse(localStorage.getItem(key) || '{}');
+                        if (expires && expires < now) {
+                            localStorage.removeItem(key);
+                            cleared++;
+                        }
+                    } catch (e) {
+                        // Пропускаем невалидные записи
+                        continue;
+                    }
+                }
+            }
+            
+            if (cleared > 0) {
+                logToConsole('INFO', `Очищено устаревших записей кэша: ${cleared}`);
+            }
+            
+            return cleared;
+        } catch (error) {
+            logToConsole('ERROR', 'Ошибка очистки кэша:', error);
+            return -1;
+        }
     }
+};
+
+// Периодическая очистка устаревших записей кэша
+setInterval(() => CacheManager.cleanup(), 60 * 60 * 1000); // Каждый час
+
+// ==================== ЗАГРУЗКА ТОП-ДАННЫХ ====================
+
+// Загрузка ТОП-данных с возможностью принудительного обновления
+async function loadTopData(forceUpdate = false) {
+    const CACHE_KEY = 'top_data';
+    const CACHE_TTL = 5 * 60 * 1000; // 5 минут вместо 24 часов
     
-  } catch (error) {
-    logToConsole('ERROR', 'Ошибка загрузки ТОП данных', error);
-    
-    // Пробуем использовать старый кэш даже если он устарел
-    const cached = localStorage.getItem(TOP_DATA_CACHE_KEY);
-    if (cached) {
-      const { data } = JSON.parse(cached);
-      logToConsole('WARN', 'Использую устаревшие ТОП данные из кэша');
-      return data;
+    try {
+        logToConsole('INFO', `Загрузка ТОП данных (forceUpdate: ${forceUpdate})`);
+        
+        // Если не требуется принудительное обновление, пробуем получить данные из кэша
+        if (!forceUpdate) {
+            const cachedData = CacheManager.get(CACHE_KEY);
+            if (cachedData) {
+                // Проверяем, не устарели ли данные (больше 5 минут)
+                const cacheAge = Date.now() - (cachedData._timestamp || 0);
+                const isStale = cacheAge > CACHE_TTL;
+                
+                if (!isStale) {
+                    logToConsole('INFO', 'Использую актуальные ТОП данные из кэша', {
+                        suppliers: cachedData.suppliers?.length || 0,
+                        brands: cachedData.brands?.length || 0,
+                        age: Math.round(cacheAge / 1000) + ' сек.'
+                    });
+                    return cachedData;
+                } else {
+                    logToConsole('INFO', 'Данные в кэше устарели, загружаем свежие', {
+                        age: Math.round(cacheAge / 1000) + ' сек.'
+                    });
+                }
+            }
+        } else {
+            logToConsole('INFO', 'Принудительное обновление ТОП данных');
+        }
+        
+        // Загружаем с сервера
+        const response = await sendAPIRequest({
+            action: 'get_top_data',
+            _: forceUpdate ? Date.now() : '' // Добавляем временную метку для предотвращения кэширования
+        });
+        
+        if (response && response.success) {
+            // Добавляем временную метку
+            response._timestamp = Date.now();
+            
+            // Сохраняем в кэш
+            CacheManager.set(CACHE_KEY, response, CACHE_TTL);
+            
+            logToConsole('INFO', 'ТОП данные успешно загружены и сохранены в кэш', {
+                suppliers: response.suppliers?.length || 0,
+                brands: response.brands?.length || 0,
+                fromServer: true
+            });
+            
+            // Оповещаем о новых данных
+            EventManager.emit('topDataUpdated', response);
+            
+            return response;
+        } else {
+            throw new Error('Не удалось загрузить ТОП данные с сервера');
+        }
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка загрузки ТОП данных:', error);
+        
+        // Пробуем использовать старый кэш даже если он устарел
+        const cached = localStorage.getItem('top_data_cache');
+        if (cached) {
+            try {
+                const data = JSON.parse(cached);
+                logToConsole('WARN', 'Использую устаревший кэш ТОП данных');
+                return data;
+            } catch (e) {
+                logToConsole('ERROR', 'Ошибка при разборе устаревшего кэша:', e);
+            }
+        }
+        
+        // Возвращаем пустые данные в случае ошибки
+        return {
+            success: false,
+            suppliers: [],
+            brands: []
+        };
     }
+}
+
+/**
+ * Принудительное обновление ТОП-данных с очисткой кэша
+ */
+function refreshTopData() {
+    logToConsole('INFO', 'Принудительное обновление ТОП данных с очисткой кэша');
     
-    return null;
-  }
+    // Очищаем кэш перед загрузкой новых данных
+    const CACHE_KEY = 'top_data';
+    CacheManager.delete(CACHE_KEY);
+    
+    // Загружаем с принудительным обновлением
+    return loadTopData(true)
+        .then(data => {
+            if (data) {
+                showNotification('Данные успешно обновлены', 'success');
+                // Обновляем интерфейс, если нужно
+                if (typeof updateUIWithNewData === 'function') {
+                    updateUIWithNewData(data);
+                }
+            }
+            return data;
+        })
+        .catch(error => {
+            logToConsole('ERROR', 'Ошибка при обновлении данных:', error);
+            showNotification('Ошибка при обновлении данных. Проверьте соединение.', 'error');
+            throw error; // Пробрасываем ошибку дальше
+        });
+}
+
+// Связываем функцию с глобальным объектом для доступа из HTML
+if (typeof window !== 'undefined') {
+    window.refreshTopData = refreshTopData;
 }
 
 // ==================== ИСПРАВЛЕННЫЕ ФУНКЦИИ ДАТЫ ====================
@@ -322,25 +790,46 @@ function parseAnyDate(dateStr) {
             return date;
         }
         
+        // Если ни один формат не подошел, возвращаем дату по умолчанию
         return new Date(0);
-        
-    } catch (e) {
-        console.log('Ошибка парсинга даты:', e, dateStr);
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка при разборе даты', { dateStr, error });
         return new Date(0);
     }
 }
 
-// Принудительное обновление ТОП-данных
-async function refreshTopData() {
-  try {
-    logToConsole('INFO', 'Принудительное обновление ТОП данных');
-    localStorage.removeItem(TOP_DATA_CACHE_KEY);
-    await loadTopData();
-    showNotification('✅ ТОП данные обновлены', 'success');
-  } catch (error) {
-    logToConsole('ERROR', 'Ошибка обновления ТОП данных', error);
-    showNotification('❌ Ошибка обновления данных', 'error');
-  }
+// Функция для обновления интерфейса при получении новых данных
+function updateUIWithNewData(data) {
+    // Здесь должна быть логика обновления интерфейса
+    // Например, перезагрузка списка поставщиков и марок
+    if (data.suppliers && Array.isArray(data.suppliers)) {
+        // Обновляем список поставщиков
+        updateSuppliersList(data.suppliers);
+    }
+    
+    if (data.brands && Array.isArray(data.brands)) {
+        // Обновляем список марок
+        updateBrandsList(data.brands);
+    }
+}
+
+// Обновление списка поставщиков
+function updateSuppliersList(suppliers) {
+    const suppliersContainer = document.getElementById('suppliers-container');
+    if (!suppliersContainer) return;
+    
+    // Здесь должна быть логика обновления DOM с новыми данными
+    // Например:
+    // suppliersContainer.innerHTML = suppliers.map(s => `<div>${s.name}</div>`).join('');
+}
+
+// Обновление списка марок
+function updateBrandsList(brands) {
+    const brandsContainer = document.getElementById('brands-container');
+    if (!brandsContainer) return;
+    
+    // Аналогично обновлению списка поставщиков
+    // brandsContainer.innerHTML = brands.map(b => `<div>${b.name}</div>`).join('');
 }
 
 // ==================== ЛОГИРОВАНИЕ ====================
@@ -408,99 +897,473 @@ function logToConsole(level, message, data = null) {
     return logEntry;
 }
 
-function debugRegistrationData() {
-    console.log('=== ДЕБАГ ДАННЫХ РЕГИСТРАЦИИ ===');
-    console.log('Текущее состояние:', registrationState);
-    console.log('Телефон:', registrationState.data.phone);
-    console.log('Нормализованный телефон:', normalizePhone(registrationState.data.phone));
-    console.log('Поле gate в данных:', registrationState.data.gate);
-    console.log('Объект для отправки:', JSON.stringify(registrationState.data, null, 2));
-    
-    // Проверяем, есть ли функция normalizePhone
-    console.log('Функция normalizePhone:', typeof normalizePhone);
-    
-    return registrationState.data;
+function isLocalNotificationsEnabled() {
+    try {
+        return localStorage.getItem('local_notifications_enabled') === 'true';
+    } catch (e) {
+        return false;
+    }
+}
+
+function setLocalNotificationsEnabled(enabled) {
+    try {
+        localStorage.setItem('local_notifications_enabled', enabled ? 'true' : 'false');
+    } catch (e) {
+        // ignore
+    }
+}
+
+function updateLocalNotificationsUI() {
+    try {
+        const buttons = [
+            document.getElementById('toggle-local-notifications-btn'),
+            document.getElementById('toggle-local-notifications-btn-step1')
+        ].filter(Boolean);
+
+        if (buttons.length === 0) return;
+
+        const supported = ("Notification" in window);
+        const enabled = isLocalNotificationsEnabled();
+
+        buttons.forEach(btn => {
+            if (!supported) {
+                btn.disabled = true;
+                btn.textContent = '🔕 Уведомления не поддерживаются';
+                return;
+            }
+
+            if (Notification.permission === 'denied') {
+                // Не блокируем: по клику покажем инструкцию
+                btn.disabled = false;
+                btn.textContent = '🔕 Уведомления запрещены (как включить)';
+                return;
+            }
+
+            btn.disabled = false;
+            btn.textContent = enabled ? '🔔 Уведомления включены (выкл)' : '🔕 Включить уведомления';
+        });
+    } catch (e) {
+        // ignore
+    }
+}
+
+function updateNotificationsOnlyModalFromCache(driverPhone) {
+    try {
+        const modal = document.getElementById('notifications-only-modal');
+        if (!modal || modal.style.display === 'none') return;
+
+        const cacheKey = 'notifications_cache_' + driverPhone;
+        const cached = localStorage.getItem(cacheKey);
+        const notifications = cached ? (JSON.parse(cached).data || []) : [];
+        const unreadCount = notifications.filter(n => !n.status || n.status !== 'read').length;
+
+        const titleEl = document.getElementById('notifications-only-title');
+        if (titleEl) {
+            titleEl.textContent = `🔔 Уведомления${unreadCount > 0 ? ` (${unreadCount})` : ''}`;
+        }
+
+        const content = document.getElementById('notifications-only-content');
+        if (content) {
+            content.innerHTML = renderNotificationsTab(notifications);
+        }
+
+        updateNotificationBadge(unreadCount);
+        updateLocalNotificationsUI();
+    } catch (e) {
+        // ignore
+    }
+}
+
+function showNotificationsDeniedHelpModal() {
+    try {
+        const modalId = 'notifications-denied-help-modal';
+        const old = document.getElementById(modalId);
+        if (old) old.remove();
+
+        const currentHost = window.location.host || '';
+
+        const html = `
+            <div class="modal-overlay" id="${modalId}" onclick="if(event.target === this) closeModalById('${modalId}')">
+                <div class="modal" onclick="event.stopPropagation()" style="max-width: 520px;">
+                    <div class="modal-header">
+                        <h3 class="modal-title">🔕 Уведомления запрещены</h3>
+                        <button class="modal-close" onclick="closeModalById('${modalId}')">✕</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="info-box">
+                            <p><strong>Включить уведомления автоматически нельзя</strong> — браузер блокирует повторный запрос, если вы нажали «Запретить».</p>
+                            <p>Но вы можете включить их вручную за 20 секунд:</p>
+                        </div>
+
+                        <div style="margin-top: 12px; font-size: 14px; line-height: 1.5; color: #333;">
+                            <p><strong>Chrome / Opera (Android):</strong></p>
+                            <p>1) Нажмите на <strong>замок</strong> слева от адреса</p>
+                            <p>2) <strong>Настройки сайта</strong></p>
+                            <p>3) <strong>Уведомления</strong> → <strong>Разрешить</strong></p>
+                            <p style="margin-top: 10px;"><strong>iPhone Safari:</strong> уведомления зависят от версии iOS и часто работают только если сайт установлен как PWA.</p>
+                        </div>
+
+                        <div class="info-box" style="margin-top: 12px;">
+                            <p>Сайт: <strong>${currentHost}</strong></p>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" onclick="closeModalById('${modalId}')">Понятно</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const container = document.createElement('div');
+        container.innerHTML = html;
+        document.body.appendChild(container);
+    } catch (e) {
+        console.error('Ошибка показа помощи по уведомлениям:', e);
+    }
+}
+
+async function enableLocalNotifications() {
+    try {
+        // Toggle OFF
+        if (isLocalNotificationsEnabled()) {
+            setLocalNotificationsEnabled(false);
+            updateLocalNotificationsUI();
+            showNotification('🔕 Уведомления выключены', 'info');
+            return true;
+        }
+
+        if (!("Notification" in window)) {
+            showNotification('Браузер не поддерживает уведомления', 'warning');
+            return false;
+        }
+
+        if (Notification.permission === 'granted') {
+            setLocalNotificationsEnabled(true);
+            updateLocalNotificationsUI();
+            showNotification('🔔 Уведомления включены', 'success');
+            return true;
+        }
+
+        if (Notification.permission === 'denied') {
+            setLocalNotificationsEnabled(false);
+            updateLocalNotificationsUI();
+
+            // Нельзя вызвать системный запрос повторно. Показываем понятную инструкцию.
+            const want = confirm('Уведомления запрещены в браузере. Показать инструкцию как включить?');
+            if (want) {
+                showNotificationsDeniedHelpModal();
+            }
+            return false;
+        }
+
+        const permission = await Notification.requestPermission();
+        const enabled = permission === 'granted';
+        setLocalNotificationsEnabled(enabled);
+        updateLocalNotificationsUI();
+        showNotification(enabled ? '🔔 Уведомления включены' : 'Уведомления не разрешены', enabled ? 'success' : 'warning');
+        return enabled;
+    } catch (e) {
+        console.error('Ошибка enableLocalNotifications:', e);
+        return false;
+    }
+}
+
+function getShownNotificationIdsKey(phone) {
+    return `shown_notification_ids_${phone || 'unknown'}`;
+}
+
+function hasShownNotification(phone, notificationId) {
+    try {
+        if (!phone || !notificationId) return false;
+        const key = getShownNotificationIdsKey(phone);
+        const raw = localStorage.getItem(key);
+        if (!raw) return false;
+        const ids = JSON.parse(raw);
+        return Array.isArray(ids) ? ids.includes(notificationId) : false;
+    } catch (e) {
+        return false;
+    }
+}
+
+function markNotificationShown(phone, notificationId) {
+    try {
+        if (!phone || !notificationId) return;
+        const key = getShownNotificationIdsKey(phone);
+        const raw = localStorage.getItem(key);
+        const ids = raw ? JSON.parse(raw) : [];
+        const safeIds = Array.isArray(ids) ? ids : [];
+
+        if (!safeIds.includes(notificationId)) {
+            safeIds.unshift(notificationId);
+        }
+
+        // Ограничиваем размер, чтобы не раздувать localStorage
+        localStorage.setItem(key, JSON.stringify(safeIds.slice(0, 100)));
+    } catch (e) {
+        // ignore
+    }
 }
 
 // ==================== ИНИЦИАЛИЗАЦИЯ ====================
 
-document.addEventListener('DOMContentLoaded', function() {
-    logToConsole('INFO', 'Приложение загружается', { version: CONFIG.APP_VERSION });
-    
-    // Загружаем CONFIG из window если есть
-    if (window.CONFIG) {
-        CONFIG = { ...CONFIG, ...window.CONFIG };
-        logToConsole('INFO', 'Конфигурация загружена', { url: CONFIG.APP_SCRIPT_URL });
+/**
+ * Основная функция инициализации приложения
+ */
+async function initializeApp() {
+    try {
+        logToConsole('INFO', 'Инициализация приложения', { version: CONFIG.APP_VERSION });
+        ensureRegistrationState();
+        
+        // 1. Загрузка конфигурации
+        await loadConfiguration();
+        
+        // 2. Проверка версии и очистка кэша
+        checkVersionAndCleanup();
+        
+        // 3. Оптимизация для мобильных устройств
+        optimizeForMobile();
+        
+        // 4. Восстановление состояния
+        loadRegistrationState();
+        ensureRegistrationState();
+        
+        // 5. Настройка обработчиков событий
+        setupEventHandlers();
+        
+        // 6. Инициализация системы уведомлений
+        initializeNotificationSystem();
+        
+        // 7. Фоновые задачи
+        startBackgroundTasks();
+        
+        // 8. Показ интерфейса
+        showStep(registrationState.step);
+        showOfflineDataCount();
+
+        // Обновляем UI кнопок локальных уведомлений (если уже есть на странице)
+        setTimeout(() => updateLocalNotificationsUI(), 0);
+        
+        logToConsole('INFO', 'Приложение успешно инициализировано');
+    } catch (error) {
+        logToConsole('ERROR', 'Критическая ошибка при инициализации', error);
+        showNotification('❌ Ошибка инициализации приложения', 'error');
     }
-     checkVersionAndCleanup();
-    // Оптимизируем для мобильных устройств
-    optimizeForMobile();
-    
-    // Загружаем сохраненное состояние
-    loadRegistrationState();
-    
-    // Настраиваем обработчики
+}
+
+/**
+ * Загрузка конфигурации приложения
+ */
+function loadConfiguration() {
+    return new Promise((resolve) => {
+        try {
+            if (window.CONFIG) {
+                CONFIG = { ...CONFIG, ...window.CONFIG };
+                logToConsole('INFO', 'Конфигурация загружена', { 
+                    url: CONFIG.APP_SCRIPT_URL,
+                    version: CONFIG.APP_VERSION 
+                });
+            }
+            resolve();
+        } catch (error) {
+            logToConsole('ERROR', 'Ошибка загрузки конфигурации', error);
+            resolve(); // Продолжаем работу с настройками по умолчанию
+        }
+    });
+}
+
+/**
+ * Настройка всех обработчиков событий
+ */
+function setupEventHandlers() {
+    // Основные обработчики
     setupPhoneInput();
     setupEventListeners();
-    setupMobileTouchHandlers(); // <-- Добавьте эту строку
+    setupMobileTouchHandlers();
     
-    // Инициализация системы уведомлений
-    initializeNotificationSystem();
+    // Обработчики изменения состояния сети
+    setupNetworkHandlers();
+}
+
+/**
+ * Настройка обработчиков работы с сетью
+ */
+function setupNetworkHandlers() {
+    window.addEventListener('online', handleOnlineStatusChange);
+    window.addEventListener('offline', handleOfflineStatusChange);
+}
+
+/**
+ * Обработчик восстановления соединения
+ */
+function handleOnlineStatusChange() {
+    logToConsole('INFO', 'Соединение восстановлено');
+    updateConnectionStatus(true);
+    showNotification('🌐 Соединение восстановлено', 'success');
     
-    // ПРЕДВАРИТЕЛЬНАЯ ЗАГРУЗКА ТОП ДАННЫХ (в фоне)
-    setTimeout(() => {
-        loadTopData().then(() => {
-            logToConsole('INFO', 'Предварительная загрузка ТОП данных завершена');
-        }).catch(error => {
-            logToConsole('ERROR', 'Ошибка предварительной загрузки ТОП данных', error);
-        });
-    }, 1000);
+    // Пробуем отправить оффлайн данные с задержкой
+    setTimeout(() => sendOfflineData(), 2000);
+}
+
+/**
+ * Обработчик потери соединения
+ */
+function handleOfflineStatusChange() {
+    logToConsole('WARN', 'Соединение потеряно');
+    updateConnectionStatus(false);
+    showNotification('⚠️ Нет соединения с интернетом', 'warning');
+}
+
+/**
+ * Запуск фоновых задач
+ */
+function startBackgroundTasks() {
+    // Загрузка ТОП данных с отложенным стартом
+    setTimeout(loadTopDataWithRetry, 1000);
     
-    // Показываем текущий шаг
-    showStep(registrationState.step);
+    // Тестирование соединения с API
+    setTimeout(testAPIConnection, 1000);
     
-    // Показываем оффлайн данные
-    showOfflineDataCount();
-    
-    // Тестируем соединение
-    setTimeout(() => {
-        testAPIConnection();
-    }, 1000);
-    
-    // Периодическая проверка соединения
+    // Периодическая проверка оффлайн данных
     setInterval(checkConnectionAndSendOffline, 60000);
     
-    logToConsole('INFO', 'Приложение инициализировано');
-});
+    // Очистка старых логов
+    setTimeout(cleanupOldLogs, 5000);
+}
+
+/**
+ * Загрузка ТОП данных с повторными попытками
+ */
+async function loadTopDataWithRetry(maxRetries = 3) {
+    try {
+        await loadTopData();
+        logToConsole('INFO', 'Предварительная загрузка ТОП данных завершена');
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка загрузки ТОП данных', error);
+        
+        // Повторная попытка с экспоненциальной задержкой
+        if (maxRetries > 0) {
+            const delay = Math.pow(2, 4 - maxRetries) * 1000; // 1s, 2s, 4s
+            logToConsole('INFO', `Повторная попытка через ${delay}мс...`);
+            
+            setTimeout(() => loadTopDataWithRetry(maxRetries - 1), delay);
+        }
+    }
+}
+
+/**
+ * Очистка старых логов
+ */
+function cleanupOldLogs() {
+    try {
+        const logs = JSON.parse(localStorage.getItem('app_logs') || '[]');
+        if (logs.length > 200) {
+            localStorage.setItem('app_logs', JSON.stringify(logs.slice(0, 200)));
+            logToConsole('INFO', 'Очищены старые логи', { removed: logs.length - 200 });
+        }
+    } catch (error) {
+        logToConsole('ERROR', 'Ошибка очистки логов', error);
+    }
+}
+
+// Запуск приложения при загрузке страницы
+document.addEventListener('DOMContentLoaded', initializeApp);
 
 // ==================== ОБРАБОТЧИКИ СОБЫТИЙ ====================
 
+/**
+ * Настройка всех обработчиков событий
+ */
 function setupEventListeners() {
     // Обработка Enter в полях ввода
-    document.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            const input = e.target;
-            if (input.tagName === 'INPUT') {
-                handleEnterKey(input);
+    document.addEventListener('keypress', handleKeyPress);
+    
+    // Обработка кликов по документу
+    document.addEventListener('click', handleDocumentClick);
+    
+    // Обработка изменений состояния сети
+    setupNetworkHandlers();
+}
+
+/**
+ * Обработка нажатий клавиш
+ */
+function handleKeyPress(e) {
+    // Enter в полях ввода
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+        e.preventDefault();
+        handleEnterKey(e.target);
+    }
+    
+    // Esc для закрытия модальных окон
+    if (e.key === 'Escape') {
+        closeCurrentModal();
+    }
+}
+
+/**
+ * Обработка кликов по документу
+ */
+function handleDocumentClick(e) {
+    // Закрытие модальных окон при клике вне контента
+    const modal = e.target.closest('.modal');
+    if (!modal && document.querySelector('.modal-overlay:not(.hidden)')) {
+        closeCurrentModal();
+    }
+    
+    // Делегированная обработка кликов по кнопкам
+    if (e.target.matches('[data-action]')) {
+        handleAction(e.target.dataset.action, e.target);
+    }
+}
+
+/**
+ * Обработка действий
+ */
+function handleAction(action, element) {
+    const actions = {
+        'submit-form': () => handleFormSubmit(element.closest('form')),
+        'open-modal': () => openModal(element.dataset.target),
+        'close-modal': () => closeModalById(element.closest('.modal-overlay').id),
+        'go-back': () => goBack(),
+        'refresh-data': () => refreshData()
+        // Добавьте другие действия по мере необходимости
+    };
+    
+    if (actions[action]) {
+        actions[action]();
+    } else {
+        console.warn(`Неизвестное действие: ${action}`);
+    }
+}
+
+/**
+ * Настройка обработчиков сети
+ */
+function setupNetworkHandlers() {
+    // Обработка изменения состояния сети
+    const updateOnlineStatus = () => {
+        const isOnline = navigator.onLine;
+        StateManager.setState({
+            ui: {
+                isOnline,
+                lastUpdate: new Date().toISOString()
             }
-        }
-    });
-    
-    // Обновление статуса соединения
-    window.addEventListener('online', function() {
-        logToConsole('INFO', 'Соединение восстановлено');
-        updateConnectionStatus(true);
-        showNotification('🌐 Соединение восстановлено', 'success');
+        });
         
-        // Пробуем отправить оффлайн данные
-        setTimeout(() => sendOfflineData(), 2000);
-    });
+        if (isOnline) {
+            EventManager.emit('online');
+            sendOfflineData();
+        } else {
+            EventManager.emit('offline');
+        }
+    };
     
-    window.addEventListener('offline', function() {
-        logToConsole('WARN', 'Соединение потеряно');
-        updateConnectionStatus(false);
-        showNotification('⚠️ Нет соединения с интернетом', 'warning');
-    });
+    // Подписка на события изменения состояния сети
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    
+    // Инициализация начального состояния
+    updateOnlineStatus();
 }
 
 // ==================== ОБРАБОТКА МОБИЛЬНЫХ КАСАНИЙ ====================
@@ -510,51 +1373,45 @@ function setupMobileTouchHandlers() {
     // Обработчик для кнопки личного кабинета
     const cabinetBtn = document.querySelector('[onclick*="openDriverCabinetFromStep1"]');
     if (cabinetBtn) {
-        // Удаляем старый обработчик
-        cabinetBtn.removeAttribute('onclick');
-        
-        // Добавляем новые обработчики для мобильных устройств
-        cabinetBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            console.log('📱 Нажата кнопка личного кабинета');
-            openDriverCabinetFromStep1();
-        });
-        
-        // Добавляем обработчик для касаний (мобильные устройства)
-        cabinetBtn.addEventListener('touchstart', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
+        if (cabinetBtn.dataset && cabinetBtn.dataset.mobileBound === '1') {
+            return;
+        }
+        if (cabinetBtn.dataset) {
+            cabinetBtn.dataset.mobileBound = '1';
+        }
+
+        // На мобильных НЕ блокируем событие preventDefault/stopPropagation,
+        // иначе разные браузеры (Opera/Chrome) по-разному перестают генерировать click.
+        cabinetBtn.addEventListener('pointerdown', function() {
             this.style.transform = 'scale(0.98)';
             this.style.opacity = '0.9';
-        }, { passive: false });
-        
-        cabinetBtn.addEventListener('touchend', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
+        }, { passive: true });
+
+        cabinetBtn.addEventListener('pointerup', function() {
             this.style.transform = '';
             this.style.opacity = '';
-            console.log('📱 Касание кнопки личного кабинета');
-            openDriverCabinetFromStep1();
-        }, { passive: false });
+        }, { passive: true });
     }
     
-    // Обработчик для кнопки начала регистрации
+    // Обработчик для кнопки начала регистрации ("Новая регистрация")
     const regBtn = document.querySelector('[onclick*="handlePhoneSubmit"]');
     if (regBtn) {
-        regBtn.addEventListener('touchstart', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
+        if (regBtn.dataset && regBtn.dataset.mobileBound === '1') {
+            return;
+        }
+        if (regBtn.dataset) {
+            regBtn.dataset.mobileBound = '1';
+        }
+
+        regBtn.addEventListener('pointerdown', function() {
             this.style.transform = 'scale(0.98)';
             this.style.opacity = '0.9';
-        }, { passive: false });
-        
-        regBtn.addEventListener('touchend', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
+        }, { passive: true });
+
+        regBtn.addEventListener('pointerup', function() {
             this.style.transform = '';
             this.style.opacity = '';
-        }, { passive: false });
+        }, { passive: true });
     }
     
     console.log('✅ Обработчики мобильных касаний настроены');
@@ -2100,7 +2957,7 @@ function resetOfflineAttempts() {
         showNotification(`✅ Сброшены попытки для ${resetCount} записей`, 'success');
         logToConsole('INFO', 'Сброшены счетчики попыток', { resetCount });
         
-        closeModal();
+        closeModalById('offline-data-modal');
         
         showOfflineDataCount();
         
@@ -2343,30 +3200,20 @@ function showDriverCabinetModal(history, notifications, driverPhone, driverName)
     // Устанавливаем активное модальное окно
     currentActiveModal = 'driver-cabinet-modal';
 }
-function closeModal(event) {
-    if (event) {
-        event.preventDefault();
-        event.stopPropagation();
-    }
-    
-    const modal = document.querySelector('.modal-overlay');
-    if (modal) {
-        modal.remove();
-    }
-}
 
 async function forceSendOfflineData() {
     showLoader(true);
     await sendOfflineData();
     showLoader(false);
-    closeModal();
+    closeModalById('offline-data-modal');
+    closeModalById('offline-data-modal');
 }
 
 function clearOfflineData() {
     if (confirm('Удалить все оффлайн данные? Это действие нельзя отменить.')) {
         localStorage.removeItem('offline_registrations');
         showOfflineDataCount();
-        closeModal();
+        closeModalById('offline-data-modal');
         showNotification('Оффлайн данные очищены', 'info');
     }
 }
@@ -2922,10 +3769,41 @@ function closeModalById(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
         modal.style.display = 'none';
-        if (currentActiveModal === modalId) {
+    }
+}
+
+function closeModal(event) {
+    try {
+        if (event) {
+            event.preventDefault?.();
+            event.stopPropagation?.();
+
+            const target = event.target;
+            const overlay = (target && target.closest) ? target.closest('.modal-overlay') : null;
+            if (overlay) {
+                overlay.remove();
+                return;
+            }
+        }
+
+        // Если событие не передали — закрываем все модалки
+        const overlays = document.querySelectorAll('.modal-overlay');
+        overlays.forEach(o => o.remove());
+    } catch (e) {
+        console.error('Ошибка closeModal:', e);
+    }
+}
+
+function closeAllModals() {
+    try {
+        const overlays = document.querySelectorAll('.modal-overlay');
+        overlays.forEach(o => o.remove());
+
+        if (typeof currentActiveModal !== 'undefined') {
             currentActiveModal = null;
         }
-        // Не удаляем элемент из DOM, просто скрываем
+    } catch (e) {
+        console.error('Ошибка closeAllModals:', e);
     }
 }
 
@@ -3027,11 +3905,11 @@ ${registration.scheduleViolation === 'Да' ? '⏰ Нарушение графи
 // ==================== ПОКАЗ ЛИЧНОГО КАБИНЕТА ====================
 function showPhoneInputModal() {
     const modalHtml = `
-        <div class="modal-overlay" onclick="closeModal()">
+        <div class="modal-overlay" id="phone-input-modal" onclick="if(event.target === this) closeModalById('phone-input-modal')">
             <div class="modal" onclick="event.stopPropagation()" style="max-width: 400px;">
                 <div class="modal-header">
                     <h3 class="modal-title">📱 Введите номер телефона</h3>
-                    <button class="modal-close" onclick="closeModal()">✕</button>
+                    <button class="modal-close" onclick="closeModalById('phone-input-modal')">✕</button>
                 </div>
                 <div class="modal-body">
                     <p>Для доступа к личному кабинету введите номер телефона:</p>
@@ -3049,7 +3927,7 @@ function showPhoneInputModal() {
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+                    <button class="btn btn-secondary" onclick="closeModalById('phone-input-modal')">Отмена</button>
                     <button class="btn btn-primary" onclick="enterCabinetWithPhone()">Войти в личный кабинет</button>
                 </div>
             </div>
@@ -3089,11 +3967,11 @@ function enterCabinetWithPhone() {
     
     const normalizedPhone = normalizePhone(phone);
     
-    // Сохраняем телефон для будущих использований
+    // Сохраняем телефон для кабинета
     saveDriverInfoForCabinet(normalizedPhone, '');
     
     // Закрываем модальное окно
-    closeModal();
+    closeModalById('phone-input-modal');
     
     // Обновляем registrationState
     if (registrationState && registrationState.data) {
@@ -3227,13 +4105,6 @@ async function getPWANotifications(phone) {
             } catch (cacheError) {
                 console.log('Не удалось сохранить уведомления в кэш:', cacheError);
             }
-            
-            // Показываем новые уведомления как push
-            formattedNotifications.forEach(notification => {
-                if (!notification.status || notification.status !== 'read') {
-                    showPushNotification(notification);
-                }
-            });
             
             return formattedNotifications;
         }
@@ -3471,21 +4342,21 @@ function switchCabinetTab(tabName) {
     }
     
     // Активировать кнопку
-    const buttons = modal.querySelectorAll('.tab-btn');
-    buttons.forEach(btn => {
-        const btnText = btn.textContent || '';
-        if (btnText.includes(getCabinetTabName(tabName))) {
+    modal.querySelectorAll('.tab-btn').forEach(btn => {
+        const onclick = btn.getAttribute('onclick') || '';
+        if (onclick.includes(`switchCabinetTab('${tabName}'`) || onclick.includes(`switchCabinetTab(\"${tabName}\"`)) {
             btn.style.borderBottomColor = '#4285f4';
             btn.style.color = '#4285f4';
         }
     });
 }
 
+// Функция для получения отображаемого имени вкладки кабинета
 function getCabinetTabName(tabName) {
     const map = {
-        'history': 'История',
+        'history': 'История регистраций',
         'notifications': 'Уведомления',
-        'status': 'Статус'
+        'status': 'Текущий статус'
     };
     return map[tabName] || tabName;
 }
@@ -3510,7 +4381,7 @@ function refreshCabinet(phone) {
         
         // Закрываем модальное окно и открываем новое
         setTimeout(() => {
-            closeModal();
+            closeModalById('driver-cabinet-modal');
             setTimeout(() => {
                 openDriverCabinet();
             }, 300);
@@ -3522,14 +4393,6 @@ function refreshCabinet(phone) {
     }
 }
 
-function getCabinetTabName(tabName) {
-    const map = {
-        'history': 'История регистраций',
-        'notifications': 'Уведомления',
-        'status': 'Текущий статус'
-    };
-    return map[tabName] || tabName;
-}
 
 
 function closeDriverCabinet() {
@@ -3746,58 +4609,76 @@ function renderHistoryTab(history) {
 
 // Функция для рендеринга вкладки уведомлений
 function renderNotificationsTab(notifications) {
-    const unreadNotifications = notifications.filter(n => !n.status || n.status !== 'read');
-    
-    if (unreadNotifications.length === 0) {
+    const allNotifications = Array.isArray(notifications) ? notifications : [];
+    const unreadCount = allNotifications.filter(n => !n.status || n.status !== 'read').length;
+
+    if (allNotifications.length === 0) {
         return `
             <div class="empty-state" style="padding: 40px 20px; text-align: center; color: #999;">
                 <div style="font-size: 40px; margin-bottom: 15px;">🔕</div>
-                <p>Нет новых уведомлений</p>
+                <p>Нет уведомлений</p>
                 <p style="font-size: 14px; margin-top: 10px;">Уведомления появятся здесь при изменении статуса</p>
             </div>
         `;
     }
-    
-    let html = `<div style="max-height: 400px; overflow-y: auto;">`;
-    
-    unreadNotifications.forEach((notification, index) => {
+
+    let html = `
+        <div style="display: flex; justify-content: flex-end; gap: 10px; margin-bottom: 12px;">
+            <button class="btn btn-secondary" onclick="markAllNotificationsAsRead()" style="padding: 8px 12px; font-size: 13px;">
+                ✅ Отметить всё прочитанным${unreadCount > 0 ? ` (${unreadCount})` : ''}
+            </button>
+        </div>
+        <div style="max-height: 400px; overflow-y: auto;">
+    `;
+
+    allNotifications.forEach((notification) => {
+        const isUnread = !notification.status || notification.status !== 'read';
         const icon = getNotificationIcon(notification.type);
         const color = getNotificationColor(notification.type);
         const formattedDate = formatNotificationTime(notification.timestamp || notification.formattedTimestamp || '');
-        
+
         html += `
             <div class="notification-item" style="
-                background: ${color.background};
-                border-left: 4px solid ${color.border};
+                background: ${isUnread ? color.background : '#f6f7f9'};
+                border-left: 6px solid ${isUnread ? color.border : '#cfd4da'};
                 padding: 12px 15px;
                 margin-bottom: 10px;
-                border-radius: 8px;
-                color: #333;
+                border-radius: 10px;
+                color: #222;
+                ${isUnread ? 'box-shadow: 0 6px 18px rgba(0,0,0,0.06);' : ''}
             ">
                 <div style="display: flex; align-items: flex-start; margin-bottom: 8px;">
                     <div style="font-size: 20px; margin-right: 10px; margin-top: 2px;">${icon}</div>
                     <div style="flex: 1;">
-                        <div style="font-weight: 600; margin-bottom: 5px; font-size: 15px;">
-                            ${notification.title || 'Уведомление'}
+                        <div style="font-weight: 600; margin-bottom: 5px; font-size: 15px; color: #111;">
+                            ${isUnread ? '● ' : ''}${notification.title || 'Уведомление'}
                         </div>
-                        <div style="font-size: 13px; color: #666; display: flex; align-items: center; gap: 8px;">
+                        <div style="font-size: 13px; color: #666; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                             <span>${formattedDate}</span>
-                            ${notification.type ? `<span style="background: ${color.border + '20'}; padding: 2px 8px; border-radius: 10px; font-size: 11px;">${notification.type}</span>` : ''}
+                            ${notification.type ? `<span style="background: ${isUnread ? (color.border + '22') : '#e9ecef'}; padding: 2px 8px; border-radius: 999px; font-size: 11px; color: ${isUnread ? '#333' : '#666'};">${notification.type}</span>` : ''}
                         </div>
                     </div>
                 </div>
-                <div style="font-size: 14px; line-height: 1.4; margin-top: 8px;">
+                <div style="font-size: 14px; line-height: 1.4; margin-top: 8px; color: #222;">
                     ${notification.message || ''}
                 </div>
                 ${notification.data && notification.data.gate ? `
-                    <div style="margin-top: 10px; padding: 8px; background: rgba(66, 133, 244, 0.1); border-radius: 6px; font-size: 13px;">
+                    <div style="margin-top: 10px; padding: 8px; background: rgba(66, 133, 244, 0.1); border-radius: 8px; font-size: 13px; color: #222;">
                         <strong>🚪 Ворота:</strong> ${notification.data.gate}
+                    </div>
+                ` : ''}
+
+                ${isUnread ? `
+                    <div style="margin-top: 12px; display: flex; justify-content: flex-end;">
+                        <button class="btn btn-primary" onclick="markNotificationAsRead('${notification.id}', ${notification.rowNumber || 0})" style="padding: 8px 12px; font-size: 13px;">
+                            ✔ Отметить прочитанным
+                        </button>
                     </div>
                 ` : ''}
             </div>
         `;
     });
-    
+
     html += `</div>`;
     return html;
 }
@@ -4249,6 +5130,7 @@ function startNotificationChecker() {
 // ==================== ПРОВЕРКА НОВЫХ УВЕДОМЛЕНИЙ ====================
 async function checkForNewNotifications() {
     try {
+        ensureRegistrationState();
         // Проверяем есть ли интернет
         if (!navigator.onLine) {
             // console.log('Нет интернета, пропускаю проверку уведомлений');
@@ -4304,6 +5186,24 @@ async function checkForNewNotifications() {
             if (unreadCount > 0) {
                 // Обновляем иконку/баджик в заголовке
                 updateNotificationBadge(unreadCount);
+
+                // Локальные уведомления (Notification API): показываем только новые непрочитанные
+                if (isLocalNotificationsEnabled() && ("Notification" in window) && Notification.permission === 'granted') {
+                    const unread = notifications.filter(n => !n.status || n.status !== 'read');
+                    // ограничим всплывашки, чтобы не было шквала
+                    unread.slice(0, 3).forEach(n => {
+                        if (n && n.id && !hasShownNotification(driverPhone, n.id)) {
+                            createBrowserNotification(n);
+                            markNotificationShown(driverPhone, n.id);
+                        }
+                    });
+                }
+                
+                // Если открыт модальный кабинет и вкладка уведомлений, обновляем её содержимое
+                const notificationsTab = document.getElementById('notifications-tab');
+                if (notificationsTab) {
+                    notificationsTab.innerHTML = renderNotificationsTab(notifications);
+                }
                 
                 // Показываем всплывающее уведомление если приложение активно
                 if (document.hasFocus()) {
@@ -4365,6 +5265,13 @@ function updateNotificationBadge(count) {
                 badge.textContent = count > 9 ? '9+' : count.toString();
                 badge.style.display = 'block';
             }
+
+            // Обновляем бейджи на кнопках "Уведомления" (шаг 1 / успех)
+            const staticBadges = document.querySelectorAll('.notification-badge-static');
+            staticBadges.forEach(b => {
+                b.textContent = count > 9 ? '9+' : count.toString();
+                b.style.display = 'inline-block';
+            });
         } else {
             // Сбрасываем заголовок
             document.title = 'УЛН. Регистрация водителей';
@@ -4374,9 +5281,146 @@ function updateNotificationBadge(count) {
             if (badge) {
                 badge.style.display = 'none';
             }
+
+            // Скрываем статические бейджи
+            const staticBadges = document.querySelectorAll('.notification-badge-static');
+            staticBadges.forEach(b => {
+                b.style.display = 'none';
+            });
         }
     } catch (error) {
         console.error('Ошибка обновления бэйджей:', error);
+    }
+}
+
+function openNotificationsCenter() {
+    try {
+        showNotificationsOnlyModal();
+    } catch (e) {
+        console.error('Ошибка открытия центра уведомлений:', e);
+    }
+}
+
+async function showNotificationsOnlyModal() {
+    try {
+        const { phone } = getCabinetIdentity();
+        if (!phone) {
+            showNotification('Введите номер телефона для просмотра уведомлений', 'warning');
+            return;
+        }
+
+        showLoader(true);
+        const notifications = await getPWANotifications(phone);
+        showLoader(false);
+
+        const modalId = 'notifications-only-modal';
+        const oldModal = document.getElementById(modalId);
+        if (oldModal) oldModal.remove();
+
+        const unreadCount = (notifications || []).filter(n => !n.status || n.status !== 'read').length;
+
+        const modalHtml = `
+            <div class="modal-overlay" id="${modalId}" onclick="if(event.target === this) closeNotificationsOnlyModal()">
+                <div class="modal" onclick="event.stopPropagation()" style="max-width: 800px; max-height: 90vh; display: flex; flex-direction: column;">
+                    <div class="modal-header">
+                        <h3 class="modal-title" id="notifications-only-title">🔔 Уведомления ${unreadCount > 0 ? `(${unreadCount})` : ''}</h3>
+                        <button class="modal-close" onclick="closeNotificationsOnlyModal()">✕</button>
+                    </div>
+
+                    <div class="modal-body" style="flex: 1; overflow-y: auto; padding: 0 20px;">
+                        <div style="display: flex; justify-content: flex-end; padding: 12px 0;">
+                            <button class="btn btn-secondary" id="toggle-local-notifications-btn" onclick="enableLocalNotifications()" style="padding: 8px 12px; font-size: 13px;">
+                                🔕 Включить уведомления
+                            </button>
+                        </div>
+                        <div id="notifications-only-content">
+                            ${renderNotificationsTab(notifications || [])}
+                        </div>
+                    </div>
+
+                    <div class="modal-footer" style="position: sticky; bottom: 0; background: white; border-top: 1px solid #f0f0f0; padding: 15px 20px; margin-top: auto;">
+                        <button class="btn btn-secondary" onclick="closeNotificationsOnlyModal()">Закрыть</button>
+                        <button class="btn btn-primary" onclick="refreshNotificationsOnlyModal(true)" style="margin-left: 10px;">🔄 Обновить</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const container = document.createElement('div');
+        container.innerHTML = modalHtml;
+        document.body.appendChild(container);
+
+        // Обновляем текст/статус кнопки локальных уведомлений
+        updateLocalNotificationsUI();
+
+        // Запускаем автообновление раз в минуту, пока окно открыто
+        if (typeof window !== 'undefined') {
+            if (window.notificationsOnlyAutoRefreshInterval) {
+                clearInterval(window.notificationsOnlyAutoRefreshInterval);
+            }
+            window.notificationsOnlyAutoRefreshInterval = setInterval(() => {
+                refreshNotificationsOnlyModal(false);
+            }, 60000);
+        }
+
+    } catch (e) {
+        showLoader(false);
+        console.error('Ошибка открытия окна уведомлений:', e);
+        showNotification('Ошибка открытия уведомлений', 'error');
+    }
+}
+
+async function refreshNotificationsOnlyModal(manual = false) {
+    try {
+        const modal = document.getElementById('notifications-only-modal');
+        if (!modal || modal.style.display === 'none') {
+            return;
+        }
+
+        const { phone } = getCabinetIdentity();
+        if (!phone) {
+            return;
+        }
+
+        if (manual) {
+            showLoader(true);
+        }
+
+        const notifications = await getPWANotifications(phone);
+        const unreadCount = (notifications || []).filter(n => !n.status || n.status !== 'read').length;
+
+        const titleEl = document.getElementById('notifications-only-title');
+        if (titleEl) {
+            titleEl.textContent = `🔔 Уведомления${unreadCount > 0 ? ` (${unreadCount})` : ''}`;
+        }
+
+        const content = document.getElementById('notifications-only-content');
+        if (content) {
+            content.innerHTML = renderNotificationsTab(notifications || []);
+        }
+
+        updateNotificationBadge(unreadCount);
+
+        if (manual) {
+            showLoader(false);
+        }
+    } catch (e) {
+        if (manual) {
+            showLoader(false);
+        }
+        console.error('Ошибка обновления уведомлений:', e);
+    }
+}
+
+function closeNotificationsOnlyModal() {
+    try {
+        if (typeof window !== 'undefined' && window.notificationsOnlyAutoRefreshInterval) {
+            clearInterval(window.notificationsOnlyAutoRefreshInterval);
+            window.notificationsOnlyAutoRefreshInterval = null;
+        }
+        closeModalById('notifications-only-modal');
+    } catch (e) {
+        console.error('Ошибка закрытия окна уведомлений:', e);
     }
 }
 
@@ -4447,16 +5491,48 @@ function createBrowserNotification(notification) {
 // ==================== ПОМЕТКА УВЕДОМЛЕНИЯ КАК ПРОЧИТАННОГО ====================
 async function markNotificationAsRead(notificationId) {
     try {
-        // Здесь можно отправить запрос на сервер для пометки как прочитанного
-        // Пока просто обновим локальный кэш
+        ensureRegistrationState();
+        const rowNumberArg = arguments.length > 1 ? arguments[1] : 0;
+        const readAt = formatDateTime(new Date());
         
         // Получаем текущий телефон
-        let driverPhone = '';
-        if (registrationState && registrationState.data && registrationState.data.phone) {
-            driverPhone = registrationState.data.phone;
-        }
+        const { phone: driverPhone } = getCabinetIdentity();
         
         if (!driverPhone) return;
+
+        // Определяем строку (rowNumber) в листе PWA_Notifications
+        let rowNumber = Number(rowNumberArg) || 0;
+
+        // Если rowNumber не передали, попробуем найти по notificationId в кэше
+        if (!rowNumber && notificationId) {
+            const cacheKey = 'notifications_cache_' + driverPhone;
+            const cachedLookup = localStorage.getItem(cacheKey);
+            if (cachedLookup) {
+                try {
+                    const cacheData = JSON.parse(cachedLookup);
+                    if (cacheData.data && Array.isArray(cacheData.data)) {
+                        const found = cacheData.data.find(n => n.id === notificationId);
+                        if (found && found.rowNumber) {
+                            rowNumber = Number(found.rowNumber) || 0;
+                        }
+                    }
+                } catch (e) {
+                    // игнор
+                }
+            }
+        }
+
+        // Отмечаем на сервере (Status=read, ReadAt=...)
+        if (rowNumber) {
+            const resp = await sendAPIRequest({
+                action: 'mark_pwa_notification_read',
+                phone: driverPhone,
+                rowNumber: rowNumber
+            });
+            if (!resp || !resp.success) {
+                throw new Error(resp?.message || 'Не удалось отметить уведомление как прочитанное');
+            }
+        }
         
         // Обновляем кэш уведомлений
         const cacheKey = 'notifications_cache_' + driverPhone;
@@ -4468,8 +5544,8 @@ async function markNotificationAsRead(notificationId) {
                 if (cacheData.data && Array.isArray(cacheData.data)) {
                     // Помечаем уведомление как прочитанное
                     cacheData.data = cacheData.data.map(n => {
-                        if (n.id === notificationId) {
-                            return { ...n, status: 'read' };
+                        if ((notificationId && n.id === notificationId) || (rowNumber && Number(n.rowNumber) === Number(rowNumber))) {
+                            return { ...n, status: 'read', readAt };
                         }
                         return n;
                     });
@@ -4480,9 +5556,99 @@ async function markNotificationAsRead(notificationId) {
                 console.log('Ошибка обновления кэша уведомлений:', e);
             }
         }
+
+        // Обновляем UI (вкладка + бэйдж)
+        updateNotificationsUIFromCache(driverPhone);
+        updateNotificationsOnlyModalFromCache(driverPhone);
+        showNotification('✅ Уведомление отмечено как прочитанное', 'success');
         
     } catch (error) {
         console.error('Ошибка пометки уведомления как прочитанного:', error);
+        showNotification('❌ Ошибка: не удалось отметить прочитанным', 'error');
+    }
+}
+
+async function markAllNotificationsAsRead() {
+    try {
+        ensureRegistrationState();
+        const { phone: driverPhone } = getCabinetIdentity();
+        if (!driverPhone) {
+            showNotification('Нет телефона для отметки уведомлений', 'warning');
+            return;
+        }
+
+        const resp = await sendAPIRequest({
+            action: 'mark_all_pwa_notifications_read',
+            phone: driverPhone
+        });
+
+        if (!resp || !resp.success) {
+            throw new Error(resp?.message || 'Не удалось отметить все уведомления');
+        }
+
+        const readAt = formatDateTime(new Date());
+        const cacheKey = 'notifications_cache_' + driverPhone;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+            try {
+                const cacheData = JSON.parse(cached);
+                if (cacheData.data && Array.isArray(cacheData.data)) {
+                    cacheData.data = cacheData.data.map(n => ({
+                        ...n,
+                        status: 'read',
+                        readAt
+                    }));
+                    localStorage.setItem(cacheKey, JSON.stringify(cacheData));
+                }
+            } catch (e) {
+                // игнор
+            }
+        }
+
+        updateNotificationsUIFromCache(driverPhone);
+        updateNotificationsOnlyModalFromCache(driverPhone);
+        showNotification('✅ Все уведомления отмечены прочитанными', 'success');
+    } catch (error) {
+        console.error('Ошибка отметки всех уведомлений:', error);
+        showNotification('❌ Ошибка: не удалось отметить все уведомления', 'error');
+    }
+}
+
+function updateNotificationsUIFromCache(driverPhone) {
+    try {
+        const cacheKey = 'notifications_cache_' + driverPhone;
+        const cached = localStorage.getItem(cacheKey);
+        const notifications = cached ? (JSON.parse(cached).data || []) : [];
+        const unreadCount = notifications.filter(n => !n.status || n.status !== 'read').length;
+
+        updateNotificationBadge(unreadCount);
+
+        const tab = document.getElementById('cabinet-notifications-tab') || document.getElementById('notifications-tab');
+        if (tab) {
+            tab.innerHTML = renderNotificationsTab(notifications);
+        }
+
+        // Обновляем подпись на кнопке вкладки (если она есть)
+        const modal = document.getElementById('driver-cabinet-modal');
+        if (modal) {
+            const notificationsBtn = modal.querySelector('.tab-btn:nth-child(2)');
+            if (notificationsBtn) {
+                notificationsBtn.innerHTML = `🔔 Уведомления (${unreadCount})`;
+            }
+
+            const infoBox = modal.querySelector('.info-box');
+            if (infoBox) {
+                // Только обновим счетчик непрочитанных, не трогая остальной текст
+                const pTags = infoBox.querySelectorAll('p');
+                pTags.forEach(p => {
+                    if (p.textContent && p.textContent.includes('Непрочитанных уведомлений')) {
+                        p.innerHTML = `<strong>🔔 Непрочитанных уведомлений:</strong> ${unreadCount}`;
+                    }
+                });
+            }
+        }
+    } catch (e) {
+        console.error('Ошибка обновления UI уведомлений:', e);
     }
 }
 
@@ -4551,6 +5717,12 @@ function resetRegistration() {
     if (confirm('Начать новую регистрацию? Все введенные данные будут потеряны.')) {
         resetRegistrationState();
         clearFormFields();
+
+        // Сбрасываем сохраненный телефон для кабинета, чтобы на шаге 1 требовался ввод
+        localStorage.removeItem('driver_info_for_cabinet');
+        localStorage.removeItem('last_driver_phone');
+        localStorage.removeItem('last_driver_name');
+
         showStep(1);
         showNotification('Регистрация сброшена', 'info');
     }
@@ -4605,10 +5777,12 @@ function saveRegistrationState() {
 
 function loadRegistrationState() {
     try {
+        ensureRegistrationState();
         const saved = localStorage.getItem('driver_registration_state');
         if (saved) {
             const parsed = JSON.parse(saved);
             registrationState = parsed;
+            ensureRegistrationState();
             
             const phoneInput = document.getElementById('phone-input');
             const fioInput = document.getElementById('fio-input');
@@ -4722,7 +5896,7 @@ function exportLogs() {
 function clearLogs() {
     if (confirm('Очистить все логи?')) {
         localStorage.removeItem('app_logs');
-        closeModal();
+        closeModalById('logs-modal');
         showNotification('Логи очищены', 'info');
     }
 }
@@ -4884,7 +6058,7 @@ function clearNetworkLogs() {
                 !log.message.includes('HTTP')
             );
             localStorage.setItem('app_logs', JSON.stringify(filteredLogs));
-            closeModal();
+            closeModalById('network-logs-modal');
             showNotification('Сетевые логи очищены', 'info');
         } catch (error) {
             showNotification('Ошибка очистки логов', 'error');
@@ -5315,10 +6489,6 @@ window.enterCabinetWithPhone = enterCabinetWithPhone;
 window.openDriverCabinetFromStep1 = openDriverCabinetFromStep1;
 window.formatDateUniversal = formatDateUniversal;
 window.refreshCabinet = refreshCabinet;
-window.openDriverCabinetFromStep1 = openDriverCabinetFromStep1;
-window.openDriverCabinet = openDriverCabinet;
-window.refreshCabinet = refreshCabinet;
-window.switchCabinetTab = switchCabinetTab;
 window.renderHistoryTab = renderHistoryTab;
 window.renderNotificationsTab = renderNotificationsTab;
 window.renderStatusTab = renderStatusTab;
@@ -5329,8 +6499,11 @@ window.safeJSONParse = safeJSONParse;
 window.safeAttribute = safeAttribute;
 window.openModal = openModal;
 window.closeModalById = closeModalById;
-window.closeCurrentModal = closeCurrentModal;
+// Удалена несуществующая функция closeCurrentModal
 window.closeAllModals = closeAllModals;
+window.markAllNotificationsAsRead = markAllNotificationsAsRead;
+window.openNotificationsCenter = openNotificationsCenter;
+window.showNotificationsOnlyModal = showNotificationsOnlyModal;
 window.refreshCabinetInModal = refreshCabinetInModal;
 window.switchCabinetTab = switchCabinetTab;
 window.shareRegistration = shareRegistration;

@@ -53,6 +53,20 @@ self.addEventListener('activate', event => {
 // Обработка запросов - УПРОЩЕННАЯ СТРАТЕГИЯ
 self.addEventListener('fetch', event => {
   const request = event.request;
+
+  try {
+    const urlObj = new URL(request.url);
+    if (urlObj.pathname === '/reg_driver_ULN/manifest.json') {
+      event.respondWith(
+        fetch(request, { cache: 'no-store' })
+          .then(resp => resp)
+          .catch(() => caches.match(request))
+      );
+      return;
+    }
+  } catch (e) {
+    // ignore
+  }
   
   // Пропускаем запросы к API и не-GET запросы
   if (request.url.includes('/api/') || request.method !== 'GET') {
@@ -93,9 +107,9 @@ self.addEventListener('fetch', event => {
             })
             .catch(error => {
               console.log(`🌐 Ошибка загрузки: ${request.url}`, error);
-              
-              // Для HTML возвращаем заглушку
-              if (request.headers.get('accept').includes('text/html')) {
+
+              const accept = request.headers.get('accept') || '';
+              if (accept.includes('text/html')) {
                 return new Response(
                   '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ошибка сети</title></head><body><h1>Нет соединения</h1><p>Проверьте подключение к интернету.</p><button onclick="window.location.reload()">Повторить</button></body></html>',
                   {
@@ -103,7 +117,8 @@ self.addEventListener('fetch', event => {
                   }
                 );
               }
-              
+
+              // Для JSON/картинок/скриптов НЕ подменяем контент HTML-страницей
               return new Response('Нет соединения', { status: 503 });
             });
         })
