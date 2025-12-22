@@ -5200,7 +5200,12 @@ async function checkForNewNotifications() {
                 }
                 
                 // Если открыт модальный кабинет и вкладка уведомлений, обновляем её содержимое
-                const notificationsTab = document.getElementById('notifications-tab');
+                // Обновляем UI кабинета/модалок из кэша (getPWANotifications уже обновляет localStorage cache)
+                updateNotificationsUIFromCache(driverPhone);
+                updateNotificationsOnlyModalFromCache(driverPhone);
+
+                // Совместимость со старым id вкладки
+                const notificationsTab = document.getElementById('cabinet-notifications-tab') || document.getElementById('notifications-tab');
                 if (notificationsTab) {
                     notificationsTab.innerHTML = renderNotificationsTab(notifications);
                 }

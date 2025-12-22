@@ -1593,10 +1593,23 @@
                 <!-- Сообщение будет загружено сюда -->
             </div>
             <div class="success-pass">
-                <h3 style="margin: 15px 0 10px;">Новый пропуск</h3>
-                <a href="https://drive.google.com/u/0/drive-viewer/AKGpihbqZzHdtEyzYIQuJDvAlib1rc3a9d1mQymiMLwigCRkfYfUOrwKkikIPpmAQn7Uk4KbBmY17xXxC-E5t0y15Gw-ae84PWKRAPI=s1600-rw-v1?auditContext=forDisplay" target="_blank" rel="noopener">
-                    <img class="success-pass-image" src="https://drive.google.com/u/0/drive-viewer/AKGpihbqZzHdtEyzYIQuJDvAlib1rc3a9d1mQymiMLwigCRkfYfUOrwKkikIPpmAQn7Uk4KbBmY17xXxC-E5t0y15Gw-ae84PWKRAPI=s1600-rw-v1?auditContext=forDisplay" alt="Новый пропуск">
+                <h3 style="margin: 15px 0 10px;">Пропуск</h3>
+                <a href="https://drive.google.com/u/0/drive-viewer/AKGpihbqZzHdtEyzYIQuJDvAlib1rc3a9d1mQymiMLwigCRkfYfUOrwKkikIPpmAQn7Uk4KbBmY17xXxC-E5t0y15Gw-ae84PWKRAPI=s1600-rw-v1?auditContext=forDisplay" target="_blank" rel="noopener" style="display: block;">
+                    <img
+                        class="success-pass-image"
+                        src="https://drive.google.com/u/0/drive-viewer/AKGpihbqZzHdtEyzYIQuJDvAlib1rc3a9d1mQymiMLwigCRkfYfUOrwKkikIPpmAQn7Uk4KbBmY17xXxC-E5t0y15Gw-ae84PWKRAPI=s1600-rw-v1?auditContext=forDisplay"
+                        alt="Пропуск"
+                        onerror="this.style.display='none'; var fb=document.getElementById('success-pass-fallback'); if(fb){fb.style.display='block';}"
+                    >
                 </a>
+                <div id="success-pass-fallback" style="display:none; margin-top: 10px;">
+                    <div class="info-box">
+                        <p>📎 Изображение не удалось загрузить (Google Drive может требовать доступ). Откройте пропуск по кнопке:</p>
+                        <a class="btn btn-secondary" href="https://drive.google.com/u/0/drive-viewer/AKGpihbqZzHdtEyzYIQuJDvAlib1rc3a9d1mQymiMLwigCRkfYfUOrwKkikIPpmAQn7Uk4KbBmY17xXxC-E5t0y15Gw-ae84PWKRAPI=s1600-rw-v1?auditContext=forDisplay" target="_blank" rel="noopener" style="display:inline-block; margin-top: 8px;">
+                            🔍 Открыть пропуск
+                        </a>
+                    </div>
+                </div>
             </div>
 
             <div class="button-group double success-actions" style="margin-top: 15px;">
