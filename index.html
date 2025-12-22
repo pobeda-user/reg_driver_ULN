@@ -1592,23 +1592,28 @@
             <div class="step-content" id="success-message">
                 <!-- Сообщение будет загружено сюда -->
             </div>
-            <div class="button-group">
-                <div class="button-group">
-    <button type="button" class="btn btn-primary" onclick="resetRegistration()">
-        📝 Новая регистрация
-    </button>
-    <button type="button" class="btn btn-secondary" onclick="showOfflineDataModal()">
-        📊 Оффлайн данные
-    </button>
-    <button type="button" class="btn btn-info" onclick="openDriverCabinet()">
-        👤 Личный кабинет
-    </button>
-    <button type="button" class="btn btn-info" onclick="openNotificationsCenter()" id="notifications-btn-success" style="position: relative;">
-        🔔 Уведомления
-        <span class="notification-badge-static" id="notifications-badge-success" style="display:none;"></span>
-    </button>
-</div>
-        </div>
+            <div class="success-pass">
+                <h3 style="margin: 15px 0 10px;">Новый пропуск</h3>
+                <a href="https://drive.google.com/u/0/drive-viewer/AKGpihbqZzHdtEyzYIQuJDvAlib1rc3a9d1mQymiMLwigCRkfYfUOrwKkikIPpmAQn7Uk4KbBmY17xXxC-E5t0y15Gw-ae84PWKRAPI=s1600-rw-v1?auditContext=forDisplay" target="_blank" rel="noopener">
+                    <img class="success-pass-image" src="https://drive.google.com/u/0/drive-viewer/AKGpihbqZzHdtEyzYIQuJDvAlib1rc3a9d1mQymiMLwigCRkfYfUOrwKkikIPpmAQn7Uk4KbBmY17xXxC-E5t0y15Gw-ae84PWKRAPI=s1600-rw-v1?auditContext=forDisplay" alt="Новый пропуск">
+                </a>
+            </div>
+
+            <div class="button-group double success-actions" style="margin-top: 15px;">
+                <button type="button" class="btn btn-primary" onclick="resetRegistration()">
+                    📝 Новая регистрация
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="showOfflineDataModal()">
+                    📊 Оффлайн данные
+                </button>
+                <button type="button" class="btn btn-info" onclick="openDriverCabinet()">
+                    👤 Личный кабинет
+                </button>
+                <button type="button" class="btn btn-info" onclick="openNotificationsCenter()" id="notifications-btn-success" style="position: relative;">
+                    🔔 Уведомления
+                    <span class="notification-badge-static" id="notifications-badge-success" style="display:none;"></span>
+                </button>
+            </div>
     </div>
 
     <!-- Уведомление -->

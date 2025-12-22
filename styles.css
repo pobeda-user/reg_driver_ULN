@@ -245,6 +245,26 @@
     color: #2e7d32;
 }
 
+.success-pass {
+    margin: 10px 0 0;
+    padding: 12px;
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #e0e0e0;
+}
+
+.success-pass-image {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border-radius: 10px;
+    display: block;
+}
+
+.success-actions {
+    justify-content: center;
+}
+
 .warning-box {
     background: #ffebee;
     border: 2px solid #f44336;
