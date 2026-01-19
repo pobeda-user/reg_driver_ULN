@@ -3,7 +3,7 @@
 // Конфигурация
 let CONFIG = {
     APP_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbzt-xQk-DSNfofBV5ewoioKNHJ8p7Idn3GDSu9PY6Dq-MSpl8NpgHiONiQgAcCfGwD0/exec',
-    APP_VERSION: '1.4'
+    APP_VERSION: '1.0'
 };
 
 // Константы для кэширования ТОП-данных

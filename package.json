@@ -1,0 +1,37 @@
+{
+  "name": "uln-driver-registration",
+  "version": "1.5.0",
+  "description": "Система регистрации водителей для распределительного центра с поддержкой PWA",
+  "main": "index.html",
+  "scripts": {
+    "dev": "python -m http.server 8000",
+    "build": "mkdir -p dist && cp -r *.html *.js *.css *.json icons/ dist/ && echo 'Build completed. Files copied to dist/'",
+    "minify-css": "cleancss -o dist/styles.min.css styles.css inline-styles.css",
+    "minify-js": "terser config.js utils.js api.js -o dist/app.min.js",
+    "full-build": "npm run build && npm run minify-css && npm run minify-js",
+    "clean": "rm -rf dist/",
+    "test": "echo 'Open http://localhost:8000/reg_driver_ULN/ in browser to test'"
+  },
+  "keywords": [
+    "pwa",
+    "registration",
+    "drivers",
+    "offline",
+    "notifications"
+  ],
+  "author": "Developer",
+  "license": "MIT",
+  "devDependencies": {
+    "clean-css-cli": "^5.6.3",
+    "terser": "^5.31.0",
+    "http-server": "^14.1.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/username/uln-driver-registration.git"
+  },
+  "bugs": {
+    "url": "https://github.com/username/uln-driver-registration/issues"
+  },
+  "homepage": "https://github.com/username/uln-driver-registration#readme"
+}

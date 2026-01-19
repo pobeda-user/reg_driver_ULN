@@ -1,5 +1,5 @@
 // service-worker.js - исправленная версия
-const APP_VERSION = '1.4';
+const APP_VERSION = '1.5';
 const CACHE_NAME = `driver-reg-v${APP_VERSION}`;
 
 // Основные ресурсы для предварительного кэширования
