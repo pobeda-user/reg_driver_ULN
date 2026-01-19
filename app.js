@@ -1104,6 +1104,96 @@ function markNotificationShown(phone, notificationId) {
     }
 }
 
+// ==================== PWA УСТАНОВКА ====================
+
+let deferredPrompt; // Хранит событие beforeinstallprompt
+
+function initializePWAInstall() {
+    // Обработчик события beforeinstallprompt
+    window.addEventListener('beforeinstallprompt', (e) => {
+        logToConsole('INFO', 'PWA: Получено событие beforeinstallprompt');
+        e.preventDefault(); // Предотвращаем автоматическое показывание баннера
+        deferredPrompt = e;
+
+        // Показываем кнопку установки
+        showInstallButton();
+    });
+
+    // Обработчик успешной установки
+    window.addEventListener('appinstalled', (e) => {
+        logToConsole('INFO', 'PWA: Приложение установлено');
+        deferredPrompt = null;
+        hideInstallButton();
+
+        showNotification('✅ Приложение установлено!', 'success');
+    });
+
+    // Проверяем, установлено ли уже приложение
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+        logToConsole('INFO', 'PWA: Приложение уже установлено (standalone mode)');
+        hideInstallButton();
+    }
+}
+
+function showInstallButton() {
+    const installBtn = document.getElementById('install-pwa-btn');
+    const installHint = document.getElementById('install-pwa-hint');
+
+    if (installBtn) {
+        installBtn.style.display = 'inline-block';
+        installBtn.addEventListener('click', handleInstallClick);
+        logToConsole('INFO', 'PWA: Кнопка установки показана');
+    }
+
+    if (installHint) {
+        installHint.style.display = 'block';
+    }
+}
+
+function hideInstallButton() {
+    const installBtn = document.getElementById('install-pwa-btn');
+    const installHint = document.getElementById('install-pwa-hint');
+
+    if (installBtn) {
+        installBtn.style.display = 'none';
+        installBtn.removeEventListener('click', handleInstallClick);
+        logToConsole('INFO', 'PWA: Кнопка установки скрыта');
+    }
+
+    if (installHint) {
+        installHint.style.display = 'none';
+    }
+}
+
+async function handleInstallClick() {
+    if (!deferredPrompt) {
+        logToConsole('WARN', 'PWA: deferredPrompt недоступен');
+        showNotification('❌ Установка невозможна', 'error');
+        return;
+    }
+
+    try {
+        logToConsole('INFO', 'PWA: Запуск установки');
+        deferredPrompt.prompt(); // Показываем диалог установки
+
+        const { outcome } = await deferredPrompt.userChoice;
+
+        logToConsole('INFO', 'PWA: Результат установки', { outcome });
+        deferredPrompt = null;
+
+        if (outcome === 'accepted') {
+            logToConsole('INFO', 'PWA: Пользователь принял установку');
+            hideInstallButton();
+        } else {
+            logToConsole('INFO', 'PWA: Пользователь отклонил установку');
+            // Кнопка остается видимой для повторной попытки
+        }
+    } catch (error) {
+        logToConsole('ERROR', 'PWA: Ошибка установки', error);
+        showNotification('❌ Ошибка установки приложения', 'error');
+    }
+}
+
 // ==================== ИНИЦИАЛИЗАЦИЯ ====================
 
 /**
@@ -1113,36 +1203,39 @@ async function initializeApp() {
     try {
         logToConsole('INFO', 'Инициализация приложения', { version: CONFIG.APP_VERSION });
         ensureRegistrationState();
-        
+
         // 1. Загрузка конфигурации
         await loadConfiguration();
-        
+
         // 2. Проверка версии и очистка кэша
         checkVersionAndCleanup();
-        
+
         // 3. Оптимизация для мобильных устройств
         optimizeForMobile();
-        
+
         // 4. Восстановление состояния
         loadRegistrationState();
         ensureRegistrationState();
-        
+
         // 5. Настройка обработчиков событий
         setupEventHandlers();
-        
-        // 6. Инициализация системы уведомлений
+
+        // 6. Инициализация PWA установки
+        initializePWAInstall();
+
+        // 7. Инициализация системы уведомлений
         initializeNotificationSystem();
-        
-        // 7. Фоновые задачи
+
+        // 8. Фоновые задачи
         startBackgroundTasks();
-        
-        // 8. Показ интерфейса
+
+        // 9. Показ интерфейса
         showStep(registrationState.step);
         showOfflineDataCount();
 
         // Обновляем UI кнопок локальных уведомлений (если уже есть на странице)
         setTimeout(() => updateLocalNotificationsUI(), 0);
-        
+
         logToConsole('INFO', 'Приложение успешно инициализировано');
     } catch (error) {
         logToConsole('ERROR', 'Критическая ошибка при инициализации', error);
@@ -6518,11 +6611,3 @@ window.closeDetailsAndRestore = closeDetailsAndRestore;
 window.restorePreviousModal = restorePreviousModal;
 
 logToConsole('INFO', 'app.js загружен и готов к работе (оптимизированная версия с ТОП-данными и PWA уведомлениями)');
-
-
-
-
-
-
-
-
