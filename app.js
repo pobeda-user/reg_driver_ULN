@@ -2229,6 +2229,17 @@ function handleOrderSubmit() {
     showStep(10);
 }
 
+function skipOrderNumber() {
+    const input = document.getElementById('order-input');
+    if (input) {
+        input.value = '0';
+    }
+
+    registrationState.data.orderNumber = '0';
+    logToConsole('INFO', 'Номер заказа пропущен (0)');
+    showStep(10);
+}
+
 // ==================== ШАГ 10: ЭТРН ====================
 
 function handleEtrnSubmit() {
@@ -2245,6 +2256,17 @@ function handleEtrnSubmit() {
     
     registrationState.data.etrn = etrn;
     logToConsole('INFO', 'ЭТрН сохранен', { etrn });
+    showStep(11);
+}
+
+function skipEtrn() {
+    const input = document.getElementById('etrn-input');
+    if (input) {
+        input.value = '0';
+    }
+
+    registrationState.data.etrn = '0';
+    logToConsole('INFO', 'ЭТрН пропущен (0)');
     showStep(11);
 }
 
@@ -2354,6 +2376,14 @@ async function submitRegistration() {
         data: registrationState.data,
         connectionStatus: navigator.onLine ? 'online' : 'offline'
     });
+
+    try {
+        if (("Notification" in window) && Notification.permission === 'default') {
+            await Notification.requestPermission();
+        }
+    } catch (e) {
+        // ignore
+    }
     
     // СОХРАНЯЕМ ТЕЛЕФОН ПЕРЕД ОЧИСТКОЙ
     const driverPhone = registrationState.data.phone;
@@ -6509,6 +6539,26 @@ function showSuccessMessage(serverData = null) {
             <p>📋 Следуйте указаниям персонала</p>
         </div>
     `;
+
+    try {
+        const supported = ("Notification" in window);
+        const perm = supported ? Notification.permission : 'unsupported';
+        const enabled = isLocalNotificationsEnabled();
+
+        if (!supported || perm !== 'granted' || !enabled) {
+            html += `
+                <div class="info-box warning">
+                    <p><strong>Важно:</strong> если уведомления выключены, вы можете <strong>не получить сообщение</strong> на телефон.</p>
+                    <p>Нажмите кнопку ниже и разрешите уведомления в браузере.</p>
+                    <div class="button-group" style="margin-top: 12px;">
+                        <button type="button" class="btn btn-skip" onclick="enableLocalNotifications()">🔔 Включить уведомления</button>
+                    </div>
+                </div>
+            `;
+        }
+    } catch (e) {
+        // ignore
+    }
     
     if (data.scheduleViolation === 'Да') {
         html += `
@@ -6559,6 +6609,8 @@ window.handleVehicleNumberSubmit = handleVehicleNumberSubmit;
 window.handlePalletsSubmit = handlePalletsSubmit;
 window.handleOrderSubmit = handleOrderSubmit;
 window.handleEtrnSubmit = handleEtrnSubmit;
+window.skipOrderNumber = skipOrderNumber;
+window.skipEtrn = skipEtrn;
 window.selectTransit = selectTransit;
 window.submitRegistration = submitRegistration;
 window.resetRegistration = resetRegistration;

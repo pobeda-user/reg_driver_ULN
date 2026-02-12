@@ -179,6 +179,16 @@ body {
     background: #e9ecef;
 }
 
+ .btn-skip {
+     background: linear-gradient(135deg, #ff9800 0%, #e65100 100%);
+     color: white;
+ }
+
+ .btn-skip:hover {
+     transform: translateY(-2px);
+     box-shadow: 0 10px 20px rgba(255, 152, 0, 0.25);
+ }
+
 /* Кнопки опций */
 .option-buttons {
     display: flex;

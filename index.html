@@ -314,6 +314,63 @@
     </script>
     
     <style>
+        /* Стили для кнопки установки PWA */
+        .install-pwa-container {
+            margin-top: 20px;
+            text-align: center;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%) !important;
+            color: white !important;
+            border: none !important;
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3) !important;
+            transition: all 0.3s ease !important;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-success:hover {
+            transform: translateY(-2px) !important;
+            box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4) !important;
+            background: linear-gradient(135deg, #66bb6a 0%, #388e3c 100%) !important;
+        }
+        
+        .btn-success:active {
+            transform: translateY(0) !important;
+            box-shadow: 0 2px 10px rgba(76, 175, 80, 0.3) !important;
+        }
+        
+        .install-pwa-hint {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        .install-pwa-hint.show {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Адаптивность для кнопки установки */
+        @media (max-width: 600px) {
+            .install-pwa-container {
+                margin-top: 15px;
+            }
+            
+            .btn-success {
+                width: 100%;
+                margin: 0 auto;
+            }
+        }
+    </style>
         /* Ваши стили остаются без изменений */
         * {
             margin: 0;
@@ -1150,6 +1207,16 @@
             <p>👤 <strong>Личный кабинет</strong>: для просмотра статуса заезда и истории</p>
             <p>🔔 <strong>Уведомления</strong>: чтобы получать уведомления, разрешите их в браузере при первом запросе</p>
         </div>
+        
+        <!-- Кнопка установки PWA -->
+        <div class="install-pwa-container" style="margin-top: 20px; text-align: center;">
+            <button id="install-pwa-btn" class="btn btn-success" style="display: none; background: #4caf50; color: white;">
+                📱 Установить приложение
+            </button>
+            <div id="install-pwa-hint" style="font-size: 12px; color: #666; margin-top: 8px; display: none;">
+                Установите приложение для удобного доступа и работы в оффлайн режиме
+            </div>
+        </div>
     </div>
 </div>
 
@@ -1471,6 +1538,9 @@
                     <button type="button" class="btn btn-secondary" onclick="goBack()">
                         Назад
                     </button>
+                    <button type="button" class="btn btn-skip" onclick="skipOrderNumber()">
+                        Пропустить
+                    </button>
                     <button type="button" class="btn btn-primary" onclick="handleOrderSubmit()">
                         Продолжить
                     </button>
@@ -1498,6 +1568,9 @@
                 <div class="button-group">
                     <button type="button" class="btn btn-secondary" onclick="goBack()">
                         Назад
+                    </button>
+                    <button type="button" class="btn btn-skip" onclick="skipEtrn()">
+                        Пропустить
                     </button>
                     <button type="button" class="btn btn-primary" onclick="handleEtrnSubmit()">
                         Продолжить
