@@ -1389,7 +1389,7 @@ function handleKeyPress(e) {
     
     // Esc для закрытия модальных окон
     if (e.key === 'Escape') {
-        closeCurrentModal();
+        ModalManager.closeCurrent();
     }
 }
 
@@ -1400,7 +1400,7 @@ function handleDocumentClick(e) {
     // Закрытие модальных окон при клике вне контента
     const modal = e.target.closest('.modal');
     if (!modal && document.querySelector('.modal-overlay:not(.hidden)')) {
-        closeCurrentModal();
+        ModalManager.closeCurrent();
     }
     
     // Делегированная обработка кликов по кнопкам
@@ -4935,7 +4935,7 @@ function getNotificationIcon(type) {
 // Функция для возврата к предыдущему модальному окну
 function returnToPreviousModal() {
     if (window.previousActiveModal) {
-        closeCurrentModal(); // Закрываем текущее окно
+        ModalManager.closeCurrent(); // Закрываем текущее окно
         
         // Восстанавливаем предыдущее
         const prevModal = document.getElementById(window.previousActiveModal);

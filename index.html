@@ -310,6 +310,38 @@
             }
         }
         
+        // Обновление индикатора сети
+        function updateNetworkStatus() {
+            const dot = document.getElementById('network-status-dot');
+            const text = document.getElementById('network-status-text');
+            const indicator = document.getElementById('network-status-indicator');
+            
+            if (!dot || !text) return;
+            
+            if (navigator.onLine) {
+                dot.style.background = '#4caf50';
+                dot.style.boxShadow = '0 0 6px rgba(76, 175, 80, 0.5)';
+                text.textContent = 'Онлайн';
+                text.style.color = '#2e7d32';
+                if (indicator) indicator.style.borderColor = 'rgba(76, 175, 80, 0.3)';
+            } else {
+                dot.style.background = '#f44336';
+                dot.style.boxShadow = '0 0 6px rgba(244, 67, 54, 0.5)';
+                text.textContent = 'Оффлайн';
+                text.style.color = '#c62828';
+                if (indicator) indicator.style.borderColor = 'rgba(244, 67, 54, 0.3)';
+            }
+        }
+        
+        // Слушаем изменения статуса сети
+        window.addEventListener('online', updateNetworkStatus);
+        window.addEventListener('offline', updateNetworkStatus);
+        
+        // Обновляем статус при загрузке
+        document.addEventListener('DOMContentLoaded', function() {
+            updateNetworkStatus();
+        });
+        
     </script>
     
     <style>
@@ -375,7 +407,36 @@
     <!-- Индикатор оффлайн данных -->
     <div id="offline-data-indicator" onclick="showOfflineDataModal()" title="Нажмите для просмотра оффлайн данных"></div>
     
-    <!-- Индикатор соединения -->
+    <!-- Индикатор онлайн/оффлайн с версией (левый верхний угол) -->
+    <div id="network-status-indicator" style="
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255,255,255,0.9);
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+        z-index: 1002;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        border: 1px solid rgba(0,0,0,0.1);
+    ">
+        <span id="network-status-dot" style="
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4caf50;
+            box-shadow: 0 0 6px rgba(76, 175, 80, 0.5);
+        "></span>
+        <span id="network-status-text">Онлайн</span>
+        <span style="color: #999;">|</span>
+        <span id="app-version-display" style="color: #666;">v1.5</span>
+    </div>
+    
+    <!-- Индикатор соединения (правый верхний угол) -->
     <div id="connection-indicator" class="offline"></div>
     
     <div class="container">
