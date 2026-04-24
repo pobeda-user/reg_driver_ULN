@@ -10,7 +10,7 @@
     <meta name="format-detection" content="telephone=no">
     
     <!-- Версия приложения -->
-    <meta name="version" content="1.5">
+    <meta name="version" content="2.0">
     <meta name="build-date" content="2025-12-17">
     
     <!-- Мета-теги для предотвращения кэширования -->
@@ -18,22 +18,22 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     
-    <title>УЛН. Регистрация водителей v1.5</title>
+    <title>УЛН. Регистрация водителей v2.0</title>
     
     <!-- PWA Manifest -->
-    <link rel="manifest" href="/reg_driver_ULN/manifest.json?v=1.5">
+    <link rel="manifest" href="/reg_driver_ULN/manifest.json?v=2.0">
     
     <!-- Иконки -->
     <link rel="icon" type="image/png" href="/reg_driver_ULN/icons/icon-32x32.png">
     <link rel="apple-touch-icon" href="/reg_driver_ULN/icons/icon-192x192.png">
     
     <!-- Стили -->
-    <link rel="stylesheet" href="/reg_driver_ULN/styles.css?v=1.5">
+    <link rel="stylesheet" href="/reg_driver_ULN/styles.css?v=2.0&t=" + Date.now() + "">
     
     <!-- Управление кэшем и Service Worker -->
     <script>
         // Константы версий
-        const APP_VERSION = '1.5';
+        const APP_VERSION = '2.0';
         const CACHE_NAME = `driver-registration-v${APP_VERSION}`;
         let updateShown = false;
         
@@ -433,7 +433,7 @@
         "></span>
         <span id="network-status-text">Онлайн</span>
         <span style="color: #999;">|</span>
-        <span id="app-version-display" style="color: #666;">v1.5</span>
+        <span id="app-version-display" style="color: #666;">v2.0</span>
     </div>
     
     <!-- Индикатор соединения (правый верхний угол) -->
@@ -987,7 +987,10 @@
     </div>
     
     <!-- Подключение скриптов -->
-    <script src="/reg_driver_ULN/app.js"></script>
+    <script src="/reg_driver_ULN/config.js?v=2.0&t=" + Date.now() + "></script>
+    <script src="/reg_driver_ULN/api.js?v=2.0&t=" + Date.now() + "></script>
+    <script src="/reg_driver_ULN/utils.js?v=2.0&t=" + Date.now() + "></script>
+    <script src="/reg_driver_ULN/app.js?v=2.0&t=" + Date.now() + "></script>
     
     <!-- Кнопка для разработчиков (скрытая) -->
     <button onclick="clearAppCache()" 
