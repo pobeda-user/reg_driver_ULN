@@ -1,9 +1,9 @@
-// app.js v1.4 - ПОЛНАЯ ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ТОП-ДАННЫМИ
+// app.js v2.0 - ПОЛНАЯ ОПТИМИЗИРОВАННАЯ ВЕРСИЯ С ТОП-ДАННЫМИ
 
 // Конфигурация
 let CONFIG = {
     APP_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbzt-xQk-DSNfofBV5ewoioKNHJ8p7Idn3GDSu9PY6Dq-MSpl8NpgHiONiQgAcCfGwD0/exec',
-    APP_VERSION: '1.0'
+    APP_VERSION: '2.0'
 };
 
 // Константы для кэширования ТОП-данных
