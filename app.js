@@ -5429,6 +5429,88 @@ function openNotificationsCenter() {
     }
 }
 
+async function openAdminPanel() {
+    try {
+        const password = prompt('Введите пароль администратора');
+        if (password === null) {
+            return;
+        }
+        if (password !== 'adm123') {
+            showNotification('Неверный пароль', 'error');
+            return;
+        }
+
+        showLoader(true);
+        const url = new URL(CONFIG.APP_SCRIPT_URL);
+        url.searchParams.append('action', 'get_admin_report');
+        url.searchParams.append('_t', Date.now());
+
+        const response = await fetch(url.toString(), {
+            method: 'GET',
+            mode: 'cors',
+            cache: 'no-cache',
+            headers: { 'Accept': 'application/json' }
+        });
+
+        const text = await response.text();
+        let result;
+        try {
+            result = JSON.parse(text);
+        } catch (e) {
+            throw new Error('Неверный формат ответа отчета');
+        }
+
+        showLoader(false);
+
+        if (!result || !result.success) {
+            showNotification(result?.message || 'Не удалось получить отчет', 'error');
+            return;
+        }
+
+        showAdminReportModal(result.reportText || '');
+
+    } catch (e) {
+        showLoader(false);
+        console.error('Ошибка админ-панели:', e);
+        showNotification('Ошибка получения отчета', 'error');
+    }
+}
+
+function showAdminReportModal(reportText) {
+    const modalId = 'admin-report-modal';
+    const old = document.getElementById(modalId);
+    if (old) old.remove();
+
+    const safeText = (reportText || '').toString();
+    const html = `
+        <div class="modal-overlay" id="${modalId}" onclick="if(event.target === this) closeAdminReportModal()">
+            <div class="modal" onclick="event.stopPropagation()" style="max-width: 900px; max-height: 90vh; display: flex; flex-direction: column;">
+                <div class="modal-header">
+                    <h3 class="modal-title">🛠️ Администрирование</h3>
+                    <button class="modal-close" onclick="closeAdminReportModal()">✕</button>
+                </div>
+                <div class="modal-body" style="flex: 1; overflow-y: auto;">
+                    <div class="info-box" style="white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">
+                        ${escapeHTML(safeText)}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeAdminReportModal()">Закрыть</button>
+                    <button class="btn btn-primary" onclick="openAdminPanel()" style="margin-left: 10px;">🔄 Обновить</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.appendChild(container);
+}
+
+function closeAdminReportModal() {
+    closeModalById('admin-report-modal');
+}
+
 async function showNotificationsOnlyModal() {
     try {
         const { phone } = getCabinetIdentity();
@@ -6653,6 +6735,7 @@ window.closeModalById = closeModalById;
 window.closeAllModals = closeAllModals;
 window.markAllNotificationsAsRead = markAllNotificationsAsRead;
 window.openNotificationsCenter = openNotificationsCenter;
+window.openAdminPanel = openAdminPanel;
 window.showNotificationsOnlyModal = showNotificationsOnlyModal;
 window.refreshCabinetInModal = refreshCabinetInModal;
 window.switchCabinetTab = switchCabinetTab;
