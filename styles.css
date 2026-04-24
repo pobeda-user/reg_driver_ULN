@@ -2394,19 +2394,26 @@
 
 /* Стили для кнопок в шаге 1 */
 .button-group.double {
-    display: flex;
-    gap: 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
     margin-bottom: 15px;
-    flex-wrap: wrap;
 }
 
 .button-group.double .btn {
-    flex: 1 1 120px;
-    min-width: 120px;
-    white-space: normal;
-    line-height: 1.15;
-    padding: 10px 8px;
+    width: 100%;
+    min-width: 0;
+    height: 50px;
+    padding: 5px;
     font-size: 13px;
+    white-space: normal;
+    line-height: 1.2;
+}
+
+@media (max-width: 400px) {
+    .button-group.double {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Новая кнопка info */
@@ -3026,7 +3033,10 @@ body {
 }
 
 .btn {
-    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
     padding: 10px 16px;
     border: none;
     border-radius: 8px;
@@ -3035,12 +3045,9 @@ body {
     cursor: pointer;
     transition: all 0.3s;
     font-family: inherit;
-    text-align: center;
     outline: none;
-    min-height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    height: 50px;
+    box-sizing: border-box;
 }
 
 .btn-primary {
