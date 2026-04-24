@@ -2401,10 +2401,12 @@
 }
 
 .button-group.double .btn {
-    flex: 1 1 170px;
-    min-width: 170px;
+    flex: 1 1 120px;
+    min-width: 120px;
     white-space: normal;
     line-height: 1.15;
+    padding: 10px 8px;
+    font-size: 13px;
 }
 
 /* Новая кнопка info */
@@ -3025,9 +3027,9 @@ body {
 
 .btn {
     flex: 1;
-    padding: 12px 16px;
+    padding: 10px 16px;
     border: none;
-    border-radius: 10px;
+    border-radius: 8px;
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
@@ -3035,6 +3037,10 @@ body {
     font-family: inherit;
     text-align: center;
     outline: none;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .btn-primary {
