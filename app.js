@@ -5496,6 +5496,7 @@ function showAdminReportModal(reportText) {
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" onclick="closeAdminReportModal()">Закрыть</button>
+                    <button class="btn btn-info" onclick="copyAdminReportText(${JSON.stringify(safeText).replace(/"/g, '&quot;')})" style="margin-left: 10px;">📋 Копировать</button>
                     <button class="btn btn-primary" onclick="openAdminPanel()" style="margin-left: 10px;">🔄 Обновить</button>
                 </div>
             </div>
@@ -5509,6 +5510,29 @@ function showAdminReportModal(reportText) {
 
 function closeAdminReportModal() {
     closeModalById('admin-report-modal');
+}
+
+function copyAdminReportText(reportText) {
+    try {
+        const textToCopy = (reportText || '').toString();
+        if (!textToCopy) {
+            showNotification('Нет текста для копирования', 'warning');
+            return;
+        }
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                showNotification('✅ Отчет скопирован в буфер обмена', 'success');
+            }).catch(() => {
+                fallbackCopyTextToClipboard(textToCopy);
+            });
+        } else {
+            fallbackCopyTextToClipboard(textToCopy);
+        }
+    } catch (e) {
+        console.error('Ошибка копирования отчета:', e);
+        showNotification('Ошибка копирования', 'error');
+    }
 }
 
 async function showNotificationsOnlyModal() {
@@ -6592,7 +6616,8 @@ function showSuccessMessage(serverData = null) {
     if (!container) return;
     
     const data = registrationState.data;
-    const gate = serverData?.assignedGate || data.gate || 'Не назначены';
+    const defaultGate = serverData?.defaultGate || '';
+    const gate = defaultGate || serverData?.assignedGate || data.gate || 'Не назначены';
     const date = serverData?.date || data.date || '';
     const time = serverData?.time || data.time || '';
     
@@ -6605,6 +6630,7 @@ function showSuccessMessage(serverData = null) {
         
         <div class="success-details">
             <p><strong>Ваши ворота:</strong> ${gate}</p>
+            <p style="margin-top: 6px; color: #555;">Основные ворота вам назначат дополнительно — придет уведомление или с вами свяжутся.</p>
             <p><strong>Статус:</strong> Зарегистрирован</p>
     `;
     
@@ -6742,6 +6768,7 @@ window.switchCabinetTab = switchCabinetTab;
 window.shareRegistration = shareRegistration;
 window.getStatusIcon = getStatusIcon;
 window.fallbackCopyTextToClipboard = fallbackCopyTextToClipboard;
+window.copyAdminReportText = copyAdminReportText;
 window.closeDetailsAndRestore = closeDetailsAndRestore;
 window.restorePreviousModal = restorePreviousModal;
 
